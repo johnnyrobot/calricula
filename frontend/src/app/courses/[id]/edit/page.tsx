@@ -331,16 +331,14 @@ function BasicInfoSection({ course, onChange, onBlur }: BasicInfoSectionProps) {
     setIsLoadingSuggestion(true);
     setDescriptionSuggestion(null);
     try {
-      const response = await api.chatWithAI(
-        `Please suggest a catalog description for this course following community college style guidelines. The course is ${course.subject_code} ${course.course_number}: ${course.title}. It is ${course.units} units with ${course.lecture_hours} lecture hours and ${course.lab_hours} lab hours per week.`,
-        [],
-        {
-          course_code: `${course.subject_code} ${course.course_number}`,
-          course_title: course.title,
-          units: course.units,
-          current_section: 'basic',
-        }
-      );
+      const response = await api.suggestCatalogDescription({
+        course_title: course.title,
+        subject_code: course.subject_code,
+        course_number: course.course_number,
+        units: course.units,
+        existing_description: course.catalog_description || undefined,
+        slos: course.slos?.map(s => s.outcome_text),
+      });
       setDescriptionSuggestion(response.text);
     } catch (error) {
       console.error('Failed to get AI suggestion:', error);
