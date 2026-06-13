@@ -1,0 +1,1 @@
+# Calricula Backend - FastAPI Application

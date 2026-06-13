@@ -1,0 +1,66 @@
+BSD 3-Clause License
+
+Copyright (c) 2024 Johnny Phung
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+---
+
+BRANDING REQUIREMENTS
+
+In addition to the BSD 3-Clause terms above, the following branding requirements
+apply to any use or distribution of this software:
+
+You may NOT alter, remove, or obscure any "Calricula" branding, including but
+not limited to logos, name references, and visual identity elements present in
+the user interface, UNLESS one of the following exemptions applies:
+
+EXEMPTIONS:
+
+1. SMALL DEPLOYMENTS: Your deployment serves fewer than 5 users in any 30-day
+   rolling period.
+
+2. SIGNIFICANT CONTRIBUTORS: You have made consistent, substantive contributions
+   to the project for at least one year AND have received explicit written
+   permission from the project maintainers.
+
+3. ENTERPRISE LICENSE: You have entered into a separate commercial agreement
+   that explicitly permits branding modifications.
+
+ADDITIONAL RESTRICTIONS:
+
+- You may not use "Powered by Calricula" or similar phrases as a substitute
+  for displaying the required branding elements.
+
+- You may not co-brand the software with your own branding in a way that
+  gives your brand equal or greater prominence than Calricula branding.
+
+- You may not market derivative works as official Calricula products or
+  suggest official endorsement without written permission.
+
+For branding exemption requests or enterprise licensing inquiries, please
+contact the project maintainers via GitHub.

@@ -1,0 +1,235 @@
+# ===========================================
+# Calricula - Demo Mode Docker Compose
+# ===========================================
+#
+# Prerequisites:
+#   1. Copy .env.example to .env and configure all variables
+#   2. Set DEMO_MODE=true and NEXT_PUBLIC_DEMO_MODE=true in .env
+#   3. Place serviceAccountKey.json in project root
+#   4. Set DOMAIN in .env to your domain (e.g., demo.calricula.com)
+#
+# Usage:
+#   Build:    docker compose -f docker-compose.demo.yml build
+#   Start:    docker compose -f docker-compose.demo.yml up -d
+#   Logs:     docker compose -f docker-compose.demo.yml logs -f
+#   Stop:     docker compose -f docker-compose.demo.yml down
+#
+# First-time setup:
+#   docker compose -f docker-compose.demo.yml exec backend alembic upgrade head
+#   docker compose -f docker-compose.demo.yml exec backend python -m seeds.seed_all
+#
+# Demo Database Reset:
+#   The demo database automatically resets every day at midnight.
+#   Manual reset: docker compose -f docker-compose.demo.yml exec demo-reset python /app/scripts/reset_demo_db.py
+#
+# Estimated resources: 1-2 vCPU, 2GB RAM (light usage, ~25 users)
+
+services:
+  # ===========================================
+  # Caddy Reverse Proxy (SSL + Load Balancing)
+  # ===========================================
+  caddy:
+    image: caddy:2-alpine
+    container_name: calricula-demo-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    environment:
+      - DOMAIN=${DEMO_DOMAIN:-demo.calricula.com}
+    volumes:
+      - ./Caddyfile.demo:/etc/caddy/Caddyfile:ro
+      - caddy_demo_data:/data
+      - caddy_demo_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/caddy-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================
+  # Demo Database (PostgreSQL)
+  # ===========================================
+  db:
+    image: postgres:16-alpine
+    container_name: calricula-demo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DEMO_DB_USER:-calricula_demo}
+      POSTGRES_PASSWORD: ${DEMO_DB_PASSWORD:?DEMO_DB_PASSWORD is required}
+      POSTGRES_DB: ${DEMO_DB_NAME:-calricula_demo}
+    volumes:
+      # Named volume for demo database
+      - postgres_demo_data:/var/lib/postgresql/data
+      # Backup of the "golden master" database for resets
+      - ./demo_db_backup.sql:/docker-entrypoint-initdb.d/01_backup.sql:ro
+    # Database not exposed externally - only accessible within Docker network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DEMO_DB_USER:-calricula_demo} -d ${DEMO_DB_NAME:-calricula_demo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================
+  # FastAPI Backend
+  # ===========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: calricula-demo-backend
+    restart: unless-stopped
+    environment:
+      # Database
+      - DATABASE_URL=postgresql://${DEMO_DB_USER:-calricula_demo}:${DEMO_DB_PASSWORD}@db:5432/${DEMO_DB_NAME:-calricula_demo}
+      # Google AI
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:?GOOGLE_API_KEY is required}
+      - GEMINI_FILE_SEARCH_STORE_NAME=${GEMINI_FILE_SEARCH_STORE_NAME:-calricula-knowledge-base}
+      # Firebase
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required}
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/serviceAccountKey.json
+      # Demo Mode
+      - DEMO_MODE=true
+      - AUTH_DEV_MODE=false
+      # Production settings
+      - ENVIRONMENT=demo
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      # Mount service account key (read-only)
+      - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
+      # Mount demo reset script
+      - ./backend/scripts:/app/scripts:ro
+      # Persistent storage for uploads
+      - uploads_demo_data:/app/uploads
+    # Backend not exposed externally - Caddy proxies to it
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ===========================================
+  # Demo Reset Service (Cron Job)
+  # ===========================================
+  demo-reset:
+    image: postgres:16-alpine
+    container_name: calricula-demo-reset
+    restart: unless-stopped
+    environment:
+      # Database connection for reset operations
+      - PGHOST=db
+      - PGUSER=${DEMO_DB_USER:-calricula_demo}
+      - PGPASSWORD=${DEMO_DB_PASSWORD}
+      - PGDATABASE=${DEMO_DB_NAME:-calricula_demo}
+      # Reset schedule (cron format: min hour day month dow)
+      # Default: Every day at midnight (00:00)
+      - RESET_CRON=${RESET_CRON:-0 0 * * *}
+    volumes:
+      # Mount the reset script
+      - ./scripts/demo-reset.sh:/demo-reset.sh:ro
+      # Volume to track last reset time
+      - demo_reset_state:/state
+    command: /bin/sh -c "
+      echo 'Demo Reset Service - Schedule: $$RESET_CRON' &&
+      while true; do
+        sleep 60 &&
+        current_min=$$(date +%M) &&
+        current_hour=$$(date +%H) &&
+        if [ \"$$current_min:$$current_hour\" = '00:00' ]; then
+          echo '[$$(date)] Running demo database reset...' &&
+          /demo-reset.sh 2>&1 | tee /state/reset.log
+        fi
+      done
+    "
+    depends_on:
+      db:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================
+  # Next.js Frontend
+  # ===========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        # API URL should match your domain for client-side requests
+        - NEXT_PUBLIC_API_URL=https://${DEMO_DOMAIN:-demo.calricula.com}
+        - NEXT_PUBLIC_DEMO_MODE=true
+        - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
+        - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+        - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+    container_name: calricula-demo-frontend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      # Internal API URL for server-side requests
+      - API_URL=http://backend:8000
+    # Frontend not exposed externally - Caddy proxies to it
+    expose:
+      - "3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+volumes:
+  postgres_demo_data:
+    driver: local
+  uploads_demo_data:
+    driver: local
+  caddy_demo_data:
+    driver: local
+  caddy_demo_config:
+    driver: local
+  demo_reset_state:
+    driver: local
+
+networks:
+  default:
+    name: calricula-demo-network
+    driver: bridge

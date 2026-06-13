@@ -1,0 +1,201 @@
+# ===========================================
+# Calricula - Production Docker Compose
+# ===========================================
+#
+# Prerequisites:
+#   1. Copy .env.production.example to .env and configure all variables
+#   2. Place serviceAccountKey.json in project root
+#   3. Set DOMAIN in .env to your domain (e.g., calricula.example.com)
+#
+# Usage:
+#   Build:    docker compose -f docker-compose.prod.yml build
+#   Start:    docker compose -f docker-compose.prod.yml up -d
+#   Logs:     docker compose -f docker-compose.prod.yml logs -f
+#   Stop:     docker compose -f docker-compose.prod.yml down
+#
+# First-time setup:
+#   docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
+#   docker compose -f docker-compose.prod.yml exec backend python -m seeds.seed_all
+#
+# Estimated resources: 1-2 vCPU, 2GB RAM (light usage, ~25 users)
+
+services:
+  # ===========================================
+  # Caddy Reverse Proxy (SSL + Load Balancing)
+  # ===========================================
+  caddy:
+    image: caddy:2-alpine
+    container_name: calricula-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    environment:
+      - DOMAIN=calricula.com
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/caddy-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================
+  # PostgreSQL Database
+  # ===========================================
+  db:
+    image: postgres:16-alpine
+    container_name: calricula-db-prod
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-calricula}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_DB: ${DB_NAME:-calricula}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    # Database not exposed externally - only accessible within Docker network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-calricula} -d ${DB_NAME:-calricula}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================
+  # FastAPI Backend
+  # ===========================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: calricula-backend-prod
+    restart: unless-stopped
+    environment:
+      # Database
+      - DATABASE_URL=postgresql://${DB_USER:-calricula}:${DB_PASSWORD}@db:5432/${DB_NAME:-calricula}
+      # Google AI
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:?GOOGLE_API_KEY is required}
+      - GEMINI_FILE_SEARCH_STORE_NAME=${GEMINI_FILE_SEARCH_STORE_NAME:-calricula-knowledge-base}
+      # Firebase
+      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required}
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/serviceAccountKey.json
+      # Production settings
+      - ENVIRONMENT=production
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      # Mount service account key (read-only)
+      - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
+      # Persistent storage for uploads
+      - uploads_data:/app/uploads
+    # Backend not exposed externally - Caddy proxies to it
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  # ===========================================
+  # Next.js Frontend
+  # ===========================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        # API URL should match your domain for client-side requests
+        - NEXT_PUBLIC_API_URL=https://calricula.com
+        - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
+        - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+        - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+    container_name: calricula-frontend-prod
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      # Internal API URL for server-side requests
+      - API_URL=http://backend:8000
+    # Frontend not exposed externally - Caddy proxies to it
+    expose:
+      - "3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
+    driver: local
+  uploads_data:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+
+networks:
+  default:
+    name: calricula-network-prod
+    driver: bridge

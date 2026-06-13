@@ -1,0 +1,372 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===========================================
+   Luminous Design System - Global Styles
+   =========================================== */
+
+/* Import Inter font from Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* Base styles */
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  body {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-50;
+  }
+
+  /* Global focus-visible styles for links */
+  a:focus-visible {
+    @apply outline-none ring-2 ring-luminous-500 ring-offset-2 rounded
+           dark:ring-offset-slate-900;
+  }
+
+  /* Global focus-visible styles for buttons without luminous classes */
+  button:focus-visible:not(.luminous-button-primary):not(.luminous-button-secondary):not(.luminous-button-danger) {
+    @apply outline-none ring-2 ring-luminous-500 ring-offset-2 rounded-lg
+           dark:ring-offset-slate-900;
+  }
+
+  /* Skip to main content link - visible only on keyboard focus */
+  .skip-link {
+    @apply sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[100]
+           focus:px-4 focus:py-2 focus:rounded-lg
+           focus:bg-luminous-600 focus:text-white focus:font-medium
+           focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2
+           focus:ring-offset-luminous-600;
+  }
+}
+
+/* ===========================================
+   Luminous Utility Classes
+   =========================================== */
+
+@layer components {
+  /* Gradient Background for Sidebar/Header */
+  .luminous-gradient {
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  }
+
+  /* Card Component */
+  .luminous-card {
+    @apply bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200
+           dark:border-slate-700 p-6 transition-all hover:shadow-md;
+  }
+
+  /* Interactive Card (clickable) */
+  .luminous-card-interactive {
+    @apply bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200
+           dark:border-slate-700 p-6 transition-all hover:shadow-md cursor-pointer
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-luminous-500
+           focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-900;
+  }
+
+  /* Primary Button */
+  .luminous-button-primary {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium
+           text-sm transition-colors focus:outline-none
+           focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-luminous-500
+           dark:focus-visible:ring-offset-slate-900
+           bg-luminous-600 text-white hover:bg-luminous-700
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Secondary Button */
+  .luminous-button-secondary {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium
+           text-sm transition-colors focus:outline-none
+           focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-luminous-500
+           dark:focus-visible:ring-offset-slate-900
+           bg-white border border-slate-300 text-slate-700
+           hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-200
+           dark:hover:bg-slate-700;
+  }
+
+  /* Danger Button */
+  .luminous-button-danger {
+    @apply inline-flex items-center justify-center px-4 py-2 rounded-lg font-medium
+           text-sm transition-colors focus:outline-none
+           focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500
+           dark:focus-visible:ring-offset-slate-900
+           bg-red-600 text-white hover:bg-red-700
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Form Input */
+  .luminous-input {
+    @apply mt-1 block w-full rounded-md border-slate-300 shadow-sm sm:text-sm
+           focus:outline-none focus:border-luminous-500 focus:ring-1 focus:ring-luminous-500
+           focus-visible:ring-2 focus-visible:ring-luminous-500 focus-visible:border-luminous-500
+           dark:bg-slate-900 dark:border-slate-600 dark:text-white
+           dark:placeholder-slate-400;
+  }
+
+  /* Form Label */
+  .luminous-label {
+    @apply block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1;
+  }
+
+  /* Form Textarea */
+  .luminous-textarea {
+    @apply mt-1 block w-full rounded-md border-slate-300 shadow-sm sm:text-sm
+           focus:outline-none focus:border-luminous-500 focus:ring-1 focus:ring-luminous-500
+           focus-visible:ring-2 focus-visible:ring-luminous-500 focus-visible:border-luminous-500
+           dark:bg-slate-900 dark:border-slate-600 dark:text-white
+           dark:placeholder-slate-400 min-h-[100px];
+  }
+
+  /* Form Select */
+  .luminous-select {
+    @apply mt-1 block w-full rounded-md border-slate-300 shadow-sm sm:text-sm
+           focus:outline-none focus:border-luminous-500 focus:ring-1 focus:ring-luminous-500
+           focus-visible:ring-2 focus-visible:ring-luminous-500 focus-visible:border-luminous-500
+           dark:bg-slate-900 dark:border-slate-600 dark:text-white;
+  }
+
+  /* ===========================================
+     Status Badges
+     =========================================== */
+
+  .luminous-badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .luminous-badge-draft {
+    @apply bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300;
+  }
+
+  .luminous-badge-review {
+    @apply bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300;
+  }
+
+  .luminous-badge-approved {
+    @apply bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300;
+  }
+
+  .luminous-badge-rejected {
+    @apply bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300;
+  }
+
+  .luminous-badge-warning {
+    @apply bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300;
+  }
+
+  /* ===========================================
+     AI Insight Card
+     =========================================== */
+
+  .luminous-ai-card {
+    @apply bg-luminous-50 dark:bg-luminous-950 border border-luminous-200
+           dark:border-luminous-800 rounded-lg p-4;
+  }
+
+  /* ===========================================
+     Navigation and Layout
+     =========================================== */
+
+  .luminous-sidebar {
+    @apply fixed inset-y-0 left-0 z-50 w-64 luminous-gradient;
+  }
+
+  .luminous-nav-item {
+    @apply flex items-center gap-3 px-4 py-2.5 text-white/80 rounded-lg
+           transition-colors hover:bg-white/10 hover:text-white
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50
+           focus-visible:ring-offset-2 focus-visible:ring-offset-luminous-600;
+  }
+
+  .luminous-nav-item-active {
+    @apply flex items-center gap-3 px-4 py-2.5 text-white rounded-lg
+           bg-white/20 font-medium
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-white/50
+           focus-visible:ring-offset-2 focus-visible:ring-offset-luminous-600;
+  }
+
+  /* ===========================================
+     Focus Styles for Accessibility
+     =========================================== */
+
+  /* Original focus class (all focus events) */
+  .luminous-focus {
+    @apply focus:outline-none focus:ring-2 focus:ring-luminous-500 focus:ring-offset-2
+           dark:focus:ring-offset-slate-900;
+  }
+
+  /* Focus-visible class (keyboard navigation only) */
+  .luminous-focus-visible {
+    @apply focus:outline-none focus-visible:outline-none
+           focus-visible:ring-2 focus-visible:ring-luminous-500 focus-visible:ring-offset-2
+           dark:focus-visible:ring-offset-slate-900;
+  }
+
+  /* High contrast focus ring for better visibility */
+  .luminous-focus-visible-high-contrast {
+    @apply focus:outline-none focus-visible:outline-none
+           focus-visible:ring-2 focus-visible:ring-luminous-400 focus-visible:ring-offset-2
+           focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900
+           dark:focus-visible:ring-luminous-300;
+  }
+
+  /* ===========================================
+     Table Styles
+     =========================================== */
+
+  .luminous-table {
+    @apply min-w-full divide-y divide-slate-200 dark:divide-slate-700;
+  }
+
+  .luminous-th {
+    @apply px-6 py-3 text-left text-xs font-medium text-slate-500
+           dark:text-slate-400 uppercase tracking-wider;
+  }
+
+  .luminous-td {
+    @apply px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-slate-100;
+  }
+}
+
+/* ===========================================
+   Animations
+   =========================================== */
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Scale up animation for modals */
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scaleIn {
+  animation: scaleIn 0.2s ease-out;
+}
+
+/* Slide down animation for dropdowns */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slideDown {
+  animation: slideDown 0.15s ease-out;
+}
+
+/* Slide up animation */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slideUp {
+  animation: slideUp 0.2s ease-out;
+}
+
+/* Bounce animation for notifications */
+@keyframes bounceIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  70% {
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-bounceIn {
+  animation: bounceIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin 2s linear infinite;
+}
+
+/* Shimmer animation for skeleton loaders */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg,
+    theme('colors.slate.200') 0%,
+    theme('colors.slate.100') 50%,
+    theme('colors.slate.200') 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+.dark .animate-shimmer {
+  background: linear-gradient(90deg,
+    theme('colors.slate.700') 0%,
+    theme('colors.slate.600') 50%,
+    theme('colors.slate.700') 100%
+  );
+  background-size: 200% 100%;
+}

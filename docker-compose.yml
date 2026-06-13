@@ -1,0 +1,52 @@
+services:
+  calricula-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: calricula-backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/serviceAccountKey.json
+    volumes:
+      - ../infrastructure/shared/firebase-service-account.json:/app/serviceAccountKey.json:ro
+      - calricula_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    networks:
+      - proxy
+
+  calricula-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+      args:
+        - NEXT_PUBLIC_API_URL=https://calricula.com
+        - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
+        - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+        - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+    container_name: calricula-frontend
+    restart: unless-stopped
+    environment:
+      - API_URL=http://calricula-backend:8000
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    networks:
+      - proxy
+
+volumes:
+  calricula_uploads:
+
+networks:
+  proxy:
+    external: true
