@@ -100,23 +100,36 @@ app.add_middleware(
 # Health Check Endpoints
 # =============================================================================
 
-@app.get("/health", tags=["Health"])
-async def health_check():
-    """
-    Basic health check endpoint.
-    Returns the service status, version, and uptime.
-    """
+def _build_health_response() -> dict:
+    """Build the health check response dict."""
     response = {
         "status": "healthy",
         "service": settings.APP_NAME,
         "version": settings.APP_VERSION,
         "timestamp": datetime.utcnow().isoformat(),
     }
-    # Add request ID if available
     request_id = get_request_id()
     if request_id:
         response["request_id"] = request_id
     return response
+
+
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """
+    Basic health check endpoint.
+    Returns the service status, version, and uptime.
+    """
+    return _build_health_response()
+
+
+@app.get("/api/health", tags=["Health"])
+async def api_health_check():
+    """
+    Health check at /api/health path.
+    Handles requests from reverse proxies that route /api/* to this backend.
+    """
+    return _build_health_response()
 
 
 @app.get("/health/db", tags=["Health"])

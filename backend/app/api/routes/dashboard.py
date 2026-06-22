@@ -6,6 +6,7 @@ Provides endpoints for the dashboard:
 - Get recent activity for the current user
 """
 
+import logging
 import uuid
 from typing import List, Optional
 from datetime import datetime, timedelta
@@ -19,6 +20,8 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.models.course import Course, CourseStatus
 from app.models.workflow import WorkflowHistory, EntityType
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -438,111 +441,108 @@ async def get_department_analytics(
     For admins: Shows analytics for all courses.
     For regular faculty: Shows analytics for their own courses only.
     """
-    from app.models.department import Department
+    try:
+        from app.models.department import Department
 
-    # Determine scope based on role
-    is_admin = current_user.role.value == "Admin"
-    is_chair = current_user.role.value == "CurriculumChair"
+        # Determine scope based on role
+        is_admin = current_user.role.value == "Admin"
+        is_chair = current_user.role.value == "CurriculumChair"
 
-    # Build base query
-    if is_admin:
-        # Admin sees all courses
-        base_query = select(Course)
-        department_name = "All Departments"
-        department_id = None
-    elif is_chair and current_user.department_id:
-        # Chair sees their department
-        base_query = select(Course).where(Course.department_id == current_user.department_id)
-        dept = session.get(Department, current_user.department_id)
-        department_name = dept.name if dept else "Unknown Department"
-        department_id = current_user.department_id
-    else:
-        # Faculty sees only their own courses
-        base_query = select(Course).where(Course.created_by == current_user.id)
-        department_name = "My Courses"
-        department_id = current_user.department_id
-
-    # Get all courses in scope
-    all_courses = session.exec(base_query).all()
-    total_courses = len(all_courses)
-
-    # Count by status
-    status_counts = {}
-    for course in all_courses:
-        status = course.status.value
-        status_counts[status] = status_counts.get(status, 0) + 1
-
-    courses_by_status = [
-        CoursesByStatusItem(
-            status=status,
-            count=count,
-            percentage=round((count / total_courses * 100) if total_courses > 0 else 0, 1),
-        )
-        for status, count in status_counts.items()
-    ]
-
-    # Sort by count descending
-    courses_by_status.sort(key=lambda x: x.count, reverse=True)
-
-    # Calculate approval rate (approved / (approved + returned))
-    # We'll look at workflow history for this
-    from app.models.workflow import WorkflowHistory, EntityType
-
-    # Get relevant course IDs
-    course_ids = [c.id for c in all_courses]
-
-    if course_ids:
-        # Count approvals
-        approvals_count = session.exec(
-            select(func.count(WorkflowHistory.id)).where(
-                WorkflowHistory.entity_type == EntityType.COURSE,
-                WorkflowHistory.entity_id.in_(course_ids),
-                WorkflowHistory.to_status == CourseStatus.APPROVED.value,
-            )
-        ).one()
-
-        # Count returns (to Draft from any review status)
-        returns_count = session.exec(
-            select(func.count(WorkflowHistory.id)).where(
-                WorkflowHistory.entity_type == EntityType.COURSE,
-                WorkflowHistory.entity_id.in_(course_ids),
-                WorkflowHistory.to_status == CourseStatus.DRAFT.value,
-                WorkflowHistory.from_status.in_([
-                    CourseStatus.DEPT_REVIEW.value,
-                    CourseStatus.CURRICULUM_COMMITTEE.value,
-                    CourseStatus.ARTICULATION_REVIEW.value,
-                ]),
-            )
-        ).one()
-
-        total_decisions = approvals_count + returns_count
-        approval_rate = round((approvals_count / total_decisions * 100) if total_decisions > 0 else 0, 1)
-
-        # Calculate average time in review
-        # Get courses that are currently in review and their workflow history
-        review_statuses = [
-            CourseStatus.DEPT_REVIEW,
-            CourseStatus.CURRICULUM_COMMITTEE,
-            CourseStatus.ARTICULATION_REVIEW,
-        ]
-
-        in_review_courses = [c for c in all_courses if c.status in review_statuses]
-        if in_review_courses:
-            now = datetime.utcnow()
-            total_days = sum((now - c.updated_at).days for c in in_review_courses)
-            avg_review_days = round(total_days / len(in_review_courses), 1)
+        # Build base query
+        if is_admin:
+            base_query = select(Course)
+            department_name = "All Departments"
+            department_id = None
+        elif is_chair and current_user.department_id:
+            base_query = select(Course).where(Course.department_id == current_user.department_id)
+            dept = session.get(Department, current_user.department_id)
+            department_name = dept.name if dept else "Unknown Department"
+            department_id = current_user.department_id
         else:
-            avg_review_days = None
-    else:
-        approval_rate = 0.0
-        avg_review_days = None
+            base_query = select(Course).where(Course.created_by == current_user.id)
+            department_name = "My Courses"
+            department_id = current_user.department_id
 
-    return DepartmentAnalyticsResponse(
-        department_id=department_id,
-        department_name=department_name,
-        total_courses=total_courses,
-        courses_by_status=courses_by_status,
-        approval_rate=approval_rate,
-        avg_review_days=avg_review_days,
-        period_comparison=None,  # Future enhancement
-    )
+        all_courses = session.exec(base_query).all()
+        total_courses = len(all_courses)
+
+        status_counts = {}
+        for course in all_courses:
+            status = course.status.value
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        courses_by_status = [
+            CoursesByStatusItem(
+                status=status,
+                count=count,
+                percentage=round((count / total_courses * 100) if total_courses > 0 else 0, 1),
+            )
+            for status, count in status_counts.items()
+        ]
+        courses_by_status.sort(key=lambda x: x.count, reverse=True)
+
+        from app.models.workflow import WorkflowHistory, EntityType
+        course_ids = [c.id for c in all_courses]
+
+        if course_ids:
+            approvals_count = session.exec(
+                select(func.count(WorkflowHistory.id)).where(
+                    WorkflowHistory.entity_type == EntityType.COURSE,
+                    WorkflowHistory.entity_id.in_(course_ids),
+                    WorkflowHistory.to_status == CourseStatus.APPROVED.value,
+                )
+            ).one()
+
+            returns_count = session.exec(
+                select(func.count(WorkflowHistory.id)).where(
+                    WorkflowHistory.entity_type == EntityType.COURSE,
+                    WorkflowHistory.entity_id.in_(course_ids),
+                    WorkflowHistory.to_status == CourseStatus.DRAFT.value,
+                    WorkflowHistory.from_status.in_([
+                        CourseStatus.DEPT_REVIEW.value,
+                        CourseStatus.CURRICULUM_COMMITTEE.value,
+                        CourseStatus.ARTICULATION_REVIEW.value,
+                    ]),
+                )
+            ).one()
+
+            total_decisions = approvals_count + returns_count
+            approval_rate = round((approvals_count / total_decisions * 100) if total_decisions > 0 else 0, 1)
+
+            review_statuses = [
+                CourseStatus.DEPT_REVIEW,
+                CourseStatus.CURRICULUM_COMMITTEE,
+                CourseStatus.ARTICULATION_REVIEW,
+            ]
+
+            in_review_courses = [c for c in all_courses if c.status in review_statuses]
+            if in_review_courses:
+                now = datetime.utcnow()
+                total_days = sum((now - c.updated_at).days for c in in_review_courses)
+                avg_review_days = round(total_days / len(in_review_courses), 1)
+            else:
+                avg_review_days = None
+        else:
+            approval_rate = 0.0
+            avg_review_days = None
+
+        return DepartmentAnalyticsResponse(
+            department_id=department_id,
+            department_name=department_name,
+            total_courses=total_courses,
+            courses_by_status=courses_by_status,
+            approval_rate=approval_rate,
+            avg_review_days=avg_review_days,
+            period_comparison=None,
+        )
+    except Exception as exc:
+        logger.error("Department analytics query failed: %s", exc)
+        return DepartmentAnalyticsResponse(
+            department_id=None,
+            department_name=None,
+            total_courses=0,
+            courses_by_status=[],
+            approval_rate=0.0,
+            avg_review_days=None,
+            period_comparison=None,
+        )
