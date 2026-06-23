@@ -186,7 +186,7 @@ def validate_cross_listing(
             if p_slo.bloom_level != c_slo.bloom_level:
                 issues.append(ValidationIssue(
                     field=f"slo_{i+1}_bloom",
-                    severity="warning",
+                    severity="error",
                     message=f"SLO {i+1} Bloom's level differs",
                     primary_value=p_slo.bloom_level,
                     cross_listed_value=c_slo.bloom_level,
@@ -226,7 +226,7 @@ def validate_cross_listing(
             if p_content.hours_allocated != c_content.hours_allocated:
                 issues.append(ValidationIssue(
                     field=f"content_{i+1}_hours",
-                    severity="warning",
+                    severity="error",
                     message=f"Content topic {i+1} hours differ",
                     primary_value=str(p_content.hours_allocated),
                     cross_listed_value=str(c_content.hours_allocated),

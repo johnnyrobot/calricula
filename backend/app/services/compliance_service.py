@@ -256,13 +256,13 @@ class ComplianceService:
             ))
 
         # Calculate Total Student Learning Hours using the 54-hour rule
-        # Weekly hours × semester weeks = semester hours
+        # Weekly hours × semester weeks (18) = semester hours
         # Lecture: weekly × 18 weeks
-        # Lab: weekly × 54 (labs are 1:1 ratio)
+        # Lab: weekly × 18 weeks
         # Outside: weekly × 18 weeks
         calculated_total_hours = (
             (lecture_hours * 18) +
-            (lab_hours * 54) +
+            (lab_hours * 18) +
             (outside_hours * 18)
         )
 
@@ -574,7 +574,7 @@ class ComplianceService:
         results = []
 
         # Check that prerequisites have content review documentation
-        prerequisites = [r for r in requisites if r.get("type") == "Prerequisite"]
+        prerequisites = [r for r in requisites if str(r.get("type", "")).lower() == "prerequisite"]
 
         for i, prereq in enumerate(prerequisites):
             content_review = prereq.get("content_review", "")
@@ -672,8 +672,12 @@ class ComplianceService:
             # Note: The CCN minimum units would need to be passed in or looked up
             # For now, we check if the ccn_minimum_units is provided in course_data
             ccn_minimum_units = course.get("ccn_minimum_units")
-            if ccn_minimum_units and units:
-                if units < ccn_minimum_units:
+            if ccn_minimum_units is not None and units is not None:
+                # Coerce both to Decimal so mixed types (Decimal/float/str)
+                # compare numerically rather than lexically.
+                units_decimal = Decimal(str(units))
+                ccn_minimum_units_decimal = Decimal(str(ccn_minimum_units))
+                if units_decimal < ccn_minimum_units_decimal:
                     results.append(ComplianceResult(
                         rule_id="CCN-002",
                         rule_name="CCN Minimum Units",

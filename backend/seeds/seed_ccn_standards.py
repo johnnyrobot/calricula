@@ -83,13 +83,19 @@ def transform_extracted_to_model(extracted: dict) -> dict:
     """Transform extracted JSON data to CCNStandard model fields."""
     discipline = extracted.get("discipline", "").upper()
 
+    # Validate minimum_units: extraction emits None (or legacy 0.0) on parse
+    # failure, so only accept a positive value and fall back to the safe
+    # default of 3.0 otherwise.
+    raw_minimum_units = extracted.get("minimum_units")
+    minimum_units = raw_minimum_units if (raw_minimum_units and raw_minimum_units > 0) else 3.0
+
     return {
         # Core identification
         "c_id": extracted.get("c_id", ""),
         "discipline": discipline,
         "title": extracted.get("title", ""),
         "descriptor": extracted.get("description", ""),
-        "minimum_units": extracted.get("minimum_units", 3.0),
+        "minimum_units": minimum_units,
 
         # Course identification (from extracted PDF data)
         "subject_code": extracted.get("subject_code", ""),
@@ -176,6 +182,18 @@ def seed_ccn_standards():
                 session.add(ccn)
                 print(f"  Created: {c_id} - {model_data.get('title', 'Unknown')}")
                 created_count += 1
+
+        # Fail fast if too many entries were skipped for invalid C-IDs, which
+        # would otherwise ship partial CCN coverage without warning.
+        total = len(extracted_data)
+        skip_ratio = (skipped_count / total) if total else 0
+        if total and skip_ratio > 0.10:
+            session.rollback()
+            raise ValueError(
+                f"Aborting seed: {skipped_count}/{total} entries "
+                f"({skip_ratio:.0%}) were skipped for missing/invalid C-IDs, "
+                f"exceeding the 10% threshold."
+            )
 
         session.commit()
         print(f"\nSeed Summary:")

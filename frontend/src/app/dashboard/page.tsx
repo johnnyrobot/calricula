@@ -15,7 +15,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { PageShell } from '@/components/layout';
 import { MyCoursesList, PendingApprovalWidget, NotificationsWidget, ActivityTimeline, DeadlineAlertsWidget, QuickSearchWidget, DepartmentAnalyticsWidget } from '@/components/dashboard';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth, UserProfile } from '@/contexts/AuthContext';
 import { api, DashboardStatsResponse } from '@/lib/api';
 
 // ===========================================
@@ -114,8 +114,14 @@ const QuickAction: React.FC<QuickActionProps> = ({
 // Dashboard Page Component
 // ===========================================
 
+// Reviewer roles permitted to see approval-related widgets
+function isReviewer(role: UserProfile['role']): boolean {
+  return ['CurriculumChair', 'ArticulationOfficer', 'Admin'].includes(role);
+}
+
 export default function DashboardPage() {
   const { user, getToken } = useAuth();
+  const canReview = user ? isReviewer(user.role) : false;
 
   // State for stats
   const [stats, setStats] = useState<DashboardStatsResponse | null>(null);
@@ -232,9 +238,11 @@ export default function DashboardPage() {
         </div>
 
         {/* Pending Approvals Section - Only visible to reviewers */}
-        <div className="mb-8">
-          <PendingApprovalWidget limit={5} defaultExpanded={true} />
-        </div>
+        {canReview && (
+          <div className="mb-8">
+            <PendingApprovalWidget limit={5} defaultExpanded={true} />
+          </div>
+        )}
 
         {/* Deadline Alerts Section */}
         <div className="mb-8">

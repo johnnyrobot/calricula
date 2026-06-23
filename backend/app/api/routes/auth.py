@@ -214,7 +214,10 @@ async def logout(
     - 401: Not authenticated
     """
     # Log the logout event (in production, you might log to analytics)
-    print(f"User logged out: {current_user.email}")
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("User logged out: %s", current_user.id)
 
     return LogoutResponse(
         message="Logout successful",

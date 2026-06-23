@@ -1135,15 +1135,6 @@ export default function CourseEditorPage() {
     }
   }, [course, courseId, getToken, toast, router]);
 
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, []);
-
   // Render section content
   const renderSectionContent = () => {
     if (!course) return null;

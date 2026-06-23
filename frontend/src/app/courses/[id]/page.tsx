@@ -33,6 +33,7 @@ import { VersionHistoryPanel } from '@/components/versions';
 import { LMIDetailView } from '@/components/lmi';
 import { CCNAlignmentBadge } from '@/components/ccn';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/components/toast';
 import { api, CourseDetail, CourseStatus } from '@/lib/api';
 
 // ===========================================
@@ -89,6 +90,7 @@ export default function CourseDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { getToken } = useAuth();
+  const toast = useToast();
   const courseId = params.id as string;
 
   const [course, setCourse] = useState<CourseDetail | null>(null);
@@ -132,7 +134,7 @@ export default function CourseDetailPage() {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Export failed:', err);
-      alert('Failed to export PDF. Please try again.');
+      toast.error('Export Failed', 'Failed to export PDF. Please try again.');
     } finally {
       setExportingPdf(false);
     }
@@ -160,7 +162,7 @@ export default function CourseDetailPage() {
       router.push(`/courses/${result.id}/edit`);
     } catch (err) {
       console.error('Duplication failed:', err);
-      alert(err instanceof Error ? err.message : 'Failed to create new version. Please try again.');
+      toast.error('Duplication Failed', err instanceof Error ? err.message : 'Failed to create new version. Please try again.');
     } finally {
       setDuplicating(false);
     }

@@ -266,6 +266,15 @@ class BLSClient:
         resp.raise_for_status()
         result = resp.json()
 
+        # The BLS API returns HTTP 200 even on API-level errors, signaling the
+        # real outcome via the "status" field. Treat anything other than
+        # REQUEST_SUCCEEDED as a failure so callers don't see empty data as valid.
+        api_status = result.get("status")
+        if api_status != "REQUEST_SUCCEEDED":
+            messages = result.get("message") or []
+            detail = "; ".join(messages) if messages else str(api_status)
+            raise RuntimeError(f"BLS API request failed ({api_status}): {detail}")
+
         # Parse response
         series_list = []
         for series in result.get("Results", {}).get("series", []):
@@ -540,13 +549,22 @@ class BLSClient:
         if not series_ids:
             return []
 
-        # Fetch all series (disable catalog to allow up to 50 series per request)
-        response = await self.fetch_series(series_ids, start_year, end_year, catalog=False)
+        # BLS limits the number of series per request: 25 without a registration
+        # key, 50 with one. Chunk the series IDs accordingly and aggregate the
+        # responses so large requests don't fail.
+        max_series_per_request = 50 if self.api_key else 25
+
+        all_series: List[BLSSeriesData] = []
+        for start in range(0, len(series_ids), max_series_per_request):
+            chunk = series_ids[start:start + max_series_per_request]
+            # Disable catalog to allow the maximum number of series per request.
+            response = await self.fetch_series(chunk, start_year, end_year, catalog=False)
+            all_series.extend(response.series)
 
         # Aggregate data by area
         area_data: Dict[str, Dict[str, Any]] = {}
 
-        for series in response.series:
+        for series in all_series:
             mapping = series_map.get(series.series_id)
             if not mapping:
                 continue

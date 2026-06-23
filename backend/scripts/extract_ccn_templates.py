@@ -99,14 +99,18 @@ def extract_description(text: str) -> str:
     return ""
 
 
-def extract_minimum_units(text: str) -> float:
-    """Extract minimum unit threshold."""
+def extract_minimum_units(text: str) -> Optional[float]:
+    """Extract minimum unit threshold.
+
+    Returns None when the value cannot be parsed so that downstream code can
+    distinguish a failed parse from a legitimate 0.0 value.
+    """
     pattern = r'Minimum\s+Unit\s+Threshold\s*\|\s*([\d.]+)\s*Semester\s+Units'
     units_str = extract_field(text, pattern)
     try:
         return float(units_str)
     except ValueError:
-        return 0.0
+        return None
 
 
 def extract_prerequisites(text: str) -> Optional[str]:
@@ -346,6 +350,19 @@ def extract_all_templates(ccn_dir: str) -> List[Dict[str, Any]]:
     for pdf_path in pdf_files:
         try:
             template = extract_ccn_template(str(pdf_path))
+            # Skip templates missing critical identifier fields so failed
+            # extractions do not pollute the output JSON.
+            if not template.get("c_id") or not template.get("course_number"):
+                logger.warning(
+                    f"Skipping {pdf_path.name}: missing critical fields "
+                    f"(c_id={template.get('c_id')!r}, "
+                    f"course_number={template.get('course_number')!r})"
+                )
+                errors.append({
+                    "file": pdf_path.name,
+                    "error": "missing critical fields (c_id/course_number)"
+                })
+                continue
             templates.append(template)
         except Exception as e:
             logger.error(f"Error processing {pdf_path.name}: {e}")

@@ -11,7 +11,7 @@ import uuid
 from typing import List, Optional
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select, func
 from pydantic import BaseModel
 
@@ -168,8 +168,8 @@ async def get_dashboard_stats(
 
 @router.get("/activity", response_model=DashboardActivityResponse)
 async def get_dashboard_activity(
-    limit: int = 10,
-    offset: int = 0,
+    limit: int = Query(default=10, ge=1, le=50),
+    offset: int = Query(default=0, ge=0),
     activity_type: Optional[str] = None,
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
@@ -216,25 +216,41 @@ async def get_dashboard_activity(
         WorkflowHistory.entity_id.in_(all_course_ids),
     )
 
-    # Get total count for pagination
-    count_query = select(func.count(WorkflowHistory.id)).where(
-        WorkflowHistory.entity_type == EntityType.COURSE,
-        WorkflowHistory.entity_id.in_(all_course_ids),
-    )
-    total_count = session.exec(count_query).one()
+    if activity_type:
+        # activity_type is a value derived in Python from the status
+        # transition, so it cannot be filtered in SQL. Materialize all
+        # matching rows, filter, then count and paginate on the filtered set
+        # so total_count and has_more reflect the filtered dataset.
+        all_items = session.exec(
+            base_query.order_by(WorkflowHistory.created_at.desc())
+        ).all()
+        filtered_items = [
+            wf for wf in all_items
+            if get_activity_type(wf.from_status, wf.to_status) == activity_type
+        ]
+        total_count = len(filtered_items)
+        workflow_items = filtered_items[offset:offset + limit]
+        has_more = offset + limit < total_count
+    else:
+        # Get total count for pagination
+        count_query = select(func.count(WorkflowHistory.id)).where(
+            WorkflowHistory.entity_type == EntityType.COURSE,
+            WorkflowHistory.entity_id.in_(all_course_ids),
+        )
+        total_count = session.exec(count_query).one()
 
-    # Get workflow items with pagination
-    workflow_items = session.exec(
-        base_query
-        .order_by(WorkflowHistory.created_at.desc())
-        .offset(offset)
-        .limit(limit + 1)  # Fetch one extra to check if there are more
-    ).all()
+        # Get workflow items with pagination
+        workflow_items = session.exec(
+            base_query
+            .order_by(WorkflowHistory.created_at.desc())
+            .offset(offset)
+            .limit(limit + 1)  # Fetch one extra to check if there are more
+        ).all()
 
-    # Check if there are more items
-    has_more = len(workflow_items) > limit
-    if has_more:
-        workflow_items = workflow_items[:limit]
+        # Check if there are more items
+        has_more = len(workflow_items) > limit
+        if has_more:
+            workflow_items = workflow_items[:limit]
 
     # Get actor names (users who made the changes)
     actor_ids = [wf.changed_by for wf in workflow_items if wf.changed_by]
@@ -308,8 +324,8 @@ class StaleItemsResponse(BaseModel):
 
 @router.get("/stale-items", response_model=StaleItemsResponse)
 async def get_stale_items(
-    draft_threshold_days: int = 30,
-    review_threshold_days: int = 7,
+    draft_threshold_days: int = Query(default=30, ge=1, le=365),
+    review_threshold_days: int = Query(default=7, ge=1, le=365),
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
@@ -547,13 +563,8 @@ async def get_department_analytics(
             period_comparison=None,
         )
     except Exception as exc:
-        logger.error("Department analytics query failed: %s", exc)
-        return DepartmentAnalyticsResponse(
-            department_id=None,
-            department_name=None,
-            total_courses=0,
-            courses_by_status=[],
-            approval_rate=0.0,
-            avg_review_days=None,
-            period_comparison=None,
-        )
+        logger.error("Department analytics query failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to compute department analytics",
+        ) from exc

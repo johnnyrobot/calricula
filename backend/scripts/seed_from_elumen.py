@@ -428,12 +428,6 @@ def import_program(
     dept_id = None
 
     if top_code:
-        # Try to find a department with matching TOP code
-        for code, did in department_map.items():
-            dept_id = did
-            dept_code = code
-            break  # Use first available department as fallback
-
         # Try to map TOP code to a known discipline
         # TOP codes follow patterns: XXXX.XX where first 2-4 digits indicate discipline
         top_prefix = top_code.split(".")[0] if top_code else ""
@@ -563,7 +557,9 @@ def seed_programs_from_elumen(
         if all_colleges:
             tenants = client.get_tenants()
             colleges_to_query = [t.abbreviation for t in tenants]
-            per_college_limit = limit // len(colleges_to_query) if limit else None
+            # Ensure at least 1 per college so a small positive global limit
+            # spread across many colleges does not floor-divide to zero.
+            per_college_limit = max(1, limit // len(colleges_to_query)) if limit else None
         else:
             colleges_to_query = [college] if college else [""]
             per_college_limit = limit
@@ -688,7 +684,9 @@ def seed_from_elumen(
         if all_colleges:
             tenants = client.get_tenants()
             colleges_to_query = [t.abbreviation for t in tenants]
-            per_college_limit = limit // len(colleges_to_query) if limit else None
+            # Ensure at least 1 per college so a small positive global limit
+            # spread across many colleges does not floor-divide to zero.
+            per_college_limit = max(1, limit // len(colleges_to_query)) if limit else None
         else:
             colleges_to_query = [college] if college else [""]
             per_college_limit = limit

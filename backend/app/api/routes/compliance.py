@@ -10,7 +10,7 @@ from typing import Optional, Dict, Any, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.database import get_session
 from app.core.deps import get_current_user
@@ -642,6 +642,10 @@ async def validate_units(
         errors.append("Lecture hours cannot be negative.")
     if lab_hours < 0:
         errors.append("Lab hours cannot be negative.")
+    if activity_hours < 0:
+        errors.append("Activity hours cannot be negative.")
+    if tba_hours < 0:
+        errors.append("TBA hours cannot be negative.")
     if outside_hours < 0:
         errors.append("Outside-of-class hours cannot be negative.")
 
@@ -2724,7 +2728,7 @@ async def adopt_ccn_standard(
 
     # Log adoption for audit trail
     logger.info(
-        f"CCN adoption: user={current_user.email}, course_id={course.id}, "
+        f"CCN adoption: user={current_user.id}, course_id={course.id}, "
         f"ccn_id={ccn_standard.c_id}, cb_codes_updated={cb_codes_updated}, "
         f"warnings={warnings}"
     )
@@ -2746,7 +2750,26 @@ class CCNNonMatchJustificationRequest(BaseModel):
     """Request for submitting CCN non-match justification."""
     course_id: uuid.UUID
     reason_code: str  # specialized, vocational, local_need, new_course, other
-    justification_text: str
+    justification_text: str = Field(min_length=20)
+
+    @field_validator("reason_code")
+    @classmethod
+    def validate_reason_code(cls, v: str) -> str:
+        valid_reason_codes = {
+            "specialized", "vocational", "local_need", "new_course", "other"
+        }
+        if v not in valid_reason_codes:
+            raise ValueError(
+                f"Invalid reason_code. Must be one of: {', '.join(sorted(valid_reason_codes))}"
+            )
+        return v
+
+    @field_validator("justification_text")
+    @classmethod
+    def validate_justification_text(cls, v: str) -> str:
+        if len(v.strip()) < 20:
+            raise ValueError("Justification text must be at least 20 characters")
+        return v
 
 
 class CCNNonMatchJustificationResponse(BaseModel):
@@ -2787,20 +2810,8 @@ async def submit_ccn_non_match_justification(
     from app.models.reference import CCNNonMatchJustification
     from datetime import datetime
 
-    # Validate reason code
-    valid_reason_codes = {'specialized', 'vocational', 'local_need', 'new_course', 'other'}
-    if request.reason_code not in valid_reason_codes:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid reason_code. Must be one of: {', '.join(valid_reason_codes)}"
-        )
-
-    # Validate justification text length
-    if len(request.justification_text.strip()) < 20:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Justification text must be at least 20 characters"
-        )
+    # reason_code and justification_text are validated by the request schema
+    # (CCNNonMatchJustificationRequest), which returns 422 on invalid input.
 
     # Check if course exists
     course = session.get(Course, request.course_id)

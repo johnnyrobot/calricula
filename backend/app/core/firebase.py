@@ -146,36 +146,35 @@ def verify_firebase_token(id_token: str) -> dict:
 
     try:
         # Verify the token
-        print(f"[AUTH] Verifying token (first 20 chars): {id_token[:20]}...")
         decoded_token = auth.verify_id_token(id_token)
-        print(f"[AUTH] Token verified successfully for uid: {decoded_token.get('uid')}, email: {decoded_token.get('email')}")
+        print("[AUTH] Token verified successfully")
         return decoded_token
-    except auth.InvalidIdTokenError as e:
-        print(f"[AUTH] Invalid token error: {e}")
+    except auth.InvalidIdTokenError:
+        print("[AUTH] Invalid token error")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    except auth.ExpiredIdTokenError as e:
-        print(f"[AUTH] Expired token error: {e}")
+    except auth.ExpiredIdTokenError:
+        print("[AUTH] Expired token error")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication token has expired",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    except auth.RevokedIdTokenError as e:
-        print(f"[AUTH] Revoked token error: {e}")
+    except auth.RevokedIdTokenError:
+        print("[AUTH] Revoked token error")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication token has been revoked",
             headers={"WWW-Authenticate": "Bearer"},
         )
     except Exception as e:
-        print(f"[AUTH] Unexpected auth error: {type(e).__name__}: {e}")
+        print(f"[AUTH] Unexpected auth error: {type(e).__name__}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"Authentication error: {str(e)}",
+            detail="Authentication error",
             headers={"WWW-Authenticate": "Bearer"},
         )
 

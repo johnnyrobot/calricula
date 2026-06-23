@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 from app.core.config import settings
-from app.core.deps import get_current_user, get_current_user_optional, require_admin
+from app.core.deps import get_current_user, require_admin
 from app.core.rate_limiter import limiter, RATE_LIMITS
 from app.models.user import User
 from app.services.gemini_service import get_gemini_service
@@ -201,7 +201,7 @@ class LMINarrativeResponse(BaseModel):
 async def chat_with_ai(
     request: Request,
     chat_request: ChatRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Chat with the AI curriculum assistant.
@@ -240,7 +240,7 @@ async def chat_with_ai(
 async def suggest_catalog_description(
     request: Request,
     desc_request: CatalogDescriptionRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Generate a catalog description suggestion.
@@ -276,7 +276,7 @@ async def suggest_catalog_description(
 async def suggest_slos(
     request: Request,
     slo_request: SLORequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Generate SLO suggestions using Bloom's Taxonomy.
@@ -311,7 +311,7 @@ async def suggest_slos(
 async def explain_compliance(
     request: Request,
     compliance_request: ComplianceExplainRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Explain a compliance issue and how to fix it.
@@ -343,7 +343,7 @@ async def explain_compliance(
 async def suggest_content_outline(
     request: Request,
     outline_request: ContentOutlineRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Generate a content outline suggestion for a course.
@@ -427,7 +427,7 @@ async def suggest_content_outline(
 async def suggest_top_code(
     request: Request,
     top_request: TOPCodeRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Suggest TOP (Taxonomy of Programs) codes for a course.
@@ -603,7 +603,7 @@ async def suggest_top_code(
 async def suggest_program_narrative(
     request: Request,
     narrative_request: ProgramNarrativeRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Generate a program narrative for Chancellor's Office submission.
@@ -829,7 +829,7 @@ async def upload_document_for_rag(
 @router.get("/rag/documents")
 async def list_rag_documents(
     document_type: Optional[str] = None,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     List all uploaded RAG documents.
@@ -889,7 +889,7 @@ async def delete_rag_document(
 async def query_with_rag(
     request: Request,
     rag_request: RAGQueryRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Query the AI with RAG (Retrieval Augmented Generation).
@@ -929,7 +929,7 @@ async def query_with_rag(
 async def explain_regulation(
     request: Request,
     reg_request: RegulationExplainRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Get an explanation of a specific curriculum regulation.
@@ -967,7 +967,7 @@ async def explain_regulation(
 async def get_cb_code_guidance(
     request: Request,
     cb_request: CBCodeGuidanceRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Get guidance on a specific CB code.
@@ -1007,7 +1007,7 @@ async def search_documents(
     query: str,
     file_ids: Optional[List[str]] = None,
     max_results: int = 5,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Search across uploaded documents for relevant passages.
@@ -1038,7 +1038,7 @@ async def search_documents(
 async def suggest_lmi_occupations(
     request: Request,
     suggest_request: LMIOccupationSuggestRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Suggest relevant occupations based on course content analysis.
@@ -1140,7 +1140,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no extra text. Keep rationales v
 async def generate_lmi_narrative(
     request: Request,
     narrative_request: LMINarrativeRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Generate a narrative describing labor market information for a course.

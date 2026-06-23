@@ -9,6 +9,7 @@ import uuid
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.core.database import get_session
@@ -358,10 +359,15 @@ async def get_top_code(
 # Disciplines List
 # =============================================================================
 
-@router.get("/disciplines")
+class DisciplinesResponse(BaseModel):
+    """Response schema for the unique CCN disciplines list."""
+    disciplines: List[str]
+
+
+@router.get("/disciplines", response_model=DisciplinesResponse)
 async def list_disciplines(
     session: Session = Depends(get_session),
-) -> List[str]:
+) -> DisciplinesResponse:
     """
     Get a list of unique CCN disciplines.
 
@@ -369,7 +375,7 @@ async def list_disciplines(
     """
     query = select(CCNStandard.discipline).distinct().order_by(CCNStandard.discipline)
     disciplines = session.exec(query).all()
-    return list(disciplines)
+    return DisciplinesResponse(disciplines=list(disciplines))
 
 
 # =============================================================================

@@ -178,7 +178,59 @@ export const reducedMotionVariants = {
     exit: { opacity: 0 },
   } as Variants,
 
+  fadeDown: {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+  } as Variants,
+
+  slideRight: {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+  } as Variants,
+
+  slideLeft: {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+  } as Variants,
+
   scale: {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+  } as Variants,
+
+  scaleBounce: {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+  } as Variants,
+
+  cardHover: {
+    initial: {},
+    hover: {},
+    tap: {},
+  } as Variants,
+
+  buttonPress: {
+    initial: { scale: 1 },
+    hover: { scale: 1 },
+    tap: { scale: 1 },
+  } as Variants,
+
+  staggerContainer: {
+    initial: {},
+    animate: {},
+  } as Variants,
+
+  staggerItem: {
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+  } as Variants,
+
+  listItem: {
     initial: { opacity: 0 },
     animate: { opacity: 1 },
     exit: { opacity: 0 },

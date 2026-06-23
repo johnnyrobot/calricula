@@ -102,15 +102,30 @@ class LMIClient:
         return self._client
 
     def _parse_float(self, value: Any) -> Optional[float]:
-        """Safely parse a float value, handling special cases."""
+        """Safely parse a float value.
+
+        Returns the actual numeric value regardless of sign. Negative and zero
+        values are valid for fields such as employment projection percentage
+        changes, so no sign-based suppression is applied here. Use _parse_wage
+        for OEWS wage fields where 0 means suppressed/unavailable.
+        """
         if value is None:
             return None
         try:
-            val = float(value)
-            # OEWS uses 0 to indicate suppressed/unavailable data
-            return val if val > 0 else None
+            return float(value)
         except (ValueError, TypeError):
             return None
+
+    def _parse_wage(self, value: Any) -> Optional[float]:
+        """Safely parse an OEWS wage value.
+
+        OEWS uses 0 (or non-positive values) to indicate suppressed/unavailable
+        wage data, so anything <= 0 is treated as missing.
+        """
+        val = self._parse_float(value)
+        if val is None or val <= 0:
+            return None
+        return val
 
     def _parse_int(self, value: Any) -> Optional[int]:
         """Safely parse an integer value."""
@@ -175,12 +190,12 @@ class LMIClient:
                 seen_keys.add(key)
 
                 # Parse hourly wages
-                hourly_mean = self._parse_float(r.get("Mean Wage"))
-                hourly_median = self._parse_float(r.get("50th Percentile (Median) Wage"))
-                hourly_10th = self._parse_float(r.get("10th Percentile Wage"))
-                hourly_25th = self._parse_float(r.get("25th Percentile Wage"))
-                hourly_75th = self._parse_float(r.get("75th Percentile Wage"))
-                hourly_90th = self._parse_float(r.get("90th Percentile Wage"))
+                hourly_mean = self._parse_wage(r.get("Mean Wage"))
+                hourly_median = self._parse_wage(r.get("50th Percentile (Median) Wage"))
+                hourly_10th = self._parse_wage(r.get("10th Percentile Wage"))
+                hourly_25th = self._parse_wage(r.get("25th Percentile Wage"))
+                hourly_75th = self._parse_wage(r.get("75th Percentile Wage"))
+                hourly_90th = self._parse_wage(r.get("90th Percentile Wage"))
 
                 # Calculate annual wages (hourly * 2080 hours/year)
                 annual_mean = round(hourly_mean * 2080, 2) if hourly_mean else None
@@ -315,7 +330,12 @@ class LMIClient:
         normalized_soc = soc_code.replace("-", "")
 
         # Build filters - use only SOC code filter (more reliable than multi-key filters)
-        filters = {"Standard Occupational Classification": normalized_soc}
+        filters = {
+            "Standard Occupational Classification": normalized_soc,
+            # MUST filter for hourly rows; otherwise annual wage rows get parsed
+            # as hourly and then multiplied by 2080.
+            "Wage Type": "Hourly wage",
+        }
 
         params = {
             "resource_id": RES_ID_WAGES,
@@ -349,12 +369,12 @@ class LMIClient:
                 seen_keys.add(key)
 
                 # Parse hourly wages
-                hourly_mean = self._parse_float(r.get("Mean Wage"))
-                hourly_median = self._parse_float(r.get("50th Percentile (Median) Wage"))
-                hourly_10th = self._parse_float(r.get("10th Percentile Wage"))
-                hourly_25th = self._parse_float(r.get("25th Percentile Wage"))
-                hourly_75th = self._parse_float(r.get("75th Percentile Wage"))
-                hourly_90th = self._parse_float(r.get("90th Percentile Wage"))
+                hourly_mean = self._parse_wage(r.get("Mean Wage"))
+                hourly_median = self._parse_wage(r.get("50th Percentile (Median) Wage"))
+                hourly_10th = self._parse_wage(r.get("10th Percentile Wage"))
+                hourly_25th = self._parse_wage(r.get("25th Percentile Wage"))
+                hourly_75th = self._parse_wage(r.get("75th Percentile Wage"))
+                hourly_90th = self._parse_wage(r.get("90th Percentile Wage"))
 
                 # Calculate annual wages (hourly * 2080 hours/year)
                 annual_mean = round(hourly_mean * 2080, 2) if hourly_mean else None

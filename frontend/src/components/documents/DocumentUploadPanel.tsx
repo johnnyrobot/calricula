@@ -320,8 +320,9 @@ export default function DocumentUploadPanel({
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Document Type Selector */}
         <div>
-          <label className="luminous-label text-sm">Document Type</label>
+          <label htmlFor="document-type-select" className="luminous-label text-sm">Document Type</label>
           <select
+            id="document-type-select"
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value as RAGDocumentType)}
             className="luminous-input w-full mt-1"
@@ -339,12 +340,22 @@ export default function DocumentUploadPanel({
 
         {/* Drop Zone */}
         <div
+          role="button"
+          tabIndex={0}
+          aria-label="Upload files. Click or press Enter to browse, or drag and drop files here."
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
           className={`
             relative border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-all
+            focus:outline-none focus-visible:ring-2 focus-visible:ring-luminous-500
             ${isDragging
               ? 'border-luminous-500 bg-luminous-50 dark:bg-luminous-900/20'
               : 'border-gray-300 dark:border-gray-600 hover:border-luminous-400 hover:bg-gray-50 dark:hover:bg-gray-800'
@@ -485,20 +496,24 @@ export default function DocumentUploadPanel({
                       {doc.document_type.replace('_', ' ')}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                     {doc.indexing_status === 'failed' && (
                       <button
+                        type="button"
                         onClick={() => handleRetryIndexing(doc.id)}
                         className="p-1 text-amber-500 hover:text-amber-700"
                         title="Retry indexing"
+                        aria-label="Retry indexing"
                       >
                         <ArrowPathIcon className="w-4 h-4" />
                       </button>
                     )}
                     <button
+                      type="button"
                       onClick={() => handleDelete(doc.id)}
                       className="p-1 text-red-500 hover:text-red-700"
                       title="Delete document"
+                      aria-label="Delete document"
                     >
                       <TrashIcon className="w-4 h-4" />
                     </button>

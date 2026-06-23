@@ -45,7 +45,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Set theme and persist to localStorage
   const setTheme = (newTheme: Theme) => {
     setThemeState(newTheme);
-    localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, newTheme);
+    } catch (error) {
+      console.warn('Failed to save theme preference:', error);
+    }
     applyTheme(newTheme);
   };
 
@@ -57,7 +61,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // Initialize theme on mount
   useEffect(() => {
-    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
+    let savedTheme: Theme | null = null;
+    try {
+      savedTheme = localStorage.getItem(THEME_STORAGE_KEY) as Theme | null;
+    } catch (error) {
+      console.warn('Failed to read theme preference:', error);
+    }
     const initialTheme = savedTheme || 'light';
     setThemeState(initialTheme);
     applyTheme(initialTheme);

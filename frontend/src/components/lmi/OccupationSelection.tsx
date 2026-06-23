@@ -87,11 +87,18 @@ export const OccupationSelection: React.FC<OccupationSelectionProps> = ({
 
   return (
     <RadioGroup
-      value={selectedSocCode || ''}
-      onChange={(socCode) => {
-        const occ =
-          socCode && occupations.find((o) => o.soc_code === socCode);
-        onSelect(socCode || null, occ || null);
+      value={
+        selectedSocCode
+          ? String(occupations.findIndex((o) => o.soc_code === selectedSocCode))
+          : ''
+      }
+      onChange={(value) => {
+        if (value === '') {
+          onSelect(null, null);
+          return;
+        }
+        const occ = occupations[Number(value)] || null;
+        onSelect(occ?.soc_code || null, occ);
       }}
       className={className}
     >
@@ -100,13 +107,11 @@ export const OccupationSelection: React.FC<OccupationSelectionProps> = ({
       </RadioGroup.Label>
 
       <div className="space-y-2">
-        {occupations.map((occupation) => {
-          const isSelected = selectedSocCode === occupation.soc_code;
-
+        {occupations.map((occupation, index) => {
           return (
             <RadioGroup.Option
-              key={occupation.soc_code || occupation.occupation_title}
-              value={occupation.soc_code || ''}
+              key={occupation.soc_code || occupation.occupation_title || index}
+              value={String(index)}
               className="relative cursor-pointer"
             >
               {({ checked }) => (

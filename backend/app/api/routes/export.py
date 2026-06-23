@@ -526,7 +526,7 @@ async def export_course_elumen(
         "activityHours": int(course.activity_hours),
         "tbaHours": int(course.tba_hours),
         "outsideOfClassHours": int(course.outside_of_class_hours),
-        "totalStudentHours": int(course.lecture_hours) + int(course.lab_hours) + int(course.outside_of_class_hours),
+        "totalStudentHours": int(course.lecture_hours) + int(course.lab_hours) + int(course.activity_hours) + int(course.tba_hours) + int(course.outside_of_class_hours),
         "department": {
             "code": department.code if department else "",
             "name": department.name if department else "",
@@ -857,6 +857,14 @@ async def get_public_course_view(
     # Fetch course
     course = session.get(Course, course_id)
     if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found"
+        )
+
+    # Only approved courses are visible publicly. Treat unapproved (draft/in-review)
+    # courses as nonexistent to avoid exposing them via this unauthenticated endpoint.
+    if course.status != CourseStatus.APPROVED:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found"
