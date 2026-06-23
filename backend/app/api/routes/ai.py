@@ -5,10 +5,13 @@ Provides endpoints for AI-assisted curriculum development features.
 Rate limited to prevent abuse.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from app.core.deps import get_current_user, get_current_user_optional
+from app.core.config import settings
+from app.core.deps import get_current_user, get_current_user_optional, require_admin
 from app.core.rate_limiter import limiter, RATE_LIMITS
 from app.models.user import User
 from app.services.gemini_service import get_gemini_service
@@ -758,6 +761,27 @@ class CBCodeGuidanceRequest(BaseModel):
     course_context: Optional[Dict[str, Any]] = None
 
 
+def _resolve_rag_document_path(file_path: str) -> str:
+    """Resolve a caller-supplied RAG document path inside the allowed directory.
+
+    The RAG upload endpoint reads files from the server's filesystem. To prevent
+    arbitrary local file disclosure (path traversal / LFI), the requested path
+    must resolve to a location inside ``settings.RAG_DOCUMENTS_DIR``. Absolute
+    paths, ``..`` traversal, and symlink escapes are all rejected.
+    """
+    base_dir = Path(settings.RAG_DOCUMENTS_DIR).resolve()
+    # Treat the supplied path as relative to the allowed base directory.
+    candidate = (base_dir / file_path).resolve()
+    try:
+        candidate.relative_to(base_dir)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="file_path must reference a document inside the allowed RAG documents directory",
+        )
+    return str(candidate)
+
+
 @router.post("/rag/upload", response_model=DocumentUploadResponse)
 @limiter.limit(RATE_LIMITS["ai_documents"])
 async def upload_document_for_rag(
@@ -765,7 +789,7 @@ async def upload_document_for_rag(
     file_path: str,
     display_name: Optional[str] = None,
     document_type: str = "reference",
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin()),
 ):
     """
     Upload a document for RAG indexing.
@@ -773,13 +797,15 @@ async def upload_document_for_rag(
     This endpoint allows uploading curriculum-related documents (PCAH, Title 5, etc.)
     that will be used to ground AI responses in authoritative sources.
 
-    Requires authentication.
+    Requires an administrator. The ``file_path`` is resolved relative to the
+    server's configured RAG documents directory and may not escape it.
     Rate limit: 20 requests/minute per user.
     """
+    safe_path = _resolve_rag_document_path(file_path)
     try:
         service = get_file_search_service()
         metadata = await service.upload_document(
-            file_path=file_path,
+            file_path=safe_path,
             display_name=display_name,
             document_type=document_type,
         )

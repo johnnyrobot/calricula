@@ -17,7 +17,7 @@ from pydantic import BaseModel
 
 from app.core.database import get_session
 from app.core.deps import get_current_user
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.course import Course, CourseStatus
 from app.models.workflow import WorkflowHistory, EntityType
 
@@ -367,14 +367,25 @@ async def get_stale_items(
         CourseStatus.ARTICULATION_REVIEW,
     ]
 
-    # For reviewers, show items in review they can act on
-    # For authors, show their items stuck in review
+    # For reviewers, show items in review they can act on.
+    # For authors (Faculty), show only their own items stuck in review.
+    # Without this scoping the query would leak every in-review course to any
+    # authenticated user regardless of permissions.
+    reviewer_roles = {
+        UserRole.ADMIN,
+        UserRole.CURRICULUM_CHAIR,
+        UserRole.ARTICULATION_OFFICER,
+    }
+    review_filters = [
+        Course.status.in_(review_statuses),
+        Course.updated_at < review_cutoff,
+    ]
+    if current_user.role not in reviewer_roles:
+        review_filters.append(Course.created_by == current_user.id)
+
     stale_review_courses = session.exec(
         select(Course)
-        .where(
-            Course.status.in_(review_statuses),
-            Course.updated_at < review_cutoff,
-        )
+        .where(*review_filters)
         .order_by(Course.updated_at.asc())
         .limit(10)
     ).all()

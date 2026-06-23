@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from app.core.database import get_session
 from app.core.deps import get_current_user
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.course import (
     Course,
     CourseStatus,
@@ -359,6 +359,17 @@ async def create_cross_listing(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Cross-listed course not found"
+        )
+
+    # Authorization: only an admin or the creator of the primary course may
+    # create a cross-listing for it (mirrors course mutation permissions).
+    if (
+        current_user.role != UserRole.ADMIN
+        and primary_course.created_by != current_user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to cross-list this course",
         )
 
     # Check not the same course

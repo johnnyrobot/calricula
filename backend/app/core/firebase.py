@@ -116,10 +116,19 @@ def verify_firebase_token(id_token: str) -> dict:
     if _firebase_app is None:
         initialize_firebase()
 
-    # If Firebase is not configured, return a mock user for development
-    # Support dev-* tokens from frontend AuthContext
+    # If Firebase is not configured, fall back to mock users ONLY in dev mode.
+    # In any other environment this must fail closed: an unconfigured Firebase
+    # must never authenticate arbitrary tokens (that would be an auth bypass).
     if _firebase_app is None:
-        # Check if token is a dev user ID
+        if not settings.AUTH_DEV_MODE:
+            print("[AUTH] Firebase not configured and AUTH_DEV_MODE is off - rejecting request")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service is not configured",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Dev mode only: support dev-* tokens from the frontend AuthContext.
         if id_token in dev_user_map:
             user_data = dev_user_map[id_token]
             return {
@@ -127,7 +136,7 @@ def verify_firebase_token(id_token: str) -> dict:
                 "email": user_data["email"],
                 "email_verified": True,
             }
-        # Default fallback for any dev token
+        # Default dev fallback for any dev token (dev mode only).
         return {
             "uid": "test_faculty_001",
             "email": "faculty@calricula.com",
