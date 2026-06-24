@@ -367,10 +367,18 @@ export default function CourseComparePage() {
   // Set auth token
   useEffect(() => {
     async function setupToken() {
-      const token = await getToken();
-      if (token) {
-        api.setToken(token);
-        setTokenReady(true);
+      try {
+        const token = await getToken();
+        if (token) {
+          api.setToken(token);
+          setTokenReady(true);
+        } else {
+          setError('Unable to authenticate. Please log in again.');
+          setLoading(false);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unable to authenticate. Please log in again.');
+        setLoading(false);
       }
     }
     if (isAuthenticated) {

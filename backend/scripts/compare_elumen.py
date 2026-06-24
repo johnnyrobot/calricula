@@ -169,8 +169,16 @@ def compare_fields(
                     is_significant=is_significant,
                 ))
         except Exception as e:
+            # Never silently swallow a comparison failure: record it as a
+            # difference so the course is not incorrectly reported as matching.
             if verbose:
                 print(f"  Warning: Could not compare {field_name}: {e}")
+            differences.append(FieldDiff(
+                field_name=field_name,
+                local_value="(comparison error)",
+                elumen_value=f"(error: {e})",
+                is_significant=is_significant,
+            ))
 
     # Compare SLO count
     local_slo_count = len(local_course.slos) if local_course.slos else 0
@@ -236,8 +244,14 @@ def compare_course(
     number: str,
     college: str = "",
     verbose: bool = False,
+    client: Optional[SynceLumenClient] = None,
 ) -> ComparisonResult:
-    """Compare a single course between local DB and eLumen."""
+    """Compare a single course between local DB and eLumen.
+
+    A SynceLumenClient may be supplied by the caller (e.g. when comparing
+    many courses in a loop) to avoid creating a new connection per course.
+    If none is provided, a temporary client is created and closed here.
+    """
     result = ComparisonResult(
         subject_code=subject.upper(),
         course_number=number,
@@ -246,11 +260,17 @@ def compare_course(
     # Get tenant from college abbreviation
     tenant = ABBREV_TENANT_MAP.get(college.upper(), "") if college else ""
 
-    # Create eLumen client
-    client = SynceLumenClient()
+    # Use the provided client, or create a temporary one for this call.
+    owns_client = client is None
+    if owns_client:
+        client = SynceLumenClient()
 
-    # Find in eLumen
-    elumen_course = get_elumen_course(client, subject, number, tenant)
+    try:
+        # Find in eLumen
+        elumen_course = get_elumen_course(client, subject, number, tenant)
+    finally:
+        if owns_client:
+            client.close()
     if elumen_course:
         result.elumen_found = True
         result.elumen_id = elumen_course.id
@@ -414,22 +434,26 @@ Examples:
 
             print(f"Comparing {len(courses)} local courses...")
 
-            for course in courses:
-                result = compare_course(
-                    course.subject_code,
-                    course.course_number,
-                    args.college,
-                    args.verbose
-                )
-                results.append(result)
+            # Create one eLumen client for the whole batch to avoid opening a
+            # new connection per course; ensure it is closed afterwards.
+            with SynceLumenClient() as client:
+                for course in courses:
+                    result = compare_course(
+                        course.subject_code,
+                        course.course_number,
+                        args.college,
+                        args.verbose,
+                        client=client,
+                    )
+                    results.append(result)
 
-                if not args.json:
-                    if result.has_significant_differences:
-                        print(f"  {Colors.RED}✗{Colors.END} {course.subject_code} {course.course_number}")
-                    elif result.elumen_found and result.is_match:
-                        print(f"  {Colors.GREEN}✓{Colors.END} {course.subject_code} {course.course_number}")
-                    elif not result.elumen_found:
-                        print(f"  {Colors.YELLOW}?{Colors.END} {course.subject_code} {course.course_number} (not in eLumen)")
+                    if not args.json:
+                        if result.has_significant_differences:
+                            print(f"  {Colors.RED}✗{Colors.END} {course.subject_code} {course.course_number}")
+                        elif result.elumen_found and result.is_match:
+                            print(f"  {Colors.GREEN}✓{Colors.END} {course.subject_code} {course.course_number}")
+                        elif not result.elumen_found:
+                            print(f"  {Colors.YELLOW}?{Colors.END} {course.subject_code} {course.course_number} (not in eLumen)")
 
         if args.json:
             print(json.dumps([r.to_dict() for r in results], indent=2))

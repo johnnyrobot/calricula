@@ -81,9 +81,9 @@ async def create_notification(
 # API Endpoints
 # =============================================================================
 
-@router.get("", response_model=List[dict])
+@router.get("", response_model=List[NotificationRead])
 async def list_notifications(
-    limit: int = Query(default=20, le=100),
+    limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     unread_only: bool = Query(default=False),
     session: Session = Depends(get_session),
@@ -141,7 +141,7 @@ async def get_notification_counts(
     return NotificationCounts(total=total, unread=unread)
 
 
-@router.get("/{notification_id}", response_model=dict)
+@router.get("/{notification_id}", response_model=NotificationRead)
 async def get_notification(
     notification_id: uuid.UUID,
     session: Session = Depends(get_session),

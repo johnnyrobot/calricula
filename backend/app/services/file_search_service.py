@@ -39,6 +39,7 @@ class DocumentMetadata:
     upload_time: datetime
     document_type: str  # e.g., "regulation", "template", "course_outline"
     tags: List[str] = field(default_factory=list)
+    file_hash: Optional[str] = None  # Content hash for upload deduplication
 
 
 @dataclass
@@ -177,9 +178,9 @@ class FileSearchService:
         mime_type = self.SUPPORTED_MIME_TYPES[suffix]
         file_hash = self._compute_file_hash(file_path)
 
-        # Check if already uploaded (by hash)
+        # Check if already uploaded (by content hash)
         for doc in self._uploaded_files.values():
-            if file_hash in doc.file_id:
+            if doc.file_hash and doc.file_hash == file_hash:
                 logger.info(f"Document already uploaded: {doc.display_name}")
                 return doc
 
@@ -194,8 +195,14 @@ class FileSearchService:
                 mime_type=mime_type,
             )
 
-            # Wait for file to be processed
+            # Wait for file to be processed (bounded to avoid hanging forever
+            # if the provider leaves the file in PROCESSING state).
+            deadline = asyncio.get_running_loop().time() + 120
             while uploaded_file.state.name == "PROCESSING":
+                if asyncio.get_running_loop().time() > deadline:
+                    raise TimeoutError(
+                        f"Timed out waiting for file processing: {uploaded_file.name}"
+                    )
                 await asyncio.sleep(1)
                 uploaded_file = genai.get_file(uploaded_file.name)
 
@@ -212,6 +219,7 @@ class FileSearchService:
                 upload_time=datetime.utcnow(),
                 document_type=document_type,
                 tags=tags or [],
+                file_hash=file_hash,
             )
 
             self._uploaded_files[uploaded_file.name] = metadata
@@ -352,8 +360,15 @@ class FileSearchService:
                         logger.warning(f"Could not get file {doc.file_id}: {str(e)}")
 
         if not files_to_use:
-            # Fall back to regular generation without RAG
-            return await self._generate_without_rag(query, system_prompt)
+            # Do NOT silently fall back to ungrounded generation: in a regulatory
+            # context an answer with no source documents must not be presented as
+            # authoritative. Surface an explicit failure instead.
+            return RAGResponse(
+                text="",
+                citations=[],
+                success=False,
+                error="No uploaded documents matched this RAG request.",
+            )
 
         # Build the prompt with system instructions
         full_prompt = ""

@@ -28,6 +28,11 @@ const fs = require('fs');
     await page.waitForLoadState('networkidle');
 
     // Set localStorage flag for dev auth bypass
+    // WARNING: DEV/TEST ONLY - Never use auth bypass in production!
+    // This manipulates localStorage to skip authentication during local E2E testing.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('Auth bypass attempted in production environment!');
+    }
     await page.evaluate(() => {
       localStorage.setItem('DEV_AUTH_BYPASS', 'true');
       localStorage.setItem('dev_user_email', 'faculty@calricula.com');

@@ -6,7 +6,7 @@
 // Typeahead search for courses and programs
 // with keyboard navigation and debounced API calls
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   MagnifyingGlassIcon,
@@ -198,8 +198,8 @@ export const QuickSearchWidget: React.FC<QuickSearchWidgetProps> = ({
   }, [getToken]);
 
   // Debounced search
-  const debouncedSearch = useCallback(
-    debounce((q: string) => search(q), 300),
+  const debouncedSearch = useMemo(
+    () => debounce((q: string) => search(q), 300),
     [search]
   );
 

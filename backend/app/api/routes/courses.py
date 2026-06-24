@@ -1090,7 +1090,7 @@ def _check_circular_dependency(
     if requisite_course_id == course_id:
         return True
 
-    visited.add(course_id)
+    visited.add(requisite_course_id)
 
     # Check what courses the requisite_course requires
     requisites_query = select(CourseRequisite).where(
@@ -1295,10 +1295,22 @@ async def update_course_requisite(
             detail="Requisite not found"
         )
 
-    # Check for circular dependency if changing requisite_course_id
+    # Validate requisite_course_id if changing it
     if requisite_data.requisite_course_id and requisite_data.requisite_course_id != requisite.requisite_course_id:
+        req_course = session.get(Course, requisite_data.requisite_course_id)
+        if not req_course:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Requisite course not found"
+            )
+        # Prevent self-reference
+        if req_course.id == course_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A course cannot be its own requisite"
+            )
+        # Check for circular dependencies
         if _check_circular_dependency(course_id, requisite_data.requisite_course_id, session):
-            req_course = session.get(Course, requisite_data.requisite_course_id)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Circular dependency detected: {req_course.subject_code} {req_course.course_number} "
@@ -1357,10 +1369,22 @@ async def patch_course_requisite(
             detail="Requisite not found"
         )
 
-    # Check for circular dependency if changing requisite_course_id
+    # Validate requisite_course_id if changing it
     if requisite_data.requisite_course_id and requisite_data.requisite_course_id != requisite.requisite_course_id:
+        req_course = session.get(Course, requisite_data.requisite_course_id)
+        if not req_course:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Requisite course not found"
+            )
+        # Prevent self-reference
+        if req_course.id == course_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="A course cannot be its own requisite"
+            )
+        # Check for circular dependencies
         if _check_circular_dependency(course_id, requisite_data.requisite_course_id, session):
-            req_course = session.get(Course, requisite_data.requisite_course_id)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Circular dependency detected: {req_course.subject_code} {req_course.course_number} "
@@ -1768,6 +1792,40 @@ async def reorder_course_slos(
 from decimal import Decimal as PyDecimal
 
 
+def _validate_linked_slos(
+    linked_slos: List[str], course_id: uuid.UUID, session: Session
+) -> None:
+    """
+    Ensure every entry in linked_slos is a valid UUID that references an SLO
+    belonging to the given course. Raises HTTPException(400) on any failure.
+    """
+    if not linked_slos:
+        return
+
+    valid_slo_ids = {
+        str(slo_id)
+        for slo_id in session.exec(
+            select(StudentLearningOutcome.id).where(
+                StudentLearningOutcome.course_id == course_id
+            )
+        ).all()
+    }
+
+    for slo_ref in linked_slos:
+        try:
+            normalized = str(uuid.UUID(str(slo_ref)))
+        except (ValueError, AttributeError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid SLO reference '{slo_ref}': not a valid UUID",
+            )
+        if normalized not in valid_slo_ids:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Linked SLO '{slo_ref}' does not belong to this course",
+            )
+
+
 class ContentCreateRequest(BaseModel):
     """Request schema for creating a content topic."""
     topic: str
@@ -1885,6 +1943,9 @@ async def create_course_content(
             detail="Hours allocated must be a positive number"
         )
 
+    # Validate linked SLOs are valid UUIDs belonging to this course
+    _validate_linked_slos(content_data.linked_slos, course_id, session)
+
     # Get the next sequence number
     max_sequence_query = select(func.max(CourseContent.sequence)).where(
         CourseContent.course_id == course_id
@@ -1973,6 +2034,7 @@ async def update_course_content(
             )
         content.hours_allocated = PyDecimal(str(content_data.hours_allocated))
     if content_data.linked_slos is not None:
+        _validate_linked_slos(content_data.linked_slos, course_id, session)
         content.linked_slos = content_data.linked_slos
 
     session.add(content)
@@ -2613,6 +2675,12 @@ async def submit_course_for_review(
     cb09 = cb_codes.get("CB09", "")
     is_cte_course = cb09 and cb09 != "E"  # A, B, C, D are all CTE/vocational
 
+    if is_cte_course and not course.lmi_soc_code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot submit CTE course: LMI data must be attached before submission.",
+        )
+
     if is_cte_course and course.lmi_soc_code:
         # Course has LMI data attached - validate its age
         is_valid, age_months, validity_status = calculate_lmi_validity(course.lmi_retrieved_at)
@@ -2735,6 +2803,20 @@ async def approve_course(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"No valid transition from '{old_status.value}' status"
         )
+
+    # Enforce cross-listing consistency before final approval, matching the
+    # validation performed by the approvals.py transition path so this
+    # convenience route cannot bypass it.
+    if new_status == CourseStatus.APPROVED:
+        from app.api.routes.approvals import validate_cross_listings_for_approval
+
+        cross_listing_errors = validate_cross_listings_for_approval(course, session)
+        if cross_listing_errors:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot approve course due to cross-listing mismatches: "
+                + "; ".join(cross_listing_errors),
+            )
 
     # Update course status
     course.status = new_status
@@ -2974,6 +3056,13 @@ async def attach_lmi_to_course(
             detail="Only the course creator or admin can attach LMI data"
         )
 
+    # Only allow LMI changes on Draft courses
+    if course.status != CourseStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="LMI data can only be modified on Draft courses"
+        )
+
     # Update LMI fields
     course.lmi_soc_code = lmi_data.soc_code
     course.lmi_occupation_title = lmi_data.occupation_title
@@ -3154,6 +3243,13 @@ async def update_lmi_narrative(
             detail="Only the course creator or admin can update LMI narrative"
         )
 
+    # Only allow LMI changes on Draft courses
+    if course.status != CourseStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="LMI data can only be modified on Draft courses"
+        )
+
     # Check if LMI data exists
     if not course.lmi_soc_code:
         raise HTTPException(
@@ -3198,6 +3294,13 @@ async def remove_lmi_from_course(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the course creator or admin can remove LMI data"
+        )
+
+    # Only allow LMI changes on Draft courses
+    if course.status != CourseStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="LMI data can only be modified on Draft courses"
         )
 
     # Clear all LMI fields

@@ -322,7 +322,7 @@ const CATEGORY_INFO: Record<string, { label: string; color: string }> = {
 function getStatusIcon(code: CBCodeDefinition, value: string | undefined, cbCodes: CBCodes) {
   // Check dependencies
   if (code.dependencies) {
-    const depValue = cbCodes[code.dependencies.code];
+    const depValue = cbCodes[code.dependencies.code.toLowerCase()];
     if (!code.dependencies.values.includes(depValue || '')) {
       // Dependency not met, code is not applicable
       return {

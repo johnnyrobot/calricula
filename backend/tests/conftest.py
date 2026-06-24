@@ -28,6 +28,23 @@ from app.models.department import Department
 # Database Fixtures
 # =============================================================================
 
+@pytest.fixture(scope="session", autouse=True)
+def _create_schema():
+    """Ensure the full database schema exists before any test runs.
+
+    main.py's lifespan leaves create_db_and_tables() commented out (prod uses
+    Alembic), so the test suite must build its own schema. Importing app.models
+    registers every SQLModel table in the metadata; create_all only adds missing
+    tables and update_schema_for_lmi() uses IF NOT EXISTS, so this is idempotent
+    and safe to run against an existing dev database as well as a fresh CI one.
+    """
+    import app.models  # noqa: F401 -- register all SQLModel tables in metadata
+    from app.core.database import create_db_and_tables, update_schema_for_lmi
+    create_db_and_tables()
+    update_schema_for_lmi()
+    yield
+
+
 @pytest.fixture(scope="session")
 def test_engine():
     """

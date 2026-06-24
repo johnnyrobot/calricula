@@ -204,7 +204,7 @@ class QCEWClient:
         area_fips: str,
         year: Optional[int] = None,
         quarter: Optional[int] = None,
-    ) -> List[Dict[str, str]]:
+    ) -> tuple[List[Dict[str, str]], int, int]:
         """
         Fetch raw CSV data for an area.
 
@@ -214,7 +214,9 @@ class QCEWClient:
             quarter: Quarter 1-4 (defaults to latest available)
 
         Returns:
-            List of dictionaries representing CSV rows
+            A tuple of (rows, actual_year, actual_quarter). The actual year and
+            quarter reflect any 404 fallback to an earlier period, so callers can
+            label the returned rows with the period the data really came from.
         """
         if year is None or quarter is None:
             year, quarter = self._get_latest_quarter()
@@ -228,7 +230,7 @@ class QCEWClient:
             # Parse CSV
             content = response.text
             reader = csv.DictReader(io.StringIO(content))
-            return list(reader)
+            return list(reader), year, quarter
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
                 # Try earlier quarter if not found
@@ -262,7 +264,9 @@ class QCEWClient:
         if year is None or quarter is None:
             year, quarter = self._get_latest_quarter()
 
-        rows = await self.fetch_area_csv(area_info["fips"], year, quarter)
+        # fetch_area_csv may fall back to an earlier period on a 404; use the
+        # actual year/quarter it returns to label the rows correctly.
+        rows, year, quarter = await self.fetch_area_csv(area_info["fips"], year, quarter)
 
         # Filter for private sector (own_code = 5) and supersector industries
         industries = []

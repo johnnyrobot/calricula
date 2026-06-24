@@ -343,6 +343,7 @@ function SLOItemEditor({
         {/* Actions */}
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           <button
+            type="button"
             onClick={() => onMoveUp(slo.id)}
             disabled={index === 0}
             className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
@@ -351,6 +352,7 @@ function SLOItemEditor({
             <ChevronUpIcon className="h-4 w-4 text-slate-500" />
           </button>
           <button
+            type="button"
             onClick={() => onMoveDown(slo.id)}
             disabled={index === total - 1}
             className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed"
@@ -359,6 +361,7 @@ function SLOItemEditor({
             <ChevronDownIcon className="h-4 w-4 text-slate-500" />
           </button>
           <button
+            type="button"
             onClick={() => onRequestDelete(slo.id, slo.outcome_text)}
             disabled={!canDelete}
             className="p-1.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 disabled:opacity-30 disabled:cursor-not-allowed"
@@ -470,6 +473,15 @@ export function SLOEditor({
     onChange([...slos, newSLO]);
   }, [slos, maxSLOs, onChange]);
 
+  // Request AI-suggested SLOs and apply them to the editor
+  const handleSuggestSLOs = useCallback(async () => {
+    if (!onSuggestSLOs) return;
+    const suggested = await onSuggestSLOs();
+    if (suggested && suggested.length > 0) {
+      onChange(suggested.map((slo, i) => ({ ...slo, sequence: i + 1 })));
+    }
+  }, [onSuggestSLOs, onChange]);
+
   // Update SLO
   const handleUpdateSLO = useCallback(
     (id: string, updates: Partial<SLOItem>) => {
@@ -528,7 +540,7 @@ export function SLOEditor({
   const handleMoveDown = useCallback(
     (id: string) => {
       const index = slos.findIndex((slo) => slo.id === id);
-      if (index >= slos.length - 1) return;
+      if (index === -1 || index >= slos.length - 1) return;
 
       const newSLOs = [...slos];
       [newSLOs[index], newSLOs[index + 1]] = [newSLOs[index + 1], newSLOs[index]];
@@ -697,6 +709,7 @@ export function SLOEditor({
         {/* Add SLO Button */}
         {slos.length < maxSLOs && (
           <button
+            type="button"
             onClick={handleAddSLO}
             className="flex-1 flex items-center justify-center gap-2 py-3 px-4 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-slate-600 dark:text-slate-400 hover:border-luminous-400 hover:text-luminous-600 dark:hover:border-luminous-600 dark:hover:text-luminous-400 transition-colors"
           >
@@ -708,7 +721,8 @@ export function SLOEditor({
         {/* AI Suggest SLOs Button */}
         {onSuggestSLOs && (
           <button
-            onClick={onSuggestSLOs}
+            type="button"
+            onClick={handleSuggestSLOs}
             disabled={isLoadingSuggestions}
             className="flex-1 flex items-center justify-center gap-2 py-3 px-4 bg-luminous-50 dark:bg-luminous-900/20 border-2 border-luminous-200 dark:border-luminous-800 rounded-xl text-luminous-700 dark:text-luminous-300 hover:bg-luminous-100 dark:hover:bg-luminous-900/40 hover:border-luminous-300 dark:hover:border-luminous-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >

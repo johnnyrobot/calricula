@@ -7,9 +7,11 @@ This provides a proxy to the eLumen public API for the admin browser.
 """
 
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from pydantic import BaseModel
 
+from app.core.deps import require_admin
+from app.models.user import User
 from app.services.elumen_client import (
     SynceLumenClient,
     CourseResponse,
@@ -252,16 +254,17 @@ def program_to_detail(program: ProgramResponse) -> ProgramDetail:
 
 
 @router.get("/tenants", response_model=List[TenantInfo])
-async def get_tenants():
+def get_tenants(
+    current_user: User = Depends(require_admin()),
+):
     """
     Get list of all LACCD colleges.
 
     Returns the 9 LACCD colleges with their abbreviations and domains.
     """
+    client = SynceLumenClient()
     try:
-        client = SynceLumenClient()
         tenants = client.get_tenants()
-        client.close()
 
         return [
             TenantInfo(
@@ -273,22 +276,25 @@ async def get_tenants():
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch tenants: {str(e)}")
+    finally:
+        client.close()
 
 
 @router.get("/courses", response_model=SearchResponse)
-async def search_courses(
+def search_courses(
     college: Optional[str] = Query(None, description="College abbreviation (e.g., LAMC)"),
     query: Optional[str] = Query(None, description="Search query"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(10, ge=1, le=100, description="Results per page"),
+    current_user: User = Depends(require_admin()),
 ):
     """
     Search courses from eLumen.
 
     Searches approved courses across LACCD colleges.
     """
+    client = SynceLumenClient()
     try:
-        client = SynceLumenClient()
         # Fetch only the required page + a small buffer
         # We fetch (page * page_size) to check if there are more pages
         courses = client.get_courses(
@@ -296,7 +302,6 @@ async def search_courses(
             query=query or "",
             limit=page_size * page + page_size,  # Fetch one extra page to determine if hasNextPage
         )
-        client.close()
 
         # Simple pagination (eLumen API doesn't return total count)
         start = (page - 1) * page_size
@@ -311,20 +316,23 @@ async def search_courses(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to search courses: {str(e)}")
+    finally:
+        client.close()
 
 
 @router.get("/courses/{course_id}", response_model=CourseDetail)
-async def get_course(
+def get_course(
     course_id: int,
     college: Optional[str] = Query(None, description="College abbreviation"),
+    current_user: User = Depends(require_admin()),
 ):
     """
     Get detailed course information from eLumen.
 
     Returns full course details including CB codes, objectives, and SLOs.
     """
+    client = SynceLumenClient()
     try:
-        client = SynceLumenClient()
         # We need to search for the course by ID
         # The eLumen API doesn't have a direct get-by-id for public endpoint
         # So we fetch courses and find the matching one
@@ -332,7 +340,6 @@ async def get_course(
             tenant=college or "",
             limit=500,  # Fetch enough to find the course
         )
-        client.close()
 
         for course in courses:
             if course.id == course_id:
@@ -343,27 +350,29 @@ async def get_course(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch course: {str(e)}")
+    finally:
+        client.close()
 
 
 @router.get("/courses/by-code/{subject}/{number}", response_model=CourseDetail)
-async def get_course_by_code(
+def get_course_by_code(
     subject: str,
     number: str,
     college: Optional[str] = Query(None, description="College abbreviation"),
+    current_user: User = Depends(require_admin()),
 ):
     """
     Get course by subject and number.
 
     More efficient than searching by ID if you know the course code.
     """
+    client = SynceLumenClient()
     try:
-        client = SynceLumenClient()
         course = client.get_course_by_code(
             subject=subject,
             number=number,
             tenant=college or "",
         )
-        client.close()
 
         if not course:
             raise HTTPException(
@@ -376,14 +385,17 @@ async def get_course_by_code(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch course: {str(e)}")
+    finally:
+        client.close()
 
 
 @router.get("/programs", response_model=SearchResponse)
-async def search_programs(
+def search_programs(
     college: Optional[str] = Query(None, description="College abbreviation (e.g., LAPC)"),
     query: Optional[str] = Query(None, description="Search query"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(10, ge=1, le=100, description="Results per page"),
+    current_user: User = Depends(require_admin()),
 ):
     """
     Search programs from eLumen.
@@ -391,14 +403,13 @@ async def search_programs(
     Searches approved programs (degrees/certificates) across LACCD colleges.
     Note: Currently only LAPC has programs in the public API.
     """
+    client = SynceLumenClient()
     try:
-        client = SynceLumenClient()
         programs = client.get_programs(
             tenant=college or "",
             query=query or "",
             limit=page_size * page + page_size,  # Fetch one extra page to determine if hasNextPage
         )
-        client.close()
 
         # Simple pagination
         start = (page - 1) * page_size
@@ -413,23 +424,25 @@ async def search_programs(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to search programs: {str(e)}")
+    finally:
+        client.close()
 
 
 @router.get("/programs/{program_id}", response_model=ProgramDetail)
-async def get_program(
+def get_program(
     program_id: int,
     college: Optional[str] = Query(None, description="College abbreviation"),
+    current_user: User = Depends(require_admin()),
 ):
     """
     Get detailed program information from eLumen.
     """
+    client = SynceLumenClient()
     try:
-        client = SynceLumenClient()
         programs = client.get_programs(
             tenant=college or "",
             limit=500,
         )
-        client.close()
 
         for program in programs:
             if program.id == program_id:
@@ -440,3 +453,5 @@ async def get_program(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to fetch program: {str(e)}")
+    finally:
+        client.close()

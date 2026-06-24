@@ -830,11 +830,13 @@ export function CBCodeWizard({
   const [showSummary, setShowSummary] = useState(false);
 
   // CCN-related state (CUR-222)
+  // Single source of truth for whether the CCN detection phase can be shown.
+  const hasCCNContext = Boolean(
+    enableCCNDetection && courseId && courseTitle && subjectCode && courseUnits !== undefined
+  );
   type CCNPhase = 'ccn_detection' | 'questions' | 'complete';
   const [ccnPhase, setCcnPhase] = useState<CCNPhase>(
-    enableCCNDetection && courseId && courseTitle && subjectCode && courseUnits !== undefined
-      ? 'ccn_detection'
-      : 'questions'
+    hasCCNContext ? 'ccn_detection' : 'questions'
   );
   const [adoptedCCN, setAdoptedCCN] = useState<string | null>(null);
   const [ccnJustification, setCcnJustification] = useState<CCNJustification | null>(null);
@@ -870,9 +872,8 @@ export function CBCodeWizard({
       setCurrentStep(currentStep + 1);
     } else {
       setShowSummary(true);
-      onComplete?.(cbCodes);
     }
-  }, [currentStep, activeQuestions.length, cbCodes, onComplete]);
+  }, [currentStep, activeQuestions.length]);
 
   const handlePrevious = useCallback(() => {
     if (showSummary) {
@@ -892,17 +893,20 @@ export function CBCodeWizard({
     // Set the adopted CCN ID
     setAdoptedCCN(ccnId);
 
+    // CUR-222: cb05 must always be "A" when adopting a CCN
+    const enforcedAutoCBCodes = { ...autoCBCodes, cb05: 'A' };
+
     // Auto-populate CB codes from CCN adoption
-    const newCodes = { ...cbCodes, ...autoCBCodes };
+    const newCodes = { ...cbCodes, ...enforcedAutoCBCodes };
     setCbCodes(newCodes);
 
     // Lock the auto-populated CB codes (CB05, CB03)
     const newLockedCodes = new Set(lockedCBCodes);
-    Object.keys(autoCBCodes).forEach(code => newLockedCodes.add(code));
+    Object.keys(enforcedAutoCBCodes).forEach(code => newLockedCodes.add(code));
     setLockedCBCodes(newLockedCodes);
 
     // Notify parent
-    onCCNAdopted?.(ccnId, autoCBCodes);
+    onCCNAdopted?.(ccnId, enforcedAutoCBCodes);
   }, [cbCodes, lockedCBCodes, onCCNAdopted]);
 
   const handleCCNSkipped = useCallback((justification?: { reasonCode: string; text: string }) => {
@@ -921,11 +925,11 @@ export function CBCodeWizard({
       setShowSummary(false);
     } else if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
-    } else if (ccnPhase === 'questions' && enableCCNDetection && courseId) {
-      // Go back to CCN detection step
+    } else if (ccnPhase === 'questions' && hasCCNContext) {
+      // Go back to CCN detection step (only when it can actually render)
       setCcnPhase('ccn_detection');
     }
-  }, [currentStep, showSummary, ccnPhase, enableCCNDetection, courseId]);
+  }, [currentStep, showSummary, ccnPhase, hasCCNContext]);
 
   // Check if current question is answered
   const isCurrentAnswered = currentQuestion
@@ -940,7 +944,7 @@ export function CBCodeWizard({
   return (
     <div className="space-y-6">
       {/* CCN Detection Phase (CUR-222) */}
-      {ccnPhase === 'ccn_detection' && courseId && courseTitle && subjectCode && courseUnits !== undefined && (
+      {ccnPhase === 'ccn_detection' && hasCCNContext && courseId && courseTitle && subjectCode && courseUnits !== undefined && (
         <CCNDetectionStep
           courseId={courseId}
           courseTitle={courseTitle}
@@ -1031,8 +1035,8 @@ export function CBCodeWizard({
         <nav className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-700" aria-label="CB Code wizard navigation">
           <button
             onClick={handlePreviousWithCCN}
-            disabled={currentStep === 0 && !showSummary && !enableCCNDetection}
-            aria-label={showSummary ? 'Edit CB codes' : currentStep === 0 && enableCCNDetection ? 'Back to CCN detection' : 'Go to previous question'}
+            disabled={currentStep === 0 && !showSummary && !hasCCNContext}
+            aria-label={showSummary ? 'Edit CB codes' : currentStep === 0 && hasCCNContext ? 'Back to CCN detection' : 'Go to previous question'}
             className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-luminous-500 focus-visible:ring-offset-2"
           >
             <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />

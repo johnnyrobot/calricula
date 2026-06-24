@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { CourseListItem, CourseListResponse } from '@/lib/api';
+import { getIdToken } from '@/lib/firebase';
 
 interface UseUserCoursesOptions {
   /** Filter for CTE courses only */
@@ -69,11 +70,18 @@ export function useUserCourses({
       }
       url.searchParams.append('limit', '100'); // Get up to 100 courses
 
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+
+      // Attach Firebase auth token so the request is authenticated.
+      const token = await getIdToken();
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(url.toString(), {
-        headers: {
-          'Content-Type': 'application/json',
-          // Auth token will be added by fetch interceptor if available
-        },
+        headers,
       });
 
       if (!response.ok) {
@@ -96,7 +104,7 @@ export function useUserCourses({
     if (autoFetch) {
       fetchCourses(initialQuery);
     }
-  }, [autoFetch, initialQuery]);
+  }, [autoFetch, initialQuery, cteOnly]);
 
   return {
     courses,

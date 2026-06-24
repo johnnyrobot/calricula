@@ -30,19 +30,37 @@ export interface UserProfile {
   department_name?: string;
 }
 
+// Whether this build permits the runtime (localStorage) dev-auth override.
+//
+// SECURITY: the `DEV_AUTH_BYPASS` localStorage flag is settable by anyone via
+// the browser console, so it must NOT be honored in a normal production build —
+// otherwise any visitor could flip it to fake an authenticated session. We only
+// respect the runtime override when the deployer explicitly opted in at build
+// time (dev or demo mode) or when running a non-production build. The backend
+// independently rejects dev tokens unless AUTH_DEV_MODE is enabled, so this is
+// defense-in-depth for the client UI.
+const isRuntimeBypassAllowed = (): boolean => {
+  return (
+    process.env.NEXT_PUBLIC_AUTH_DEV_MODE === 'true' ||
+    process.env.NEXT_PUBLIC_DEMO_MODE === 'true' ||
+    process.env.NODE_ENV !== 'production'
+  );
+};
+
 // Development mode detection helper
-// Enable dev bypass if NEXT_PUBLIC_AUTH_DEV_MODE is set to 'true'
-// This allows testing without Firebase even in production builds
+// Enable dev bypass if NEXT_PUBLIC_AUTH_DEV_MODE is set to 'true', or via the
+// localStorage override ONLY in builds where that override is permitted.
 const isDevBypassEnabled = (): boolean => {
   if (typeof window === 'undefined') return false; // Server-side render
-  // IMPORTANT: Check localStorage FIRST for runtime control
-  // This allows dev bypass to work even if the build-time env var was false
-  const manualDevMode = window.localStorage.getItem('DEV_AUTH_BYPASS') === 'true';
-  if (manualDevMode) return true;
 
-  // Fall back to build-time environment variable
-  const authDevMode = process.env.NEXT_PUBLIC_AUTH_DEV_MODE === 'true';
-  return authDevMode;
+  // Runtime localStorage override — only honored when this build allows it.
+  if (isRuntimeBypassAllowed()) {
+    const manualDevMode = window.localStorage.getItem('DEV_AUTH_BYPASS') === 'true';
+    if (manualDevMode) return true;
+  }
+
+  // Build-time environment variable (set by the deployer, not the visitor).
+  return process.env.NEXT_PUBLIC_AUTH_DEV_MODE === 'true';
 };
 
 // Demo mode detection helper
@@ -226,9 +244,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return;
     }
 
-    if (!isConfigured) {
+    if (!isConfigured && isRuntimeBypassAllowed()) {
       console.log('[AUTH] Firebase not configured - enabling dev mode automatically');
-      // Auto-enable dev mode when Firebase isn't configured
+      // Auto-enable dev mode when Firebase isn't configured (dev/demo builds only;
+      // a locked-down production build must not silently bypass authentication).
       autoDevModeEnabled = true;
       if (typeof window !== 'undefined') {
         window.localStorage.setItem('DEV_AUTH_BYPASS', 'true');
@@ -256,11 +275,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // This enables automated testing with Puppeteer when Firebase hangs
     const timeoutId = setTimeout(() => {
       if (!authResolved) {
-        console.warn('[AUTH] Firebase auth timeout - enabling dev mode fallback');
-        autoDevModeEnabled = true;
-        // Store in localStorage so future page loads use dev mode
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem('DEV_AUTH_BYPASS', 'true');
+        // Only fall back to dev mode in builds that permit the bypass. A
+        // locked-down production build must fail closed if Firebase hangs
+        // rather than auto-authenticating the visitor.
+        if (isRuntimeBypassAllowed()) {
+          console.warn('[AUTH] Firebase auth timeout - enabling dev mode fallback');
+          autoDevModeEnabled = true;
+          // Store in localStorage so future page loads use dev mode
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem('DEV_AUTH_BYPASS', 'true');
+          }
+        } else {
+          console.warn('[AUTH] Firebase auth timeout - no dev fallback in production');
         }
         setLoading(false);
       }

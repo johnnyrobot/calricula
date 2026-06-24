@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 from app.core.database import get_session
 from app.core.deps import get_current_user
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.course import (
     Course,
     CourseStatus,
@@ -186,7 +186,7 @@ def validate_cross_listing(
             if p_slo.bloom_level != c_slo.bloom_level:
                 issues.append(ValidationIssue(
                     field=f"slo_{i+1}_bloom",
-                    severity="warning",
+                    severity="error",
                     message=f"SLO {i+1} Bloom's level differs",
                     primary_value=p_slo.bloom_level,
                     cross_listed_value=c_slo.bloom_level,
@@ -226,7 +226,7 @@ def validate_cross_listing(
             if p_content.hours_allocated != c_content.hours_allocated:
                 issues.append(ValidationIssue(
                     field=f"content_{i+1}_hours",
-                    severity="warning",
+                    severity="error",
                     message=f"Content topic {i+1} hours differ",
                     primary_value=str(p_content.hours_allocated),
                     cross_listed_value=str(c_content.hours_allocated),
@@ -359,6 +359,17 @@ async def create_cross_listing(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Cross-listed course not found"
+        )
+
+    # Authorization: only an admin or the creator of the primary course may
+    # create a cross-listing for it (mirrors course mutation permissions).
+    if (
+        current_user.role != UserRole.ADMIN
+        and primary_course.created_by != current_user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to cross-list this course",
         )
 
     # Check not the same course

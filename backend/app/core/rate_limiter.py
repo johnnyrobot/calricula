@@ -12,13 +12,14 @@ Rate Limits:
 """
 
 import logging
-from functools import wraps
-from typing import Callable, Optional
 
-from fastapi import HTTPException, Request, Response
+from fastapi import Request, Response
+from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -41,10 +42,13 @@ def get_user_identifier(request: Request) -> str:
         if user_id:
             return f"user:{user_id}"
 
-    # Try to get user from custom header (dev mode)
-    dev_user = request.headers.get("X-Dev-User-Id")
-    if dev_user:
-        return f"dev:{dev_user}"
+    # Try to get user from custom header, but ONLY in dev mode.
+    # Honoring this header outside dev mode would let clients spoof an
+    # arbitrary identifier to evade per-user rate limits.
+    if settings.AUTH_DEV_MODE:
+        dev_user = request.headers.get("X-Dev-User-Id")
+        if dev_user:
+            return f"dev:{dev_user}"
 
     # Fall back to IP address
     return f"ip:{get_remote_address(request)}"
@@ -115,11 +119,11 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Res
     # SlowAPI includes the limit info in the detail
     retry_after = 60  # Default to 60 seconds
 
-    raise HTTPException(
+    return JSONResponse(
         status_code=429,
-        detail={
+        content={
             "error": "rate_limit_exceeded",
-            "message": f"Too many requests. Please wait before trying again.",
+            "message": "Too many requests. Please wait before trying again.",
             "limit": str(exc.detail),
             "retry_after_seconds": retry_after,
         },
@@ -127,70 +131,19 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> Res
     )
 
 
-def rate_limited(limit_type: str = "ai_generation", exempt_admins: bool = True):
+def is_admin(request: Request) -> bool:
     """
-    Decorator to apply rate limiting to an endpoint.
+    SlowAPI ``exempt_when`` predicate: returns True when the current user is an
+    admin and should bypass rate limiting.
 
-    Args:
-        limit_type: Key from RATE_LIMITS dict (e.g., "ai_generation", "ai_chat")
-        exempt_admins: If True, admin users bypass rate limiting
+    Apply rate limiting directly on route handlers, e.g.::
 
-    Usage:
         @router.post("/suggest/catalog-description")
-        @rate_limited("ai_generation")
-        async def suggest_catalog_description(...):
+        @limiter.limit(RATE_LIMITS["ai_generation"], exempt_when=is_admin)
+        async def suggest_catalog_description(request: Request, ...):
             ...
+
+    The route handler must declare an explicit ``request: Request`` parameter so
+    SlowAPI can locate the request and enforce the limit.
     """
-    limit = RATE_LIMITS.get(limit_type, "10/minute")
-
-    def decorator(func: Callable):
-        @wraps(func)
-        async def wrapper(*args, request: Request = None, **kwargs):
-            # Find request in args or kwargs
-            if request is None:
-                for arg in args:
-                    if isinstance(arg, Request):
-                        request = arg
-                        break
-
-            if request is None:
-                # No request found, just call the function
-                return await func(*args, **kwargs)
-
-            # Check if admin is exempt
-            if exempt_admins and check_admin_exempt(request):
-                logger.debug(f"Admin user exempt from rate limiting on {request.url.path}")
-                return await func(*args, request=request, **kwargs)
-
-            # Apply rate limiting using SlowAPI's shared limiter
-            # The actual rate limiting is done via dependency injection
-            return await func(*args, request=request, **kwargs)
-
-        return wrapper
-    return decorator
-
-
-# Dependency functions for FastAPI
-def get_ai_generation_limiter():
-    """Dependency for AI generation endpoints (10/minute)."""
-    return limiter.limit(RATE_LIMITS["ai_generation"])
-
-
-def get_ai_chat_limiter():
-    """Dependency for AI chat endpoints (30/minute)."""
-    return limiter.limit(RATE_LIMITS["ai_chat"])
-
-
-def get_ai_rag_limiter():
-    """Dependency for RAG endpoints (20/minute)."""
-    return limiter.limit(RATE_LIMITS["ai_rag"])
-
-
-def get_ai_explain_limiter():
-    """Dependency for compliance explanation endpoints (30/minute)."""
-    return limiter.limit(RATE_LIMITS["ai_explain"])
-
-
-def get_ai_documents_limiter():
-    """Dependency for document operation endpoints (20/minute)."""
-    return limiter.limit(RATE_LIMITS["ai_documents"])
+    return check_admin_exempt(request)
