@@ -1,0 +1,55 @@
+name: CI
+
+# WS-0 safety net: run the backend test suite and frontend build/unit tests on
+# every push and PR. This is the gate the remediation workstreams (WS-1..WS-5)
+# verify against. Playwright e2e is intentionally a separate opt-in step (it
+# needs browser binaries + a running app) to keep PR feedback fast.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run tests
+        run: pytest
+      - name: Type check (non-blocking)
+        run: mypy app
+        continue-on-error: true
+
+  frontend:
+    name: Frontend (build + jest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+      - name: Build
+        run: npm run build
+      - name: Unit tests
+        run: npm test
