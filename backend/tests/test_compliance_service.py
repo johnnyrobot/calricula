@@ -193,11 +193,11 @@ class TestUnitsHoursCompliance:
         assert rule_result.status == ComplianceStatus.FAIL
 
     def test_lab_course_calculates_correctly(self, compliance_service):
-        """Lab course should calculate hours at 1:1 ratio (54 hours per unit)."""
+        """Lab course: standard ratio is 3 lab hrs/week per unit (3 × 18 = 54)."""
         course = {
             "units": Decimal("1"),
             "lecture_hours": Decimal("0"),
-            "lab_hours": Decimal("1"),  # 1 × 54 = 54 hours = 1 unit
+            "lab_hours": Decimal("3"),  # 3 lab hrs/wk × 18 wks = 54 hours = 1 unit
             "outside_of_class_hours": Decimal("0"),
         }
         results = compliance_service._check_units_hours(course)
@@ -210,7 +210,7 @@ class TestUnitsHoursCompliance:
         course = {
             "units": Decimal("4"),
             "lecture_hours": Decimal("3"),  # 3 × 18 = 54
-            "lab_hours": Decimal("1"),  # 1 × 54 = 54
+            "lab_hours": Decimal("3"),  # 3 × 18 = 54
             "outside_of_class_hours": Decimal("6"),  # 6 × 18 = 108
             # Total: 54 + 54 + 108 = 216 / 54 = 4 units
         }

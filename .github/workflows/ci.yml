@@ -44,6 +44,23 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+      - name: Seed reference data
+        # The seed-data tests (test_ccn_seed_data, reference endpoints) read
+        # pre-seeded rows from the DB. Create the schema and seed only the two
+        # dependency-free reference tables — not courses/programs/demo data,
+        # which would perturb count-based tests. Both seeders are offline (no AI).
+        run: |
+          python - <<'PY'
+          import app.models  # noqa: F401 -- register all SQLModel tables
+          from app.core.database import create_db_and_tables, update_schema_for_lmi
+          create_db_and_tables()
+          update_schema_for_lmi()
+          from seeds.seed_top_codes import seed_top_codes
+          from seeds.seed_ccn_standards import seed_ccn_standards
+          seed_top_codes()
+          seed_ccn_standards()
+          print("Seeded TOP codes + CCN standards")
+          PY
       - name: Run tests
         run: pytest
       - name: Type check (non-blocking)
