@@ -257,6 +257,7 @@ class TestCourseAPIIntegration:
             "units": 3.0,
             "lecture_hours": 3,
             "lab_hours": 0,
+            "outside_of_class_hours": 6,  # 3 lecture + 6 outside = 162 hrs / 54 = 3 units
         }
 
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
