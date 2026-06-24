@@ -16,6 +16,25 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # The suite talks to Postgres (settings.DATABASE_URL defaults to
+    # localhost:5433/calricula). Provide it as a service container; the port is
+    # mapped to 5433 to match that default.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: calricula
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5433/calricula
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
