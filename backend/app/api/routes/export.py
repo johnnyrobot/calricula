@@ -8,6 +8,7 @@ Provides endpoints for exporting Course Outlines of Record (CORs) and Programs:
 
 import uuid
 import io
+import html
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
@@ -525,7 +526,7 @@ async def export_course_elumen(
         "activityHours": int(course.activity_hours),
         "tbaHours": int(course.tba_hours),
         "outsideOfClassHours": int(course.outside_of_class_hours),
-        "totalStudentHours": int(course.lecture_hours) + int(course.lab_hours) + int(course.outside_of_class_hours),
+        "totalStudentHours": int(course.lecture_hours) + int(course.lab_hours) + int(course.activity_hours) + int(course.tba_hours) + int(course.outside_of_class_hours),
         "department": {
             "code": department.code if department else "",
             "name": department.name if department else "",
@@ -861,6 +862,14 @@ async def get_public_course_view(
             detail="Course not found"
         )
 
+    # Only approved courses are visible publicly. Treat unapproved (draft/in-review)
+    # courses as nonexistent to avoid exposing them via this unauthenticated endpoint.
+    if course.status != CourseStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found"
+        )
+
     # Fetch related data
     department = session.get(Department, course.department_id)
 
@@ -1002,13 +1011,23 @@ async def get_public_course_view(
 
 
 def _generate_public_html(data: dict) -> str:
-    """Generate HTML view for public course display."""
+    """Generate HTML view for public course display.
+
+    All dynamic, data-controlled values are HTML-escaped before interpolation.
+    This endpoint is unauthenticated and serves faculty-authored content
+    (titles, descriptions, SLOs, content outlines), so escaping is required to
+    prevent stored cross-site scripting (XSS).
+    """
+
+    def esc(value) -> str:
+        """HTML-escape any value (including quotes) for safe interpolation."""
+        return html.escape(str(value if value is not None else ""), quote=True)
 
     # Build prerequisites string
     prereqs_html = ""
     if data["prerequisites"]:
         prereqs = ", ".join([
-            p.get("course", p.get("description", ""))
+            esc(p.get("course", p.get("description", "")))
             for p in data["prerequisites"]
         ])
         prereqs_html = f"<p><strong>Prerequisites:</strong> {prereqs}</p>"
@@ -1017,7 +1036,7 @@ def _generate_public_html(data: dict) -> str:
     coreqs_html = ""
     if data["corequisites"]:
         coreqs = ", ".join([
-            c.get("course", c.get("description", ""))
+            esc(c.get("course", c.get("description", "")))
             for c in data["corequisites"]
         ])
         coreqs_html = f"<p><strong>Corequisites:</strong> {coreqs}</p>"
@@ -1026,7 +1045,7 @@ def _generate_public_html(data: dict) -> str:
     slos_html = ""
     if data["studentLearningOutcomes"]:
         slo_items = "\n".join([
-            f"<li>{slo['outcome']}</li>"
+            f"<li>{esc(slo['outcome'])}</li>"
             for slo in data["studentLearningOutcomes"]
         ])
         slos_html = f"""
@@ -1039,8 +1058,8 @@ def _generate_public_html(data: dict) -> str:
     if data["contentOutline"]:
         content_items = "\n".join([
             f"""<li>
-                <strong>{item['topic']}</strong>
-                {('<ul>' + ''.join([f'<li>{st}</li>' for st in item['subtopics']]) + '</ul>') if item['subtopics'] else ''}
+                <strong>{esc(item['topic'])}</strong>
+                {('<ul>' + ''.join([f'<li>{esc(st)}</li>' for st in item['subtopics']]) + '</ul>') if item['subtopics'] else ''}
             </li>"""
             for item in data["contentOutline"]
         ])
@@ -1057,21 +1076,21 @@ def _generate_public_html(data: dict) -> str:
     if data["transferability"]["csu"]:
         transfers.append('<span class="badge badge-csu">CSU Transferable</span>')
     if data["cId"]["isAligned"]:
-        transfers.append(f'<span class="badge badge-cid">C-ID: {data["cId"]["number"]}</span>')
+        transfers.append(f'<span class="badge badge-cid">C-ID: {esc(data["cId"]["number"])}</span>')
     if transfers:
         transfer_html = f'<div class="transferability">{" ".join(transfers)}</div>'
 
     # Units display
-    units_display = str(data["units"]["value"])
+    units_display = esc(data["units"]["value"])
     if data["units"]["isVariable"]:
-        units_display = f"{data['units']['minimum']}-{data['units']['maximum']}"
+        units_display = f"{esc(data['units']['minimum'])}-{esc(data['units']['maximum'])}"
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{data['courseCode']} - {data['title']}</title>
+    <title>{esc(data['courseCode'])} - {esc(data['title'])}</title>
     <style>
         :root {{
             --luminous-500: #6366f1;
@@ -1169,22 +1188,22 @@ def _generate_public_html(data: dict) -> str:
 </head>
 <body>
     <div class="header">
-        <p class="course-code">{data['courseCode']}</p>
-        <p class="course-title">{data['title']}</p>
-        <p class="meta">{data['department']['name']} | {data['status']}</p>
+        <p class="course-code">{esc(data['courseCode'])}</p>
+        <p class="course-title">{esc(data['title'])}</p>
+        <p class="meta">{esc(data['department']['name'])} | {esc(data['status'])}</p>
     </div>
 
     <div class="units-hours">
         <div><span>Units:</span> {units_display}</div>
-        <div><span>Lecture:</span> {data['hours']['lecture']} hrs</div>
-        <div><span>Lab:</span> {data['hours']['lab']} hrs</div>
+        <div><span>Lecture:</span> {esc(data['hours']['lecture'])} hrs</div>
+        <div><span>Lab:</span> {esc(data['hours']['lab'])} hrs</div>
     </div>
 
     {transfer_html}
 
     <div class="description">
         <strong>Catalog Description:</strong><br>
-        {data['description'] or 'No description available.'}
+        {esc(data['description']) if data['description'] else 'No description available.'}
     </div>
 
     {prereqs_html}
@@ -1195,8 +1214,8 @@ def _generate_public_html(data: dict) -> str:
     {content_html}
 
     <div class="footer">
-        <p>{data['institution']['name']} | {data['institution']['district']}</p>
-        <p>Last updated: {data['lastUpdated'][:10] if data['lastUpdated'] else 'N/A'}</p>
+        <p>{esc(data['institution']['name'])}{(' | ' + esc(data['institution']['district'])) if data['institution'].get('district') else ''}</p>
+        <p>Last updated: {esc(data['lastUpdated'][:10]) if data['lastUpdated'] else 'N/A'}</p>
     </div>
 </body>
 </html>"""

@@ -625,7 +625,15 @@ export function CrossListingEditor({ courseId, readOnly = false }: CrossListingE
   // Uses .then()/.catch() pattern to prevent Next.js error overlay
   const fetchCrossListings = useCallback(async () => {
     setLoading(true);
-    const token = await getToken();
+    let token: string | null;
+    try {
+      token = await getToken();
+    } catch (err) {
+      console.error('Failed to fetch cross-listings:', err);
+      toast.error('Failed to load cross-listings', (err as Error).message || undefined);
+      setLoading(false);
+      return;
+    }
     if (token) api.setToken(token);
 
     api.listCrossListings(courseId)
@@ -655,7 +663,16 @@ export function CrossListingEditor({ courseId, readOnly = false }: CrossListingE
     setValidation(null);
     setComparison(null);
 
-    const token = await getToken();
+    let token: string | null;
+    try {
+      token = await getToken();
+    } catch (err) {
+      console.error('Failed to validate cross-listing:', err);
+      toast.error('Failed to validate cross-listing', (err as Error).message || 'Please check the server connection');
+      setValidationModalOpen(false);
+      setIsValidating(false);
+      return;
+    }
     if (token) api.setToken(token);
 
     // Fetch both validation and comparison in parallel
@@ -683,7 +700,15 @@ export function CrossListingEditor({ courseId, readOnly = false }: CrossListingE
     if (!selectedCourse) return;
 
     setIsCreating(true);
-    const token = await getToken();
+    let token: string | null;
+    try {
+      token = await getToken();
+    } catch (err) {
+      console.error('Failed to create cross-listing:', err);
+      toast.error('Failed to create cross-listing', (err as Error).message || undefined);
+      setIsCreating(false);
+      return;
+    }
     if (token) api.setToken(token);
 
     api.createCrossListing(courseId, selectedCourse.id)
@@ -706,7 +731,15 @@ export function CrossListingEditor({ courseId, readOnly = false }: CrossListingE
   // Uses .then()/.catch() pattern to prevent Next.js error overlay
   const handleRemoveCrossListing = async (crossListingId: string) => {
     setRemovingId(crossListingId);
-    const token = await getToken();
+    let token: string | null;
+    try {
+      token = await getToken();
+    } catch (err) {
+      console.error('Failed to remove cross-listing:', err);
+      toast.error('Failed to remove cross-listing', (err as Error).message || undefined);
+      setRemovingId(null);
+      return;
+    }
     if (token) api.setToken(token);
 
     api.deleteCrossListing(courseId, crossListingId)
@@ -727,7 +760,15 @@ export function CrossListingEditor({ courseId, readOnly = false }: CrossListingE
   // Uses .then()/.catch() pattern to prevent Next.js error overlay
   const handleSyncFromPrimary = async (crossListingId: string) => {
     setSyncingId(crossListingId);
-    const token = await getToken();
+    let token: string | null;
+    try {
+      token = await getToken();
+    } catch (err) {
+      console.error('Failed to sync from primary:', err);
+      toast.error('Failed to sync from primary course', (err as Error).message || undefined);
+      setSyncingId(null);
+      return;
+    }
     if (token) api.setToken(token);
 
     api.syncCrossListing(courseId, crossListingId)

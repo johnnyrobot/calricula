@@ -143,8 +143,8 @@ describe('CCNDetectionStep', () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': 'Bearer mock-auth-token',
           },
-          credentials: 'include',
           body: JSON.stringify({
             title: 'Introduction to Calculus',
             description: 'An introduction to differential calculus',
@@ -453,8 +453,8 @@ describe('CCNDetectionStep', () => {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Authorization': 'Bearer mock-auth-token',
           },
-          credentials: 'include',
           body: JSON.stringify({
             course_id: 'course-123',
             reason_code: 'vocational',

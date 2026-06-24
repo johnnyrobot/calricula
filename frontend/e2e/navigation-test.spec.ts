@@ -1,38 +1,5 @@
 import { test, expect } from '@playwright/test';
-
-// Test user credentials (for dev mode or test environment)
-const TEST_USERS = {
-  faculty: {
-    email: 'faculty@calricula.com',
-    password: 'Test123!',
-    role: 'Faculty',
-  },
-};
-
-/**
- * Helper to login via the dev mode
- */
-async function loginAsUser(
-  page: any,
-  user: { email: string; password: string }
-): Promise<void> {
-  await page.goto('/login');
-
-  // Wait for login form
-  await page.waitForSelector('input[type="email"]');
-
-  // Fill credentials
-  await page.fill('input[type="email"]', user.email);
-  await page.fill('input[type="password"]', user.password);
-
-  // Submit
-  await page.click('button[type="submit"]');
-
-  // Wait for redirect (should go to dashboard or previous page)
-  await page.waitForURL((url: URL) => !url.pathname.includes('/login'), {
-    timeout: 10000,
-  });
-}
+import { TEST_USERS, loginAsUser } from './fixtures/ccn-fixtures';
 
 test.describe('Navigation Tests', () => {
   test('navigate through all pages: Courses, Programs, Library, LMI Data, and Dashboard', async ({ page }) => {

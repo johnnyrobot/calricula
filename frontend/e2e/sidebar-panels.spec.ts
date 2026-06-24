@@ -17,9 +17,13 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { TEST_USERS, loginAsUser } from './fixtures/ccn-fixtures';
 
 test.describe('Course Editor Sidebar Panels', () => {
   test.beforeEach(async ({ page }) => {
+    // Authenticate before navigating to protected pages
+    await loginAsUser(page, TEST_USERS.faculty);
+
     // Navigate to courses list
     await page.goto('http://localhost:3000/courses');
     await page.waitForLoadState('networkidle');

@@ -100,6 +100,82 @@ class WorkflowHistoryResponse(BaseModel):
 
 
 # =============================================================================
+# Authorization Helpers
+# =============================================================================
+
+# Roles that act as curriculum reviewers and may view/comment on entities in
+# review regardless of ownership.
+_REVIEWER_ROLES = {
+    UserRole.CURRICULUM_CHAIR,
+    UserRole.ARTICULATION_OFFICER,
+    UserRole.ADMIN,
+}
+
+
+def _get_entity_owner_id(
+    entity_type: EntityType,
+    entity_id: uuid.UUID,
+    session: Session,
+) -> Optional[uuid.UUID]:
+    """Return the created_by user id for the referenced entity, or None if not found."""
+    from app.models.course import Course
+    from app.models.program import Program
+
+    if entity_type == EntityType.COURSE:
+        entity = session.get(Course, entity_id)
+    elif entity_type == EntityType.PROGRAM:
+        entity = session.get(Program, entity_id)
+    else:
+        entity = None
+    return entity.created_by if entity else None
+
+
+def _ensure_entity_access(
+    entity_type: EntityType,
+    entity_id: uuid.UUID,
+    current_user: User,
+    session: Session,
+) -> None:
+    """Ensure the current user may attach/read comments for the given entity.
+
+    Allowed: the entity owner, reviewer roles (chair/articulation/admin).
+    Raises 404 if the entity does not exist, 403 if the user lacks access.
+    """
+    owner_id = _get_entity_owner_id(entity_type, entity_id, session)
+    if owner_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"{entity_type.value} not found",
+        )
+    if current_user.role in _REVIEWER_ROLES or owner_id == current_user.id:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You do not have access to this entity",
+    )
+
+
+def _ensure_can_modify_comment(
+    comment: Comment,
+    current_user: User,
+    session: Session,
+) -> None:
+    """Ensure the current user may resolve/unresolve the given comment.
+
+    Allowed: admin, comment author, entity owner, or a reviewer role.
+    """
+    if current_user.role in _REVIEWER_ROLES or comment.user_id == current_user.id:
+        return
+    owner_id = _get_entity_owner_id(comment.entity_type, comment.entity_id, session)
+    if owner_id == current_user.id:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You are not authorized to modify this comment",
+    )
+
+
+# =============================================================================
 # Comment Endpoints
 # =============================================================================
 
@@ -130,6 +206,14 @@ async def create_comment(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Comment content cannot be empty"
         )
+
+    # Ensure the user is allowed to attach comments to this entity
+    _ensure_entity_access(
+        comment_data.entity_type,
+        comment_data.entity_id,
+        current_user,
+        session,
+    )
 
     # Create comment
     comment = Comment(
@@ -192,6 +276,11 @@ async def list_comments(
     - `page`: Page number (default: 1)
     - `limit`: Items per page (default: 50, max: 100)
     """
+    # If a specific entity is requested, ensure the user may access it before
+    # returning its review feedback.
+    if entity_type and entity_id:
+        _ensure_entity_access(entity_type, entity_id, current_user, session)
+
     # Build base query
     query = select(Comment)
     count_query = select(func.count(Comment.id))
@@ -392,6 +481,8 @@ async def resolve_comment(
             detail="Comment not found"
         )
 
+    _ensure_can_modify_comment(comment, current_user, session)
+
     comment.resolved = True
 
     session.add(comment)
@@ -439,6 +530,8 @@ async def unresolve_comment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Comment not found"
         )
+
+    _ensure_can_modify_comment(comment, current_user, session)
 
     comment.resolved = False
 

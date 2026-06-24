@@ -16,7 +16,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select, func, or_
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.database import get_session
 from app.core.deps import get_current_user, require_admin
@@ -481,7 +481,7 @@ class AddCourseRequest(BaseModel):
     """Request schema for adding a course to a program."""
     course_id: uuid.UUID
     requirement_type: RequirementType = RequirementType.REQUIRED_CORE
-    units_applied: Optional[Decimal] = None
+    units_applied: Optional[Decimal] = Field(default=None, ge=0)
 
 
 @router.post("/{program_id}/courses", response_model=CourseInProgramItem, status_code=status.HTTP_201_CREATED)
@@ -641,8 +641,8 @@ async def remove_course_from_program(
 class UpdateCourseInProgramRequest(BaseModel):
     """Request schema for updating a course within a program."""
     requirement_type: Optional[RequirementType] = None
-    units_applied: Optional[Decimal] = None
-    sequence: Optional[int] = None
+    units_applied: Optional[Decimal] = Field(default=None, ge=0)
+    sequence: Optional[int] = Field(default=None, gt=0)
 
 
 @router.patch("/{program_id}/courses/{program_course_id}", response_model=CourseInProgramItem)
@@ -726,7 +726,7 @@ async def update_course_in_program(
 class ReorderCourseItem(BaseModel):
     """Single course reorder item."""
     program_course_id: uuid.UUID
-    sequence: int
+    sequence: int = Field(gt=0)
 
 
 class ReorderCoursesRequest(BaseModel):

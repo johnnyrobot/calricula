@@ -237,6 +237,11 @@ def validate_cross_listings_for_approval(course: Course, session: Session) -> Li
                         f"Cross-listing mismatch with {course_code}: SLO {i+1} text differs"
                     )
                     break  # Only report first mismatch per cross-listing
+                if slo1.bloom_level != slo2.bloom_level:
+                    errors.append(
+                        f"Cross-listing mismatch with {course_code}: SLO {i+1} Bloom level differs"
+                    )
+                    break  # Only report first mismatch per cross-listing
 
         # Get other course's content
         other_content = session.exec(
@@ -257,6 +262,12 @@ def validate_cross_listings_for_approval(course: Course, session: Session) -> Li
                 if c1.topic.strip().lower() != c2.topic.strip().lower():
                     errors.append(
                         f"Cross-listing mismatch with {course_code}: Content topic {i+1} differs"
+                    )
+                    break  # Only report first mismatch per cross-listing
+                if c1.hours_allocated != c2.hours_allocated:
+                    errors.append(
+                        f"Cross-listing mismatch with {course_code}: Content topic {i+1} "
+                        f"hours differ ({c1.hours_allocated} vs {c2.hours_allocated})"
                     )
                     break  # Only report first mismatch per cross-listing
 

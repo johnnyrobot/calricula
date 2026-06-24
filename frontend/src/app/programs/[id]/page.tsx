@@ -21,6 +21,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { PageShell } from '@/components/layout';
 import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/components/toast';
 import { api, ProgramDetail, CourseInProgram, ProgramStatus, ProgramType, ProgramNarrativeResponse } from '@/lib/api';
 import { invalidateProgramCache } from '@/lib/swr';
 
@@ -177,6 +178,7 @@ export default function ProgramDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { getToken, user } = useAuth();
+  const toast = useToast();
   const programId = params.id as string;
 
   const [program, setProgram] = useState<ProgramDetail | null>(null);
@@ -226,7 +228,7 @@ export default function ProgramDetailPage() {
       }
 
       // Fetch PDF from API
-      const response = await fetch(`http://localhost:8001/api/export/program/${programId}/pdf`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8001'}/api/export/program/${programId}/pdf`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -248,7 +250,7 @@ export default function ProgramDetailPage() {
       document.body.removeChild(a);
     } catch (err) {
       console.error('Failed to export PDF:', err);
-      alert('Failed to export PDF. Please try again.');
+      toast.error('Export Failed', 'Failed to export PDF. Please try again.');
     } finally {
       setExporting(false);
     }
@@ -294,7 +296,7 @@ export default function ProgramDetailPage() {
       setShowNarrativeModal(true);
     } catch (err) {
       console.error('Failed to generate narrative:', err);
-      alert('Failed to generate narrative. Please try again.');
+      toast.error('Generation Failed', 'Failed to generate narrative. Please try again.');
     } finally {
       setGeneratingNarrative(false);
     }
@@ -323,7 +325,7 @@ export default function ProgramDetailPage() {
       setNarrativeResult(null);
     } catch (err) {
       console.error('Failed to apply narrative:', err);
-      alert('Failed to save narrative. Please try again.');
+      toast.error('Save Failed', 'Failed to save narrative. Please try again.');
     }
   };
 

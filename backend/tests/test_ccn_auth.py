@@ -18,6 +18,7 @@ from unittest.mock import patch, MagicMock
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session
+from firebase_admin import auth as fb_auth
 
 from app.main import app
 from app.core.database import engine
@@ -216,16 +217,26 @@ class TestInvalidTokenHandling:
     """Tests for handling invalid authentication tokens."""
 
     def test_ccn_match_with_invalid_token(self, client):
-        """Test CCN match with an invalid/malformed token."""
-        response = client.post(
-            "/api/compliance/ccn-match",
-            json={
-                "title": "Test Course",
-                "subject_code": "MATH",
-                "units": 4.0,
-            },
-            headers={"Authorization": "Bearer invalid_token_12345"}
-        )
+        """Test CCN match with an invalid/malformed token.
+
+        Simulate a *configured* Firebase that rejects the token. Without this,
+        an unconfigured Firebase (as in CI) fails closed with 503 before it ever
+        inspects the token, so we couldn't exercise the invalid-token -> 401 path.
+        """
+        with patch("app.core.firebase._firebase_app", MagicMock()), \
+             patch(
+                 "app.core.firebase.auth.verify_id_token",
+                 side_effect=fb_auth.InvalidIdTokenError("invalid token"),
+             ):
+            response = client.post(
+                "/api/compliance/ccn-match",
+                json={
+                    "title": "Test Course",
+                    "subject_code": "MATH",
+                    "units": 4.0,
+                },
+                headers={"Authorization": "Bearer invalid_token_12345"}
+            )
         assert response.status_code == 401
         data = response.json()
         assert "detail" in data
@@ -258,17 +269,22 @@ class TestInvalidTokenHandling:
         assert response.status_code == 401
 
     def test_ccn_justification_with_invalid_token(self, client):
-        """Test CCN justification with invalid token."""
+        """Test CCN justification with invalid token (configured Firebase rejects it)."""
         fake_course_id = str(uuid.uuid4())
-        response = client.post(
-            "/api/compliance/ccn-non-match-justification",
-            json={
-                "course_id": fake_course_id,
-                "reason_code": "other",
-                "justification_text": "Test",
-            },
-            headers={"Authorization": "Bearer fake_expired_token"}
-        )
+        with patch("app.core.firebase._firebase_app", MagicMock()), \
+             patch(
+                 "app.core.firebase.auth.verify_id_token",
+                 side_effect=fb_auth.InvalidIdTokenError("invalid token"),
+             ):
+            response = client.post(
+                "/api/compliance/ccn-non-match-justification",
+                json={
+                    "course_id": fake_course_id,
+                    "reason_code": "other",
+                    "justification_text": "Test",
+                },
+                headers={"Authorization": "Bearer fake_expired_token"}
+            )
         assert response.status_code == 401
 
 
@@ -334,9 +350,11 @@ class TestUserNotFound:
     """Tests for handling valid tokens with no matching user in database."""
 
     def test_ccn_match_valid_token_no_user(self, client):
-        """Test CCN match with valid token but user not in database."""
+        """Valid token, no existing user: get_current_user JIT-provisions a
+        FACULTY user (deps.py auto-provision), so the request succeeds rather
+        than 404. This pins the intended auto-provisioning behavior."""
         with patch("app.core.deps.verify_firebase_token") as mock_verify:
-            # Token is valid but user doesn't exist
+            # Token is valid; the user does not exist yet and will be created.
             mock_verify.return_value = {
                 "uid": "nonexistent_user_uid_12345",
                 "email": "ghost@example.com"
@@ -352,8 +370,8 @@ class TestUserNotFound:
                 headers={"Authorization": "Bearer valid_but_unknown_user"}
             )
 
-            # Should return 404 (user not found) or 401
-            assert response.status_code in [401, 404]
+            # User is auto-provisioned from the valid token -> request succeeds.
+            assert response.status_code == 200
 
 
 # =============================================================================
@@ -394,7 +412,7 @@ class TestRoleBasedAccess:
                     json={
                         "course_id": str(test_course.id),
                         "reason_code": "specialized",
-                        "justification_text": "Specialized content",
+                        "justification_text": "Specialized content beyond the CCN descriptor scope.",
                     },
                     headers={"Authorization": "Bearer test_token"}
                 )

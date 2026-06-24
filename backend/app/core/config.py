@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: Optional[str] = None
     GEMINI_FILE_SEARCH_STORE_NAME: str = "calricula-knowledge-base"
 
+    # RAG document ingestion
+    # Server-side directory that the RAG upload endpoint is allowed to read from.
+    # Requests must reference a file inside this directory; paths that resolve
+    # outside it are rejected to prevent arbitrary local file disclosure.
+    RAG_DOCUMENTS_DIR: str = "reference_documents"
+
     # BLS API (U.S. Bureau of Labor Statistics)
     BLS_API_KEY: Optional[str] = None
 

@@ -148,12 +148,15 @@ async def health_check_db(session: Session = Depends(get_session)):
             "timestamp": datetime.utcnow().isoformat(),
         }
     except Exception as e:
-        return {
-            "status": "unhealthy",
-            "database": "disconnected",
-            "error": str(e),
-            "timestamp": datetime.utcnow().isoformat(),
-        }
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "database": "disconnected",
+                "error": str(e),
+                "timestamp": datetime.utcnow().isoformat(),
+            },
+        )
 
 
 @app.get("/health/pool", tags=["Health"])

@@ -48,6 +48,21 @@ ALLOWED_MIME_TYPES = {
 
 
 # =============================================================================
+# Helpers
+# =============================================================================
+
+def _public_metadata(custom_metadata: Optional[dict]) -> dict:
+    """Return custom_metadata with internal-only keys removed.
+
+    `stored_path` holds the internal server filesystem path and must never be
+    exposed in API responses.
+    """
+    if not custom_metadata:
+        return {}
+    return {k: v for k, v in custom_metadata.items() if k != "stored_path"}
+
+
+# =============================================================================
 # Response Models
 # =============================================================================
 
@@ -247,7 +262,7 @@ async def list_documents(
             department_id=doc.department_id,
             course_id=doc.course_id,
             uploaded_by=doc.uploaded_by,
-            custom_metadata=doc.custom_metadata,
+            custom_metadata=_public_metadata(doc.custom_metadata),
             created_at=doc.created_at,
             indexed_at=doc.indexed_at
         ) for doc in documents],
@@ -296,7 +311,7 @@ async def get_course_documents(
             department_id=doc.department_id,
             course_id=doc.course_id,
             uploaded_by=doc.uploaded_by,
-            custom_metadata=doc.custom_metadata,
+            custom_metadata=_public_metadata(doc.custom_metadata),
             created_at=doc.created_at,
             indexed_at=doc.indexed_at
         ) for doc in documents],
@@ -333,7 +348,7 @@ async def get_document(
         department_id=document.department_id,
         course_id=document.course_id,
         uploaded_by=document.uploaded_by,
-        custom_metadata=document.custom_metadata,
+        custom_metadata=_public_metadata(document.custom_metadata),
         created_at=document.created_at,
         indexed_at=document.indexed_at
     )
@@ -413,7 +428,7 @@ async def update_document(
         department_id=document.department_id,
         course_id=document.course_id,
         uploaded_by=document.uploaded_by,
-        custom_metadata=document.custom_metadata,
+        custom_metadata=_public_metadata(document.custom_metadata),
         created_at=document.created_at,
         indexed_at=document.indexed_at
     )
@@ -439,6 +454,14 @@ async def delete_document(
     # Check ownership
     if document.uploaded_by != current_user.id and current_user.role != "Admin":
         raise HTTPException(status_code=403, detail="Not authorized to delete this document")
+
+    # Remove the indexed copy from the RAG system so it is no longer searchable
+    if document.file_search_document_id:
+        try:
+            from app.services import get_file_search_service
+            await get_file_search_service().delete_document(document.file_search_document_id)
+        except Exception:
+            pass  # Index deletion is best-effort
 
     # Try to delete the file
     if document.custom_metadata and "stored_path" in document.custom_metadata:

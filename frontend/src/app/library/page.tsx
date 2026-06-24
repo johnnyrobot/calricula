@@ -482,18 +482,14 @@ export default function LibraryPage() {
     [pageSize, toast]
   );
 
-  // Fetch on mount and when college changes
-  useEffect(() => {
-    setPage(1);
-    fetchCourses(selectedCollege, '', 1);
-  }, [selectedCollege, fetchCourses]);
-
-  // Handle search with debounce
+  // Fetch on mount and whenever the college or search query changes.
+  // Single effect avoids duplicate/racing fetches (e.g. an empty-query fetch
+  // resolving after a search-query fetch and overwriting filtered results).
   useEffect(() => {
     const timer = setTimeout(() => {
       setPage(1);
       fetchCourses(selectedCollege, searchQuery, 1);
-    }, 500);
+    }, searchQuery ? 500 : 0);
 
     return () => clearTimeout(timer);
   }, [searchQuery, selectedCollege, fetchCourses]);

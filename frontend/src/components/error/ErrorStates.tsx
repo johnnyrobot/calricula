@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ExclamationTriangleIcon,
   MagnifyingGlassIcon,
@@ -33,6 +34,8 @@ export function NotFoundError({
   showGoBack = true,
   showGoHome = true,
 }: ErrorStateProps) {
+  const router = useRouter();
+
   const handleGoBack = () => {
     if (onGoBack) {
       onGoBack();
@@ -44,8 +47,8 @@ export function NotFoundError({
   const handleGoHome = () => {
     if (onGoHome) {
       onGoHome();
-    } else if (typeof window !== 'undefined') {
-      window.location.href = '/dashboard';
+    } else {
+      router.push('/dashboard');
     }
   };
 
@@ -101,6 +104,8 @@ export function ServerError({
   showRetry = true,
   showGoHome = true,
 }: ErrorStateProps) {
+  const router = useRouter();
+
   const handleRetry = () => {
     if (onRetry) {
       onRetry();
@@ -112,8 +117,8 @@ export function ServerError({
   const handleGoHome = () => {
     if (onGoHome) {
       onGoHome();
-    } else if (typeof window !== 'undefined') {
-      window.location.href = '/dashboard';
+    } else {
+      router.push('/dashboard');
     }
   };
 
@@ -213,6 +218,8 @@ export function GenericError({
   showRetry = true,
   showGoHome = true,
 }: ErrorStateProps) {
+  const router = useRouter();
+
   const handleRetry = () => {
     if (onRetry) {
       onRetry();
@@ -224,8 +231,8 @@ export function GenericError({
   const handleGoHome = () => {
     if (onGoHome) {
       onGoHome();
-    } else if (typeof window !== 'undefined') {
-      window.location.href = '/dashboard';
+    } else {
+      router.push('/dashboard');
     }
   };
 
@@ -278,6 +285,8 @@ export function AccessDeniedError({
   showGoBack = true,
   showGoHome = true,
 }: ErrorStateProps) {
+  const router = useRouter();
+
   const handleGoBack = () => {
     if (onGoBack) {
       onGoBack();
@@ -289,8 +298,8 @@ export function AccessDeniedError({
   const handleGoHome = () => {
     if (onGoHome) {
       onGoHome();
-    } else if (typeof window !== 'undefined') {
-      window.location.href = '/dashboard';
+    } else {
+      router.push('/dashboard');
     }
   };
 

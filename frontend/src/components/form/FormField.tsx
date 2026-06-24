@@ -59,6 +59,17 @@ export function FormField({
   const hasError = Boolean(error);
   const showValidState = showSuccess && isValid && !hasError;
 
+  // Associate the label with its input by injecting id={name} into the child
+  // input/select/textarea when it doesn't already define its own id.
+  const childrenWithId = React.isValidElement(children)
+    ? React.cloneElement(
+        children as React.ReactElement<{ id?: string }>,
+        {
+          id: (children as React.ReactElement<{ id?: string }>).props.id ?? name,
+        }
+      )
+    : children;
+
   return (
     <div className={`form-field ${className}`}>
       {/* Label */}
@@ -74,7 +85,7 @@ export function FormField({
 
       {/* Input Container */}
       <div className="relative">
-        {children}
+        {childrenWithId}
 
         {/* Status Icon */}
         {(hasError || showValidState) && (

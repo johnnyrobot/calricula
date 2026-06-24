@@ -5,10 +5,13 @@ Provides endpoints for AI-assisted curriculum development features.
 Rate limited to prevent abuse.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
-from app.core.deps import get_current_user, get_current_user_optional
+from app.core.config import settings
+from app.core.deps import get_current_user, require_admin
 from app.core.rate_limiter import limiter, RATE_LIMITS
 from app.models.user import User
 from app.services.gemini_service import get_gemini_service
@@ -198,7 +201,7 @@ class LMINarrativeResponse(BaseModel):
 async def chat_with_ai(
     request: Request,
     chat_request: ChatRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Chat with the AI curriculum assistant.
@@ -237,7 +240,7 @@ async def chat_with_ai(
 async def suggest_catalog_description(
     request: Request,
     desc_request: CatalogDescriptionRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Generate a catalog description suggestion.
@@ -273,7 +276,7 @@ async def suggest_catalog_description(
 async def suggest_slos(
     request: Request,
     slo_request: SLORequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Generate SLO suggestions using Bloom's Taxonomy.
@@ -308,7 +311,7 @@ async def suggest_slos(
 async def explain_compliance(
     request: Request,
     compliance_request: ComplianceExplainRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Explain a compliance issue and how to fix it.
@@ -340,7 +343,7 @@ async def explain_compliance(
 async def suggest_content_outline(
     request: Request,
     outline_request: ContentOutlineRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Generate a content outline suggestion for a course.
@@ -424,7 +427,7 @@ async def suggest_content_outline(
 async def suggest_top_code(
     request: Request,
     top_request: TOPCodeRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Suggest TOP (Taxonomy of Programs) codes for a course.
@@ -600,7 +603,7 @@ async def suggest_top_code(
 async def suggest_program_narrative(
     request: Request,
     narrative_request: ProgramNarrativeRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Generate a program narrative for Chancellor's Office submission.
@@ -758,6 +761,27 @@ class CBCodeGuidanceRequest(BaseModel):
     course_context: Optional[Dict[str, Any]] = None
 
 
+def _resolve_rag_document_path(file_path: str) -> str:
+    """Resolve a caller-supplied RAG document path inside the allowed directory.
+
+    The RAG upload endpoint reads files from the server's filesystem. To prevent
+    arbitrary local file disclosure (path traversal / LFI), the requested path
+    must resolve to a location inside ``settings.RAG_DOCUMENTS_DIR``. Absolute
+    paths, ``..`` traversal, and symlink escapes are all rejected.
+    """
+    base_dir = Path(settings.RAG_DOCUMENTS_DIR).resolve()
+    # Treat the supplied path as relative to the allowed base directory.
+    candidate = (base_dir / file_path).resolve()
+    try:
+        candidate.relative_to(base_dir)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="file_path must reference a document inside the allowed RAG documents directory",
+        )
+    return str(candidate)
+
+
 @router.post("/rag/upload", response_model=DocumentUploadResponse)
 @limiter.limit(RATE_LIMITS["ai_documents"])
 async def upload_document_for_rag(
@@ -765,7 +789,7 @@ async def upload_document_for_rag(
     file_path: str,
     display_name: Optional[str] = None,
     document_type: str = "reference",
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin()),
 ):
     """
     Upload a document for RAG indexing.
@@ -773,13 +797,15 @@ async def upload_document_for_rag(
     This endpoint allows uploading curriculum-related documents (PCAH, Title 5, etc.)
     that will be used to ground AI responses in authoritative sources.
 
-    Requires authentication.
+    Requires an administrator. The ``file_path`` is resolved relative to the
+    server's configured RAG documents directory and may not escape it.
     Rate limit: 20 requests/minute per user.
     """
+    safe_path = _resolve_rag_document_path(file_path)
     try:
         service = get_file_search_service()
         metadata = await service.upload_document(
-            file_path=file_path,
+            file_path=safe_path,
             display_name=display_name,
             document_type=document_type,
         )
@@ -803,7 +829,7 @@ async def upload_document_for_rag(
 @router.get("/rag/documents")
 async def list_rag_documents(
     document_type: Optional[str] = None,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     List all uploaded RAG documents.
@@ -863,7 +889,7 @@ async def delete_rag_document(
 async def query_with_rag(
     request: Request,
     rag_request: RAGQueryRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Query the AI with RAG (Retrieval Augmented Generation).
@@ -903,7 +929,7 @@ async def query_with_rag(
 async def explain_regulation(
     request: Request,
     reg_request: RegulationExplainRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Get an explanation of a specific curriculum regulation.
@@ -941,7 +967,7 @@ async def explain_regulation(
 async def get_cb_code_guidance(
     request: Request,
     cb_request: CBCodeGuidanceRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Get guidance on a specific CB code.
@@ -981,7 +1007,7 @@ async def search_documents(
     query: str,
     file_ids: Optional[List[str]] = None,
     max_results: int = 5,
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Search across uploaded documents for relevant passages.
@@ -1012,7 +1038,7 @@ async def search_documents(
 async def suggest_lmi_occupations(
     request: Request,
     suggest_request: LMIOccupationSuggestRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Suggest relevant occupations based on course content analysis.
@@ -1114,7 +1140,7 @@ IMPORTANT: Return ONLY valid JSON. No markdown, no extra text. Keep rationales v
 async def generate_lmi_narrative(
     request: Request,
     narrative_request: LMINarrativeRequest,
-    current_user: Optional[User] = Depends(get_current_user_optional)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Generate a narrative describing labor market information for a course.
