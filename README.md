@@ -1,6 +1,6 @@
 # Calricula - Intelligent Curriculum Management System
 
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/johnnyphung-laccd/calricula)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/johnnyrobot/calricula)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
 
 An AI-assisted curriculum management platform that enables faculty to create, modify, and route Course Outlines of Record (CORs) and Programs through approval workflows.
@@ -40,7 +40,7 @@ An AI-assisted curriculum management platform that enables faculty to create, mo
 
 ```bash
 # Clone the repository
-git clone https://github.com/johnnyphung-laccd/calricula.git
+git clone https://github.com/johnnyrobot/calricula.git
 cd calricula
 
 # Create environment file from template
