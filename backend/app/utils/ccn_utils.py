@@ -2,7 +2,10 @@
 CCN (Common Course Numbering) Utilities
 
 Provides utilities for working with community college
-Common Course Numbering (CCN/C-ID) standards per AB 1111.
+Common Course Numbering (CCN) standards per AB 1111.
+
+Note: CCN (AB 1111, format "SUBJ C####") is distinct from the legacy C-ID
+(Course Identification Numbering System, format "SUBJ ###").
 
 CCN Format: SUBJ C####&&
 - SUBJ: 4-letter subject code (e.g., MATH, ENGL, PSYCH)
@@ -134,6 +137,40 @@ CCN_PATTERN = re.compile(
     r'^([A-Z]{2,6})\s+C(\d{4})([HLSE]{0,2})$',
     re.IGNORECASE
 )
+
+
+# Legacy C-ID format regex pattern.
+# Format: SUBJ ### (e.g., "MATH 220", "ENGL 100"), no "C" prefix.
+# This is the legacy Course Identification Numbering System, distinct from CCN.
+CID_PATTERN = re.compile(
+    r'^([A-Z]{2,6})\s+(\d{2,3})([A-Z]?)$',
+    re.IGNORECASE
+)
+
+
+def validate_cid_format(c_id: str) -> bool:
+    """
+    Validate that a legacy C-ID code follows the SUBJ ### format.
+
+    Legacy C-ID (Course Identification Numbering System) is distinct from the
+    AB 1111 CCN code: it has NO "C" prefix (e.g., "MATH 220", "ENGL 100").
+
+    Args:
+        c_id: The C-ID code string to validate
+
+    Returns:
+        True if the format is valid, False otherwise.
+
+    Example:
+        >>> validate_cid_format("ENGL 100")
+        True
+        >>> validate_cid_format("ENGL C1000")  # CCN format, not C-ID
+        False
+    """
+    if not c_id:
+        return False
+    c_id = ' '.join(c_id.strip().split())
+    return CID_PATTERN.match(c_id) is not None
 
 
 def parse_ccn_code(ccn_code: str) -> Optional[CCNCodeParts]:

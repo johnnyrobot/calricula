@@ -1,7 +1,7 @@
 """
 Reference Data API Routes
 
-Provides endpoints for CCN/C-ID standards, TOP codes, and other reference data.
+Provides endpoints for CCN (AB 1111) standards, TOP codes, and other reference data.
 These endpoints are public (no authentication required) as they serve reference data.
 """
 
@@ -30,13 +30,13 @@ router = APIRouter()
 @router.get("/ccn-standards", response_model=List[CCNStandardRead])
 async def list_ccn_standards(
     discipline: Optional[str] = Query(None, description="Filter by discipline (e.g., MATH, ENGL)"),
-    search: Optional[str] = Query(None, description="Search by C-ID or title"),
+    search: Optional[str] = Query(None, description="Search by CCN code or title"),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     session: Session = Depends(get_session),
 ) -> List[CCNStandardRead]:
     """
-    List CCN/C-ID standards with optional filtering.
+    List CCN (AB 1111) standards with optional filtering.
 
     Returns Common Course Numbering standards from the California Community
     Colleges system, used for AB 1111 course alignment.
@@ -47,16 +47,16 @@ async def list_ccn_standards(
     if discipline:
         query = query.where(CCNStandard.discipline == discipline.upper())
 
-    # Search by C-ID or title
+    # Search by CCN code or title
     if search:
         search_term = f"%{search}%"
         query = query.where(
-            (CCNStandard.c_id.ilike(search_term)) |
+            (CCNStandard.ccn_code.ilike(search_term)) |
             (CCNStandard.title.ilike(search_term))
         )
 
-    # Order by discipline and C-ID
-    query = query.order_by(CCNStandard.discipline, CCNStandard.c_id)
+    # Order by discipline and CCN code
+    query = query.order_by(CCNStandard.discipline, CCNStandard.ccn_code)
 
     # Pagination
     query = query.offset(skip).limit(limit)
@@ -66,7 +66,7 @@ async def list_ccn_standards(
     return [
         CCNStandardRead(
             id=std.id,
-            c_id=std.c_id,
+            ccn_code=std.ccn_code,
             discipline=std.discipline,
             title=std.title,
             descriptor=std.descriptor,
@@ -112,7 +112,7 @@ async def get_ccn_standard(
 
     return CCNStandardRead(
         id=standard.id,
-        c_id=standard.c_id,
+        ccn_code=standard.ccn_code,
         discipline=standard.discipline,
         title=standard.title,
         descriptor=standard.descriptor,
@@ -145,9 +145,12 @@ async def get_ccn_standard_by_cid(
     session: Session = Depends(get_session),
 ) -> CCNStandardRead:
     """
-    Get a CCN standard by its C-ID number (e.g., "MATH C1051").
+    Get a CCN standard by its CCN code (e.g., "MATH C1051").
+
+    Note: the route path retains the legacy `/by-cid/` segment and `{c_id}`
+    placeholder for backward compatibility; the value is an AB 1111 CCN code.
     """
-    query = select(CCNStandard).where(CCNStandard.c_id == c_id.upper())
+    query = select(CCNStandard).where(CCNStandard.ccn_code == c_id.upper())
     standard = session.exec(query).first()
 
     if not standard:
@@ -155,7 +158,7 @@ async def get_ccn_standard_by_cid(
 
     return CCNStandardRead(
         id=standard.id,
-        c_id=standard.c_id,
+        ccn_code=standard.ccn_code,
         discipline=standard.discipline,
         title=standard.title,
         descriptor=standard.descriptor,
@@ -191,7 +194,7 @@ async def find_matching_ccn_standards(
     """
     Find CCN standards that might match a course based on subject code and title.
 
-    This endpoint helps with automatic C-ID alignment detection.
+    This endpoint helps with automatic CCN alignment detection.
     Returns potential matches sorted by relevance.
     """
     # Map common subject codes to CCN disciplines
@@ -238,10 +241,10 @@ async def find_matching_ccn_standards(
         title_lower = title.lower()
         query = query.order_by(
             CCNStandard.title.ilike(f"%{title_lower}%").desc(),
-            CCNStandard.c_id
+            CCNStandard.ccn_code
         )
     else:
-        query = query.order_by(CCNStandard.c_id)
+        query = query.order_by(CCNStandard.ccn_code)
 
     query = query.limit(10)
 
@@ -250,7 +253,7 @@ async def find_matching_ccn_standards(
     return [
         CCNStandardRead(
             id=std.id,
-            c_id=std.c_id,
+            ccn_code=std.ccn_code,
             discipline=std.discipline,
             title=std.title,
             descriptor=std.descriptor,

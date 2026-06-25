@@ -4,7 +4,7 @@
 // CCN Adopt Standard Prompt Component - CUR-76
 // ===========================================
 // AI Insight card style prompt that appears when a course matches
-// a C-ID standard, offering to adopt it.
+// a CCN standard, offering to adopt it.
 
 import { useState, useCallback } from 'react';
 import {
@@ -30,7 +30,7 @@ import {
 // ===========================================
 
 export interface CCNStandard {
-  c_id: string;
+  ccn_code: string;
   discipline: string;
   title: string;
   descriptor?: string;
@@ -40,7 +40,7 @@ export interface CCNStandard {
 }
 
 export interface CCNMatchResult {
-  c_id: string;
+  ccn_code: string;
   discipline: string;
   title: string;
   descriptor?: string;
@@ -54,7 +54,7 @@ export interface CCNMatchResult {
 }
 
 export interface CCNAdoptPromptProps {
-  /** The matched C-ID standard */
+  /** The matched CCN standard */
   match: CCNMatchResult;
   /** Current course title for display */
   courseTitle?: string;
@@ -155,7 +155,7 @@ export function CCNAdoptPrompt({
 
   const handleAdopt = useCallback(() => {
     const standard: CCNStandard = {
-      c_id: match.c_id,
+      ccn_code: match.ccn_code,
       discipline: match.discipline,
       title: match.title,
       descriptor: match.descriptor,
@@ -168,7 +168,7 @@ export function CCNAdoptPrompt({
 
   const handleViewRequirements = useCallback(() => {
     const standard: CCNStandard = {
-      c_id: match.c_id,
+      ccn_code: match.ccn_code,
       discipline: match.discipline,
       title: match.title,
       descriptor: match.descriptor,
@@ -202,7 +202,7 @@ export function CCNAdoptPrompt({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-slate-900 dark:text-white">
-                C-ID Standard Match Found
+                CCN Standard Match Found
               </h3>
               {isHighConfidence && (
                 <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-medium">
@@ -215,14 +215,14 @@ export function CCNAdoptPrompt({
                 <>
                   &ldquo;{courseTitle}&rdquo; matches{' '}
                   <span className="font-mono font-medium text-luminous-600 dark:text-luminous-400">
-                    {match.c_id}
+                    {match.ccn_code}
                   </span>
                 </>
               ) : (
                 <>
                   This course matches{' '}
                   <span className="font-mono font-medium text-luminous-600 dark:text-luminous-400">
-                    {match.c_id}
+                    {match.ccn_code}
                   </span>
                 </>
               )}
@@ -245,7 +245,7 @@ export function CCNAdoptPrompt({
             <div className="flex items-center gap-2 mb-1">
               <CheckBadgeIcon className="h-5 w-5 text-green-500" />
               <span className="font-mono font-bold text-lg text-slate-900 dark:text-white">
-                {match.c_id}
+                {match.ccn_code}
               </span>
             </div>
             <h4 className="font-medium text-slate-800 dark:text-slate-200">
@@ -422,7 +422,7 @@ export function CCNAdoptPromptCompact({
 }: CCNAdoptPromptCompactProps) {
   const handleAdopt = useCallback(() => {
     const standard: CCNStandard = {
-      c_id: match.c_id,
+      ccn_code: match.ccn_code,
       discipline: match.discipline,
       title: match.title,
       descriptor: match.descriptor,
@@ -449,7 +449,7 @@ export function CCNAdoptPromptCompact({
           <SparklesIcon className="h-4 w-4 text-luminous-500 flex-shrink-0" />
           <div>
             <p className="text-xs font-medium text-luminous-700 dark:text-luminous-300">
-              C-ID Match: {match.c_id}
+              CCN Match: {match.ccn_code}
             </p>
             <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
               {confidencePercent}% confidence

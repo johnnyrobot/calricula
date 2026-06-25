@@ -28,7 +28,7 @@ describe('CCNDetectionStep', () => {
 
   const mockMatchResponse = {
     best_match: {
-      c_id: 'MATH C2210',
+      ccn_code: 'MATH C2210',
       discipline: 'MATH',
       title: 'Calculus I',
       descriptor: 'Introduction to differential and integral calculus',
@@ -106,10 +106,10 @@ describe('CCNDetectionStep', () => {
       render(<CCNDetectionStep {...defaultProps} />);
 
       await waitFor(() => {
-        expect(screen.getByText('C-ID Standard Match Found')).toBeInTheDocument();
+        expect(screen.getByText('CCN Standard Match Found')).toBeInTheDocument();
       });
 
-      // Use getAllByText since C-ID appears in multiple places
+      // Use getAllByText since CCN appears in multiple places
       const cIdElements = screen.getAllByText('MATH C2210');
       expect(cIdElements.length).toBeGreaterThan(0);
     });
@@ -169,7 +169,7 @@ describe('CCNDetectionStep', () => {
         expect(screen.getByText('No CCN Standard Found')).toBeInTheDocument();
       });
 
-      expect(screen.getByText(/No matching C-ID standard was found/)).toBeInTheDocument();
+      expect(screen.getByText(/No matching CCN standard was found/)).toBeInTheDocument();
     });
 
     it('displays no match when confidence is below threshold', async () => {
@@ -277,7 +277,7 @@ describe('CCNDetectionStep', () => {
       await user.click(screen.getByText('Retry'));
 
       await waitFor(() => {
-        expect(screen.getByText('C-ID Standard Match Found')).toBeInTheDocument();
+        expect(screen.getByText('CCN Standard Match Found')).toBeInTheDocument();
       });
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
@@ -509,7 +509,7 @@ describe('CCNDetectionStep', () => {
 
       await user.click(screen.getByText('Back'));
 
-      expect(screen.getByText('C-ID Standard Match Found')).toBeInTheDocument();
+      expect(screen.getByText('CCN Standard Match Found')).toBeInTheDocument();
     });
   });
 
