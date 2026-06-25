@@ -61,27 +61,67 @@ def test_client_construction_uses_api_key_and_model(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Citation extraction contract -- WS-2b replaces regex scraping with the
-# managed File Search tool's native (page-level) citations.
+# Citation extraction contract -- WS-2b replaced regex scraping with the managed
+# File Search tool's native (page-level) grounding chunks.
 # ---------------------------------------------------------------------------
 
-def test_extract_citations_parses_source_and_section():
+def test_extract_citations_from_grounding_reads_native_chunks():
+    from types import SimpleNamespace
     svc = fss.FileSearchService()
-    text = (
-        "Per the handbook [Source: PCAH 8th Edition, Section: 3.2] and the "
-        "regulation [Source: Title 5 55002.5]."
-    )
-    cites = svc._extract_citations(text, [])
+    response = SimpleNamespace(candidates=[SimpleNamespace(
+        grounding_metadata=SimpleNamespace(
+            grounding_chunks=[
+                SimpleNamespace(retrieved_context=SimpleNamespace(
+                    title="PCAH 8th Edition", text="...", page_number=42, section="3.2")),
+                SimpleNamespace(retrieved_context=SimpleNamespace(
+                    title="Title 5 55002.5", text="...", page_number=None, section=None)),
+            ],
+            grounding_supports=[],
+        )
+    )])
+    cites = svc._extract_citations_from_grounding(response)
     assert len(cites) == 2
     assert cites[0].source_file == "PCAH 8th Edition"
+    assert cites[0].page_number == 42
     assert cites[0].section == "3.2"
     assert cites[1].source_file == "Title 5 55002.5"
-    assert cites[1].section is None
+    assert cites[1].page_number is None
 
 
 def test_extract_grounding_metadata_is_graceful_on_bare_response():
     svc = fss.FileSearchService()
     assert svc._extract_grounding_metadata(object()) is None
+
+
+def test_generate_with_rag_uses_file_search_tool_and_native_citations():
+    """WS-2b: generate_with_rag queries the managed store via the FileSearch tool
+    and returns native grounding citations (no regex). Pins the structural
+    contract that the live smoke test verifies end-to-end."""
+    from types import SimpleNamespace
+    svc = fss.FileSearchService()
+    svc._configured = True
+    svc._store_name = "fileSearchStores/test-store"
+    svc.client = MagicMock()
+    fake_response = SimpleNamespace(
+        text="Per PCAH, units follow the 54-hour rule.",
+        candidates=[SimpleNamespace(grounding_metadata=SimpleNamespace(
+            grounding_chunks=[SimpleNamespace(retrieved_context=SimpleNamespace(
+                title="PCAH 8th Edition", text="...", page_number=12, section=None))],
+            grounding_supports=[],
+        ))],
+    )
+    svc.client.models.generate_content.return_value = fake_response
+
+    result = asyncio.run(svc.generate_with_rag("How are units calculated?"))
+
+    assert result.success is True
+    assert result.citations[0].source_file == "PCAH 8th Edition"
+    # The FileSearch tool referenced our persistent store, on the gemini-3.x model.
+    kwargs = svc.client.models.generate_content.call_args.kwargs
+    assert kwargs["model"] == "gemini-3.5-flash"
+    assert kwargs["config"].tools[0].file_search.file_search_store_names == [
+        "fileSearchStores/test-store"
+    ]
 
 
 # ---------------------------------------------------------------------------
