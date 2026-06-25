@@ -23,7 +23,7 @@ class ProgramCourseBase(BaseModel):
     """Base program-course relationship fields."""
     course_id: uuid.UUID = Field(description="Course ID")
     requirement_type: RequirementType = Field(
-        default=RequirementType.REQUIRED,
+        default=RequirementType.REQUIRED_CORE,
         description="Type of requirement"
     )
     sequence: int = Field(default=1, ge=1, description="Display order")
