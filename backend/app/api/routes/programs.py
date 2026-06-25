@@ -16,7 +16,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select, func, or_
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 from app.core.database import get_session
 from app.core.deps import get_current_user, require_admin
@@ -60,8 +60,7 @@ class ProgramListItem(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProgramListResponse(BaseModel):
@@ -85,8 +84,7 @@ class CourseInProgramItem(BaseModel):
     sequence: int
     units_applied: Decimal
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProgramDetailResponse(BaseModel):
@@ -108,8 +106,7 @@ class ProgramDetailResponse(BaseModel):
     updated_at: datetime
     courses: List[CourseInProgramItem] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =============================================================================

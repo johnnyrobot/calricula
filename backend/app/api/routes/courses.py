@@ -17,7 +17,7 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from sqlmodel import Session, select, func, or_
 from sqlalchemy.orm import joinedload, selectinload
-from pydantic import BaseModel
+from pydantic import ConfigDict, BaseModel
 
 from app.core.database import get_session
 from app.core.deps import get_current_user, require_role, require_admin, require_reviewer
@@ -125,8 +125,7 @@ class CourseListItem(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CourseListResponse(BaseModel):
@@ -146,8 +145,7 @@ class SLOItem(BaseModel):
     bloom_level: str
     performance_criteria: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ContentItem(BaseModel):
@@ -159,8 +157,7 @@ class ContentItem(BaseModel):
     hours_allocated: Decimal
     linked_slos: List[str]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RequisiteCourseInfo(BaseModel):
@@ -181,8 +178,7 @@ class RequisiteItem(BaseModel):
     content_review: Optional[str] = None
     validation_type: Optional[str] = None  # Title 5 compliance type
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RequisitesGroupedResponse(BaseModel):
@@ -232,8 +228,7 @@ class CourseDetailResponse(BaseModel):
     content_items: List[ContentItem] = []
     requisites: List[RequisiteItem] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =============================================================================
@@ -384,8 +379,7 @@ class CourseSearchItem(BaseModel):
     department_name: Optional[str] = None
     department_code: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CourseSearchResponse(BaseModel):
@@ -1483,8 +1477,7 @@ class SLOResponse(BaseModel):
     performance_criteria: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("/{course_id}/slos", response_model=List[SLOResponse])
@@ -1858,8 +1851,7 @@ class ContentResponse(BaseModel):
     linked_slos: List[str]
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.get("/{course_id}/content", response_model=List[ContentResponse])

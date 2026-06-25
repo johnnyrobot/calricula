@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 
 # =============================================================================
@@ -40,8 +40,7 @@ class DepartmentInfo(BaseModel):
     name: str
     code: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DepartmentResponse(DepartmentBase):
@@ -50,8 +49,7 @@ class DepartmentResponse(DepartmentBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DepartmentListItem(BaseModel):
@@ -64,8 +62,7 @@ class DepartmentListItem(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DepartmentListResponse(BaseModel):
