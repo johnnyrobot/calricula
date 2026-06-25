@@ -52,7 +52,7 @@ interface UploadProgress {
 const DOCUMENT_TYPE_OPTIONS: Array<{ value: RAGDocumentType; label: string; description: string }> = [
   { value: 'syllabus', label: 'Syllabus', description: 'Course syllabus or outline' },
   { value: 'textbook', label: 'Textbook', description: 'Textbook content or table of contents' },
-  { value: 'standard', label: 'Standard', description: 'C-ID or curriculum standard' },
+  { value: 'standard', label: 'Standard', description: 'CCN/C-ID or curriculum standard' },
   { value: 'regulation', label: 'Regulation', description: 'Title 5 or PCAH regulation' },
   { value: 'advisory_notes', label: 'Advisory Notes', description: 'Advisory committee notes' },
   { value: 'other', label: 'Other', description: 'Other reference material' },

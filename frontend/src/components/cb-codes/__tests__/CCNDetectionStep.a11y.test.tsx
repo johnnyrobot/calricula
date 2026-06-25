@@ -49,7 +49,7 @@ describe('CCNDetectionStep Accessibility', () => {
 
   const mockMatchResponse = {
     best_match: {
-      c_id: 'MATH C2210',
+      ccn_code: 'MATH C2210',
       discipline: 'MATH',
       title: 'Calculus I',
       minimum_units: 4,
@@ -246,7 +246,7 @@ describe('CCNDetectionStep Accessibility', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText(/No matching C-ID standard was found for this MATH course/i)).toBeInTheDocument();
+        expect(screen.getByText(/No matching CCN standard was found for this MATH course/i)).toBeInTheDocument();
       }, { timeout: 3000 });
     });
 
@@ -280,7 +280,7 @@ describe('CCNDetectionStep Accessibility', () => {
       });
 
       await waitFor(() => {
-        // Multiple elements contain the C-ID - just verify at least one is present
+        // Multiple elements contain the CCN - just verify at least one is present
         const elements = screen.getAllByText(/MATH C2210/i);
         expect(elements.length).toBeGreaterThan(0);
       }, { timeout: 3000 });
@@ -304,7 +304,7 @@ describe('CCNDetectionStep Accessibility', () => {
       });
 
       await waitFor(() => {
-        // Multiple elements contain the C-ID - just verify at least one is present
+        // Multiple elements contain the CCN - just verify at least one is present
         const elements = screen.getAllByText(/MATH C2210/i);
         expect(elements.length).toBeGreaterThan(0);
       }, { timeout: 3000 });

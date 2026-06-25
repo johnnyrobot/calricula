@@ -4,7 +4,7 @@ import { CCNAdoptPrompt, CCNAdoptPromptCompact, CCNMatchResult, CCNStandard } fr
 
 describe('CCNAdoptPrompt', () => {
   const mockMatch: CCNMatchResult = {
-    c_id: 'MATH C2210',
+    ccn_code: 'MATH C2210',
     discipline: 'MATH',
     title: 'Calculus I',
     descriptor: 'Introduction to differential and integral calculus',
@@ -30,7 +30,7 @@ describe('CCNAdoptPrompt', () => {
     it('renders match found header', () => {
       render(<CCNAdoptPrompt match={mockMatch} onAdopt={mockOnAdopt} onDismiss={mockOnDismiss} />);
 
-      expect(screen.getByText('C-ID Standard Match Found')).toBeInTheDocument();
+      expect(screen.getByText('CCN Standard Match Found')).toBeInTheDocument();
     });
 
     it('shows high match badge for high confidence', () => {
@@ -59,10 +59,10 @@ describe('CCNAdoptPrompt', () => {
       expect(screen.getByText(/Introduction to Calculus.*matches/)).toBeInTheDocument();
     });
 
-    it('displays C-ID code', () => {
+    it('displays CCN code', () => {
       render(<CCNAdoptPrompt match={mockMatch} onAdopt={mockOnAdopt} onDismiss={mockOnDismiss} />);
 
-      // C-ID appears in multiple places
+      // CCN appears in multiple places
       const cIdElements = screen.getAllByText('MATH C2210');
       expect(cIdElements.length).toBeGreaterThan(0);
     });
@@ -192,7 +192,7 @@ describe('CCNAdoptPrompt', () => {
       await user.click(screen.getByText('Adopt Standard'));
 
       expect(mockOnAdopt).toHaveBeenCalledWith({
-        c_id: 'MATH C2210',
+        ccn_code: 'MATH C2210',
         discipline: 'MATH',
         title: 'Calculus I',
         descriptor: 'Introduction to differential and integral calculus',
@@ -229,7 +229,7 @@ describe('CCNAdoptPrompt', () => {
       await user.click(screen.getByText('View Requirements'));
 
       expect(mockOnViewRequirements).toHaveBeenCalledWith(expect.objectContaining({
-        c_id: 'MATH C2210',
+        ccn_code: 'MATH C2210',
       }));
     });
 
@@ -312,7 +312,7 @@ describe('CCNAdoptPrompt', () => {
 
 describe('CCNAdoptPromptCompact', () => {
   const mockMatch: CCNMatchResult = {
-    c_id: 'ENGL C1000',
+    ccn_code: 'ENGL C1000',
     discipline: 'ENGL',
     title: 'English Composition',
     minimum_units: 3,
@@ -332,10 +332,10 @@ describe('CCNAdoptPromptCompact', () => {
     jest.clearAllMocks();
   });
 
-  it('displays C-ID match', () => {
+  it('displays CCN match', () => {
     render(<CCNAdoptPromptCompact match={mockMatch} onAdopt={mockOnAdopt} onDismiss={mockOnDismiss} />);
 
-    expect(screen.getByText('C-ID Match: ENGL C1000')).toBeInTheDocument();
+    expect(screen.getByText('CCN Match: ENGL C1000')).toBeInTheDocument();
   });
 
   it('displays confidence percentage', () => {
@@ -351,7 +351,7 @@ describe('CCNAdoptPromptCompact', () => {
     await user.click(screen.getByText('Adopt'));
 
     expect(mockOnAdopt).toHaveBeenCalledWith(expect.objectContaining({
-      c_id: 'ENGL C1000',
+      ccn_code: 'ENGL C1000',
     }));
   });
 

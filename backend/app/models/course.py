@@ -10,6 +10,9 @@ from typing import Optional, List, Dict, Any, TYPE_CHECKING
 
 from sqlmodel import Field, SQLModel, Relationship, Column
 from sqlalchemy import JSON
+from pydantic import field_validator
+
+from app.utils.ccn_utils import validate_ccn_format, validate_cid_format
 
 if TYPE_CHECKING:
     from app.models.department import Department
@@ -86,7 +89,13 @@ class CourseBase(SQLModel):
     status: CourseStatus = Field(default=CourseStatus.DRAFT)
     version: int = Field(default=1)
     effective_term: Optional[str] = None  # e.g., "Fall 2025"
-    ccn_id: Optional[str] = None  # C-ID alignment, e.g., "MATH C1051"
+    # AB 1111 Common Course Numbering (CCN) code, e.g., "MATH C1051".
+    # Format: SUBJ C#### with optional H/L/S/E suffix. Distinct from legacy C-ID below.
+    ccn_code: Optional[str] = None
+    # Legacy C-ID (Course Identification Numbering System) alignment, e.g., "MATH 220".
+    # Faculty-driven transfer articulation identifier; format SUBJ ### (no "C" prefix).
+    # Optional and distinct from the AB 1111 CCN code above.
+    c_id: Optional[str] = None
 
     # eLumen tracking
     elumen_id: Optional[int] = Field(default=None, index=True)  # Source record ID from eLumen
@@ -200,8 +209,35 @@ class CourseUpdate(SQLModel):
     total_student_learning_hours: Optional[Decimal] = None
     top_code: Optional[str] = None
     effective_term: Optional[str] = None
-    ccn_id: Optional[str] = None
+    ccn_code: Optional[str] = None  # AB 1111 CCN code (renamed from ccn_id)
+    c_id: Optional[str] = None  # Legacy C-ID (distinct from CCN)
     elumen_id: Optional[int] = None
+
+    @field_validator("ccn_code")
+    @classmethod
+    def validate_ccn_code(cls, v: Optional[str]) -> Optional[str]:
+        # AB 1111 CCN format: "SUBJ C####" with optional H/L/S/E suffix.
+        if v is None or v.strip() == "":
+            return None
+        if not validate_ccn_format(v):
+            raise ValueError(
+                f"Invalid CCN code format: '{v}'. Expected AB 1111 format "
+                f"like 'MATH C1051' (SUBJ C#### with optional H/L/S/E suffix)."
+            )
+        return v.strip()
+
+    @field_validator("c_id")
+    @classmethod
+    def validate_legacy_cid(cls, v: Optional[str]) -> Optional[str]:
+        # Legacy C-ID format: "SUBJ ###" (no "C" prefix), distinct from CCN.
+        if v is None or v.strip() == "":
+            return None
+        if not validate_cid_format(v):
+            raise ValueError(
+                f"Invalid C-ID format: '{v}'. Expected legacy C-ID format "
+                f"like 'MATH 220' (SUBJ ### with no 'C' prefix)."
+            )
+        return v.strip()
     cb_codes: Optional[Dict[str, Any]] = None
     transferability: Optional[Dict[str, Any]] = None
     ge_applicability: Optional[Dict[str, Any]] = None

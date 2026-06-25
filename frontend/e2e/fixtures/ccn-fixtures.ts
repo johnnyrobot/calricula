@@ -136,7 +136,7 @@ export async function navigateToCBCodesSection(page: Page): Promise<void> {
 export async function waitForCCNDetection(page: Page): Promise<string> {
   // Wait for either match found or no match
   const result = await Promise.race([
-    page.waitForSelector('text=C-ID Standard Match Found', { timeout: 15000 }).then(() => 'match'),
+    page.waitForSelector('text=CCN Standard Match Found', { timeout: 15000 }).then(() => 'match'),
     page.waitForSelector('text=No CCN Standard Found', { timeout: 15000 }).then(() => 'no_match'),
     page.waitForSelector('text=Unable to Check CCN Standards', { timeout: 15000 }).then(() => 'error'),
   ]);

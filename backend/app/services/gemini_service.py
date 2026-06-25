@@ -26,7 +26,7 @@ and academic programs.
 - Course Outline of Record (COR) development
 - Student Learning Outcomes (SLOs) using Bloom's Taxonomy
 - CB Code requirements for state reporting
-- Common Course Numbering (CCN/C-ID) alignment
+- Common Course Numbering (CCN, AB 1111) alignment
 - Transfer requirements (UC, CSU, Cal-GETC)
 - Career Technical Education (CTE) requirements
 - Accreditation standards (ACCJC)

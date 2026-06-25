@@ -723,11 +723,11 @@ class ComplianceService:
         """
         results = []
 
-        ccn_id = course.get("ccn_id")
+        ccn_code = course.get("ccn_code")
         cb_codes = course.get("cb_codes", {}) or {}
         units = course.get("units")
 
-        if ccn_id:
+        if ccn_code:
             # CCN-001: Check CB05 = "A" for CCN courses
             # Check both cases since JSON keys can vary
             cb05 = cb_codes.get("CB05") or cb_codes.get("cb05")
@@ -748,7 +748,7 @@ class ComplianceService:
                     rule_name="CCN Transfer Status",
                     category=ComplianceCategory.CCN,
                     status=ComplianceStatus.PASS,
-                    message=f"CCN-aligned course ({ccn_id}) has correct CB05='A' for UC+CSU transfer.",
+                    message=f"CCN-aligned course ({ccn_code}) has correct CB05='A' for UC+CSU transfer.",
                     section="CB Codes",
                 ))
             else:
@@ -758,7 +758,7 @@ class ComplianceService:
                     rule_name="CCN Transfer Status",
                     category=ComplianceCategory.CCN,
                     status=ComplianceStatus.WARN,
-                    message=f"CCN-aligned course ({ccn_id}) should have CB05='A' set.",
+                    message=f"CCN-aligned course ({ccn_code}) should have CB05='A' set.",
                     section="CB Codes",
                     citation="AB 1111 (Common Course Numbering Act)",
                     recommendation="Set CB05 to 'A' for CCN-aligned courses.",
@@ -781,7 +781,7 @@ class ComplianceService:
                         status=ComplianceStatus.WARN,
                         message=f"Course units ({units}) below CCN minimum ({ccn_minimum_units}).",
                         section="Units",
-                        citation="C-ID Descriptor requirements",
+                        citation="CCN Descriptor requirements (AB 1111)",
                         recommendation=f"Consider increasing units to at least {ccn_minimum_units} to meet CCN requirements.",
                     ))
                 else:
@@ -809,7 +809,7 @@ class ComplianceService:
                     message="Course is not CCN-aligned. Per AB 1111, a justification should be provided.",
                     section="CCN Alignment",
                     citation="AB 1111 (Common Course Numbering Act)",
-                    recommendation="Submit a CCN non-match justification explaining why this course does not align with a C-ID standard.",
+                    recommendation="Submit a CCN non-match justification explaining why this course does not align with a CCN standard.",
                 ))
             else:
                 results.append(ComplianceResult(

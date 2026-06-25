@@ -5,7 +5,7 @@ Validates that the seeded CCN standards data meets AB 1111 (Common Course
 Numbering) requirements for community colleges.
 
 Tests cover:
-- C-ID format validation (SUBJ C####&&)
+- CCN code format validation (SUBJ C####&&)
 - Required fields presence
 - Discipline-to-TOP-code mapping consistency
 - SLO/content requirements format
@@ -51,16 +51,16 @@ def production_ccn_standards(all_ccn_standards) -> List[CCNStandard]:
     Filter to only production CCN standards (exclude test data).
 
     Test data can be identified by:
-    - Invalid C-ID format (hex strings instead of 4 digits)
+    - Invalid CCN code format (hex strings instead of 4 digits)
     - Title containing 'Test'
     """
     def is_production_standard(std: CCNStandard) -> bool:
-        # Exclude if c_id contains hex characters (test data pattern)
-        if std.c_id:
-            parts = parse_ccn_code(std.c_id)
+        # Exclude if ccn_code contains hex characters (test data pattern)
+        if std.ccn_code:
+            parts = parse_ccn_code(std.ccn_code)
             if parts is None:
                 return False
-            # Valid C-IDs have purely numeric course numbers
+            # Valid CCN codes have purely numeric course numbers
             if not parts.course_number.isdigit():
                 return False
         return True
@@ -75,15 +75,15 @@ def ccn_disciplines(production_ccn_standards) -> Set[str]:
 
 
 # =============================================================================
-# Test: C-ID Format Validation
+# Test: CCN code Format Validation
 # =============================================================================
 
 class TestCIDFormatValidation:
-    """Tests for C-ID format validation per AB 1111."""
+    """Tests for CCN code format validation per AB 1111."""
 
     def test_all_ccn_standards_have_valid_cid(self, production_ccn_standards):
         """
-        Every CCN standard must have a valid C-ID code.
+        Every CCN standard must have a valid CCN code.
 
         Format: SUBJ C#### or SUBJ C####& or SUBJ C####&&
         Where:
@@ -95,49 +95,49 @@ class TestCIDFormatValidation:
         invalid_cids = []
 
         for standard in production_ccn_standards:
-            if not standard.c_id:
-                invalid_cids.append(f"[empty c_id] - {standard.title or 'Unknown'}")
-            elif not validate_ccn_format(standard.c_id):
-                invalid_cids.append(f"{standard.c_id} - {standard.title or 'Unknown'}")
+            if not standard.ccn_code:
+                invalid_cids.append(f"[empty ccn_code] - {standard.title or 'Unknown'}")
+            elif not validate_ccn_format(standard.ccn_code):
+                invalid_cids.append(f"{standard.ccn_code} - {standard.title or 'Unknown'}")
 
         if invalid_cids:
             pytest.fail(
-                f"Found {len(invalid_cids)} invalid C-ID formats:\n"
+                f"Found {len(invalid_cids)} invalid CCN code formats:\n"
                 + "\n".join(invalid_cids[:10])  # Show first 10
             )
 
     def test_cid_starts_with_subject_code(self, production_ccn_standards):
-        """C-ID should start with a valid subject code (2-6 letters)."""
+        """CCN code should start with a valid subject code (2-6 letters)."""
         pattern = re.compile(r'^[A-Z]{2,6}\s+C\d{4}', re.IGNORECASE)
 
         for standard in production_ccn_standards:
-            if standard.c_id:
-                assert pattern.match(standard.c_id), (
-                    f"C-ID should start with subject code: {standard.c_id}"
+            if standard.ccn_code:
+                assert pattern.match(standard.ccn_code), (
+                    f"CCN code should start with subject code: {standard.ccn_code}"
                 )
 
     def test_cid_contains_common_identifier(self, production_ccn_standards):
-        """C-ID must contain the 'C' common course identifier."""
+        """CCN code must contain the 'C' common course identifier."""
         for standard in production_ccn_standards:
-            if standard.c_id:
+            if standard.ccn_code:
                 # Normalize whitespace and check for 'C' followed by digits
-                normalized = ' '.join(standard.c_id.strip().split())
+                normalized = ' '.join(standard.ccn_code.strip().split())
                 assert ' C' in normalized.upper() or '\tC' in normalized.upper(), (
-                    f"C-ID missing 'C' identifier: {standard.c_id}"
+                    f"CCN code missing 'C' identifier: {standard.ccn_code}"
                 )
 
     def test_cid_course_number_is_4_digits(self, production_ccn_standards):
-        """Course number portion of C-ID must be exactly 4 digits."""
+        """Course number portion of CCN code must be exactly 4 digits."""
         for standard in production_ccn_standards:
-            if standard.c_id:
-                parts = parse_ccn_code(standard.c_id)
+            if standard.ccn_code:
+                parts = parse_ccn_code(standard.ccn_code)
                 if parts:
                     assert len(parts.course_number) == 4, (
-                        f"Course number must be 4 digits: {standard.c_id} "
+                        f"Course number must be 4 digits: {standard.ccn_code} "
                         f"(got {parts.course_number})"
                     )
                     assert parts.course_number.isdigit(), (
-                        f"Course number must be numeric: {standard.c_id}"
+                        f"Course number must be numeric: {standard.ccn_code}"
                     )
 
 
@@ -154,7 +154,7 @@ class TestRequiredFieldsPresent:
 
         for standard in production_ccn_standards:
             if not standard.discipline or not standard.discipline.strip():
-                missing_discipline.append(f"{standard.c_id} - {standard.title or 'Unknown'}")
+                missing_discipline.append(f"{standard.ccn_code} - {standard.title or 'Unknown'}")
 
         if missing_discipline:
             pytest.fail(
@@ -168,7 +168,7 @@ class TestRequiredFieldsPresent:
 
         for standard in production_ccn_standards:
             if not standard.title or not standard.title.strip():
-                missing_title.append(f"{standard.c_id} - discipline: {standard.discipline}")
+                missing_title.append(f"{standard.ccn_code} - discipline: {standard.discipline}")
 
         if missing_title:
             pytest.fail(
@@ -195,7 +195,7 @@ class TestRequiredFieldsPresent:
         assert pct_with_units >= 50, (
             f"Less than 50% of CCN standards have units extracted. "
             f"Found {len(with_units)}/{total} ({pct_with_units:.1f}%) with units. "
-            f"Missing: {', '.join(s.c_id for s in without_units[:5])}"
+            f"Missing: {', '.join(s.ccn_code for s in without_units[:5])}"
         )
 
     def test_ccn_standards_units_in_valid_range(self, production_ccn_standards):
@@ -212,7 +212,7 @@ class TestRequiredFieldsPresent:
             if standard.minimum_units is not None and standard.minimum_units > 0:
                 if standard.minimum_units < 0.5 or standard.minimum_units > 10:
                     out_of_range.append(
-                        f"{standard.c_id} - units: {standard.minimum_units}"
+                        f"{standard.ccn_code} - units: {standard.minimum_units}"
                     )
 
         if out_of_range:
@@ -252,7 +252,7 @@ class TestDisciplineTopCodeConsistency:
                 expected = DISCIPLINE_TOP_CODES.get(standard.discipline)
                 if expected and standard.implied_top_code != expected:
                     mismatched.append(
-                        f"{standard.c_id}: implied={standard.implied_top_code}, "
+                        f"{standard.ccn_code}: implied={standard.implied_top_code}, "
                         f"expected={expected}"
                     )
 
@@ -271,7 +271,7 @@ class TestDisciplineTopCodeConsistency:
             if standard.implied_top_code:
                 if not pattern.match(standard.implied_top_code):
                     invalid_format.append(
-                        f"{standard.c_id}: {standard.implied_top_code}"
+                        f"{standard.ccn_code}: {standard.implied_top_code}"
                     )
 
         if invalid_format:
@@ -296,7 +296,7 @@ class TestSLOContentRequirementsFormat:
             if standard.slo_requirements is not None:
                 if not isinstance(standard.slo_requirements, list):
                     invalid_type.append(
-                        f"{standard.c_id}: type={type(standard.slo_requirements).__name__}"
+                        f"{standard.ccn_code}: type={type(standard.slo_requirements).__name__}"
                     )
 
         if invalid_type:
@@ -314,11 +314,11 @@ class TestSLOContentRequirementsFormat:
                 for i, slo in enumerate(standard.slo_requirements):
                     if not isinstance(slo, str):
                         invalid_items.append(
-                            f"{standard.c_id}[{i}]: type={type(slo).__name__}"
+                            f"{standard.ccn_code}[{i}]: type={type(slo).__name__}"
                         )
                     elif len(slo.strip()) == 0:
                         invalid_items.append(
-                            f"{standard.c_id}[{i}]: empty string"
+                            f"{standard.ccn_code}[{i}]: empty string"
                         )
 
         if invalid_items:
@@ -335,7 +335,7 @@ class TestSLOContentRequirementsFormat:
             if standard.content_requirements is not None:
                 if not isinstance(standard.content_requirements, list):
                     invalid_type.append(
-                        f"{standard.c_id}: type={type(standard.content_requirements).__name__}"
+                        f"{standard.ccn_code}: type={type(standard.content_requirements).__name__}"
                     )
 
         if invalid_type:
@@ -352,13 +352,13 @@ class TestSLOContentRequirementsFormat:
             if standard.objectives is not None:
                 if not isinstance(standard.objectives, list):
                     invalid.append(
-                        f"{standard.c_id}: objectives not a list"
+                        f"{standard.ccn_code}: objectives not a list"
                     )
                 else:
                     for i, obj in enumerate(standard.objectives):
                         if not isinstance(obj, str):
                             invalid.append(
-                                f"{standard.c_id}[{i}]: objective not string"
+                                f"{standard.ccn_code}[{i}]: objective not string"
                             )
 
         if invalid:
@@ -376,18 +376,18 @@ class TestUniquenessConstraints:
     """Tests for uniqueness of CCN data."""
 
     def test_ccn_cid_is_unique(self, production_ccn_standards):
-        """All C-ID codes should be unique."""
-        cids = [s.c_id for s in production_ccn_standards if s.c_id]
+        """All CCN codes should be unique."""
+        cids = [s.ccn_code for s in production_ccn_standards if s.ccn_code]
         duplicates = [cid for cid in cids if cids.count(cid) > 1]
 
         if duplicates:
             unique_duplicates = sorted(set(duplicates))
             pytest.fail(
-                f"Found {len(unique_duplicates)} duplicate C-IDs:\n"
+                f"Found {len(unique_duplicates)} duplicate CCN codes:\n"
                 + ", ".join(unique_duplicates)
             )
 
-    def test_ccn_id_is_unique(self, production_ccn_standards):
+    def test_ccn_code_is_unique(self, production_ccn_standards):
         """All CCN standard IDs (UUIDs) should be unique."""
         ids = [str(s.id) for s in production_ccn_standards]
         assert len(ids) == len(set(ids)), "Duplicate CCN standard IDs found"
@@ -424,7 +424,7 @@ class TestExpectedStandardsCount:
 
         Per AB 1111, these are the primary transfer disciplines.
         """
-        # CHEM (Chemistry) is not yet present in the current C-ID/CCN extract —
+        # CHEM (Chemistry) is not yet present in the current CCN extract —
         # AB 1111 rollout is phased and Chemistry has no finalized template in
         # seeds/data/ccn_templates_extracted.json yet. Tracked as a seed-data
         # gap; assert only disciplines actually present in the seeded templates.
@@ -483,7 +483,7 @@ class TestCBCodeImplications:
         for standard in production_ccn_standards:
             if standard.implied_cb05 != "A":
                 non_a_standards.append(
-                    f"{standard.c_id}: implied_cb05={standard.implied_cb05}"
+                    f"{standard.ccn_code}: implied_cb05={standard.implied_cb05}"
                 )
 
         if non_a_standards:
@@ -498,20 +498,20 @@ class TestCBCodeImplications:
 # =============================================================================
 
 class TestSpecialtyFlagsConsistency:
-    """Tests for specialty flag consistency with C-ID codes."""
+    """Tests for specialty flag consistency with CCN codes."""
 
     def test_honors_flag_matches_cid_suffix(self, production_ccn_standards):
-        """is_honors flag should match 'H' suffix in C-ID."""
+        """is_honors flag should match 'H' suffix in CCN code."""
         mismatches = []
 
         for standard in production_ccn_standards:
-            if standard.c_id:
-                parts = parse_ccn_code(standard.c_id)
+            if standard.ccn_code:
+                parts = parse_ccn_code(standard.ccn_code)
                 if parts:
                     has_h_suffix = parts.is_honors
                     if has_h_suffix != standard.is_honors:
                         mismatches.append(
-                            f"{standard.c_id}: flag={standard.is_honors}, "
+                            f"{standard.ccn_code}: flag={standard.is_honors}, "
                             f"suffix={'H' if has_h_suffix else 'none'}"
                         )
 
@@ -522,17 +522,17 @@ class TestSpecialtyFlagsConsistency:
             )
 
     def test_lab_flag_matches_cid_suffix(self, production_ccn_standards):
-        """is_lab_only flag should match 'L' suffix in C-ID."""
+        """is_lab_only flag should match 'L' suffix in CCN code."""
         mismatches = []
 
         for standard in production_ccn_standards:
-            if standard.c_id:
-                parts = parse_ccn_code(standard.c_id)
+            if standard.ccn_code:
+                parts = parse_ccn_code(standard.ccn_code)
                 if parts:
                     has_l_suffix = parts.is_lab_only
                     if has_l_suffix != standard.is_lab_only:
                         mismatches.append(
-                            f"{standard.c_id}: flag={standard.is_lab_only}, "
+                            f"{standard.ccn_code}: flag={standard.is_lab_only}, "
                             f"suffix={'L' if has_l_suffix else 'none'}"
                         )
 

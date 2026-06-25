@@ -22,7 +22,7 @@ expect.extend(toHaveNoViolations);
 
 describe('CCNAlignmentBadge Accessibility', () => {
   const mockStandard: CCNStandard = {
-    c_id: 'MATH C2210',
+    ccn_code: 'MATH C2210',
     discipline: 'MATH',
     title: 'Calculus I',
     descriptor: 'Introduction to differential calculus',
@@ -56,14 +56,14 @@ describe('CCNAlignmentBadge Accessibility', () => {
       render(<CCNAlignmentBadge alignment={alignedInfo} />);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveAttribute('aria-label', 'C-ID Aligned: MATH C2210');
+      expect(button).toHaveAttribute('aria-label', 'CCN Aligned: MATH C2210');
     });
 
     it('has aria-label without standard when none status', () => {
       render(<CCNAlignmentBadge alignment={noneInfo} />);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveAttribute('aria-label', 'No C-ID Match');
+      expect(button).toHaveAttribute('aria-label', 'No CCN Match');
     });
 
     it('has aria-expanded attribute that changes when tooltip opens', () => {
@@ -97,7 +97,7 @@ describe('CCNAlignmentBadge Accessibility', () => {
       fireEvent.click(screen.getByRole('button'));
 
       const dialog = screen.getByRole('dialog');
-      expect(dialog).toHaveAttribute('aria-label', 'C-ID alignment details');
+      expect(dialog).toHaveAttribute('aria-label', 'CCN alignment details');
     });
 
     it('close button has aria-label', () => {
@@ -191,7 +191,7 @@ describe('CCNAlignmentBadge Accessibility', () => {
       render(<CCNAlignmentBadge alignment={alignedInfo} />);
 
       // The button with aria-label contains the readable text
-      expect(screen.getByRole('button', { name: /C-ID Aligned: MATH C2210/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /CCN Aligned: MATH C2210/i })).toBeInTheDocument();
     });
 
     it('tooltip content is accessible when open', () => {
@@ -200,7 +200,7 @@ describe('CCNAlignmentBadge Accessibility', () => {
       fireEvent.click(screen.getByRole('button'));
 
       // Important information should be in the document
-      expect(screen.getByText('This course is aligned with a C-ID standard')).toBeInTheDocument();
+      expect(screen.getByText('This course is aligned with a CCN standard')).toBeInTheDocument();
       expect(screen.getByText('Calculus I')).toBeInTheDocument();
     });
 
@@ -243,7 +243,7 @@ describe('CCNAlignmentBadge Accessibility', () => {
 
 describe('CCNAlignmentBadgeCompact Accessibility', () => {
   const mockStandard: CCNStandard = {
-    c_id: 'ENGL C1000',
+    ccn_code: 'ENGL C1000',
     discipline: 'ENGL',
     title: 'English Composition',
     minimum_units: 3,
@@ -268,7 +268,7 @@ describe('CCNAlignmentBadgeCompact Accessibility', () => {
       render(<CCNAlignmentBadgeCompact alignment={alignedInfo} />);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveAttribute('title', 'C-ID Aligned: English Composition');
+      expect(button).toHaveAttribute('title', 'CCN Aligned: English Composition');
     });
 
     it('is keyboard accessible', async () => {

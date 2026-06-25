@@ -534,7 +534,8 @@ async def export_course_elumen(
         "status": course.status.value,
         "version": course.version,
         "effectiveTerm": course.effective_term,
-        "ccnId": course.ccn_id,
+        "ccnCode": course.ccn_code,
+        "cId": course.c_id,
         "cbCodes": course.cb_codes or {},
         "transferability": course.transferability or {},
         "geApplicability": course.ge_applicability or {},
@@ -946,10 +947,10 @@ async def get_public_course_view(
             "localGe": (course.ge_applicability or {}).get("local_ge", []),
         },
 
-        # C-ID alignment (for articulation)
-        "cId": {
-            "number": course.ccn_id if course.ccn_id else None,
-            "isAligned": bool(course.ccn_id),
+        # CCN alignment (AB 1111, for articulation)
+        "ccn": {
+            "number": course.ccn_code if course.ccn_code else None,
+            "isAligned": bool(course.ccn_code),
         },
 
         # Student Learning Outcomes
@@ -1075,8 +1076,8 @@ def _generate_public_html(data: dict) -> str:
         transfers.append('<span class="badge badge-uc">UC Transferable</span>')
     if data["transferability"]["csu"]:
         transfers.append('<span class="badge badge-csu">CSU Transferable</span>')
-    if data["cId"]["isAligned"]:
-        transfers.append(f'<span class="badge badge-cid">C-ID: {esc(data["cId"]["number"])}</span>')
+    if data["ccn"]["isAligned"]:
+        transfers.append(f'<span class="badge badge-ccn">CCN: {esc(data["ccn"]["number"])}</span>')
     if transfers:
         transfer_html = f'<div class="transferability">{" ".join(transfers)}</div>'
 
@@ -1158,7 +1159,7 @@ def _generate_public_html(data: dict) -> str:
             background: #dcfce7;
             color: #16a34a;
         }}
-        .badge-cid {{
+        .badge-ccn {{
             background: #f3e8ff;
             color: #7c3aed;
         }}

@@ -27,7 +27,8 @@ export interface CourseListItem {
   status: CourseStatus;
   department_id: string;
   department: Department | null;
-  ccn_id: string | null;
+  ccn_code: string | null;
+  c_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -117,7 +118,8 @@ export interface CourseDetail {
   status: CourseStatus;
   version: number;
   effective_term: string | null;
-  ccn_id: string | null;
+  ccn_code: string | null;
+  c_id: string | null;
   ccn_justification: Record<string, unknown> | null;
 
   // eLumen tracking
@@ -163,7 +165,8 @@ export interface CourseCreateData {
   total_student_learning_hours?: number;
   top_code?: string;
   effective_term?: string;
-  ccn_id?: string;
+  ccn_code?: string;
+  c_id?: string;
   cb_codes?: Record<string, unknown>;
   transferability?: Record<string, unknown>;
   ge_applicability?: Record<string, unknown>;
@@ -187,7 +190,8 @@ export interface CourseUpdateData {
   total_student_learning_hours?: number;
   top_code?: string | null;
   effective_term?: string | null;
-  ccn_id?: string | null;
+  ccn_code?: string | null;
+  c_id?: string | null;
   ccn_justification?: Record<string, unknown> | null;
   cb_codes?: Record<string, unknown>;
   transferability?: Record<string, unknown>;

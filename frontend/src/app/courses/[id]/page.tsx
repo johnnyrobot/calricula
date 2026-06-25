@@ -244,12 +244,12 @@ export default function CourseDetailPage() {
                 {course.subject_code} {course.course_number}
               </span>
               <StatusBadge status={course.status} />
-              {course.ccn_id && (
+              {course.ccn_code && (
                 <CCNAlignmentBadge
                   alignment={{
                     status: 'aligned',
                     standard: {
-                      c_id: course.ccn_id,
+                      ccn_code: course.ccn_code,
                       discipline: course.subject_code,
                       title: course.title,
                       minimum_units: course.units,
@@ -574,7 +574,7 @@ export default function CourseDetailPage() {
             </div>
 
             {/* CCN Alignment - CUR-226 */}
-            {course.ccn_id && (
+            {course.ccn_code && (
               <div className="luminous-card">
                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
                   <CheckBadgeIcon className="h-5 w-5 text-green-500" />
@@ -582,16 +582,37 @@ export default function CourseDetailPage() {
                 </h3>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-600 dark:text-slate-400">C-ID Standard</span>
+                    <span className="text-slate-600 dark:text-slate-400">CCN Standard</span>
                     <span className="font-mono font-semibold text-green-600 dark:text-green-400">
-                      {course.ccn_id}
+                      {course.ccn_code}
                     </span>
                   </div>
                   <p className="text-sm text-slate-500 dark:text-slate-400">
-                    This course is aligned with a C-ID standard per AB 1111 (Common Course Numbering).
+                    This course is aligned with a CCN standard per AB 1111 (Common Course Numbering).
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Legacy C-ID alignment (distinct from CCN) */}
+            {course.c_id && (
+              <div className="luminous-card">
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+                  <CheckBadgeIcon className="h-5 w-5 text-blue-500" />
+                  C-ID Alignment
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-600 dark:text-slate-400">C-ID</span>
+                    <span className="font-mono font-semibold text-blue-600 dark:text-blue-400">
+                      {course.c_id}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    This course carries a legacy C-ID (Course Identification Numbering System) descriptor.
                   </p>
                   <a
-                    href={`https://c-id.net/descriptors/${course.ccn_id.replace(/\s+/g, '-')}`}
+                    href={`https://c-id.net/descriptors/${course.c_id.replace(/\s+/g, '-')}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-sm font-medium text-luminous-600 dark:text-luminous-400 hover:underline"

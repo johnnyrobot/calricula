@@ -177,7 +177,8 @@ class CourseBase(BaseModel):
     homework_hours: int = Field(default=0, ge=0, description="Expected homework hours")
     total_student_hours: int = Field(default=0, ge=0, description="Total student learning hours")
     effective_term: Optional[str] = Field(None, description="Effective term (e.g., 'Fall 2025')")
-    ccn_id: Optional[str] = Field(None, description="C-ID alignment identifier")
+    ccn_code: Optional[str] = Field(None, description="AB 1111 Common Course Numbering (CCN) code, e.g., 'MATH C1051'")
+    c_id: Optional[str] = Field(None, description="Legacy C-ID (Course Identification Numbering System) code, e.g., 'MATH 220'; distinct from CCN")
 
 
 class CourseCreateRequest(CourseBase):
@@ -207,7 +208,8 @@ class CourseUpdateRequest(BaseModel):
     homework_hours: Optional[int] = Field(None, ge=0)
     total_student_hours: Optional[int] = Field(None, ge=0)
     effective_term: Optional[str] = None
-    ccn_id: Optional[str] = None
+    ccn_code: Optional[str] = None
+    c_id: Optional[str] = None
     cb_codes: Optional[Dict[str, Any]] = None
     transferability: Optional[Dict[str, Any]] = None
     ge_applicability: Optional[Dict[str, Any]] = None
@@ -260,7 +262,8 @@ class CourseDetailResponse(BaseModel):
     status: CourseStatus
     version: int
     effective_term: Optional[str]
-    ccn_id: Optional[str]
+    ccn_code: Optional[str]
+    c_id: Optional[str] = None
     department_id: uuid.UUID
     department: Optional[DepartmentInfo] = None
     cb_codes: Dict[str, Any]

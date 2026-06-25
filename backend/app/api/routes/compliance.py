@@ -105,11 +105,11 @@ class ValidateUnitsResponse(BaseModel):
 
 
 # =============================================================================
-# CCN/C-ID Matching Schemas
+# CCN Matching Schemas
 # =============================================================================
 
 class CCNMatchRequest(BaseModel):
-    """Request for finding CCN/C-ID matches for a course."""
+    """Request for finding CCN (AB 1111) matches for a course."""
     title: str
     description: Optional[str] = None
     subject_code: Optional[str] = None  # e.g., "PSYC", "MATH"
@@ -119,7 +119,7 @@ class CCNMatchRequest(BaseModel):
 
 class CCNMatchResult(BaseModel):
     """Individual CCN match result with confidence score."""
-    c_id: str
+    ccn_code: str  # AB 1111 CCN code (renamed from c_id)
     discipline: str
     title: str
     descriptor: Optional[str]
@@ -141,7 +141,7 @@ class CCNMatchResponse(BaseModel):
 
 
 # =============================================================================
-# Enhanced CCN/C-ID Matching Schemas (for CB Wizard Integration)
+# Enhanced CCN Matching Schemas (for CB Wizard Integration)
 # =============================================================================
 
 class CCNMatchRequestEnhanced(BaseModel):
@@ -162,7 +162,7 @@ class CCNMatchRequestEnhanced(BaseModel):
 
 class CCNMatchResultEnhanced(BaseModel):
     """Enhanced CCN match result with implied CB codes and coverage scores."""
-    c_id: str
+    ccn_code: str  # AB 1111 CCN code (renamed from c_id)
     title: str
     discipline: str
     confidence_score: float  # 0.0 to 1.0
@@ -429,15 +429,15 @@ async def audit_course(
             "cb_codes": course.cb_codes or {},
             "transferability": course.transferability or {},
             "ge_applicability": course.ge_applicability or {},
-            "ccn_id": course.ccn_id,  # CCN alignment
+            "ccn_code": course.ccn_code,  # AB 1111 CCN alignment
         }
 
         # Check for CCN justification and minimum units (for CCN compliance checks)
         from app.models.reference import CCNNonMatchJustification
-        if course.ccn_id:
+        if course.ccn_code:
             # Look up CCN standard to get minimum units
             ccn_standard = session.exec(
-                select(CCNStandard).where(CCNStandard.c_id == course.ccn_id)
+                select(CCNStandard).where(CCNStandard.ccn_code == course.ccn_code)
             ).first()
             if ccn_standard:
                 course_data["ccn_minimum_units"] = ccn_standard.minimum_units
@@ -786,16 +786,16 @@ async def find_ccn_matches(
     session: Session = Depends(get_session),
 ):
     """
-    Find Common Course Numbering (C-ID) matches for a course.
+    Find Common Course Numbering (CCN) matches for a course.
 
-    This endpoint searches for C-ID standards that match the provided course
+    This endpoint searches for CCN standards that match the provided course
     information. It uses text matching on titles and descriptions, and considers
     discipline/subject alignment.
 
     **AB 1111 Compliance:**
     California's Common Course Numbering Act (AB 1111) requires community colleges
-    to align courses with C-ID standards where applicable. This endpoint helps
-    identify potential C-ID alignments for course development.
+    to align courses with CCN standards where applicable. This endpoint helps
+    identify potential CCN alignments for course development.
 
     **Request Parameters:**
     - `title`: Course title (required) - used for primary matching
@@ -805,7 +805,7 @@ async def find_ccn_matches(
     - `slos`: List of SLO texts (optional) - for alignment checking
 
     **Response:**
-    - `matches`: Array of matching C-ID standards with confidence scores
+    - `matches`: Array of matching CCN standards with confidence scores
     - `best_match`: The highest confidence match (if any)
     - `total_matches`: Number of standards that matched
 
@@ -846,7 +846,7 @@ async def find_ccn_matches(
         union = keywords1 | keywords2
         return len(intersection) / len(union) if union else 0.0
 
-    # Map common subject codes to C-ID disciplines
+    # Map common subject codes to CCN disciplines
     discipline_map = {
         'PSYC': ['PSYCH', 'PSY'],
         'PSYCH': ['PSYC', 'PSY'],
@@ -927,7 +927,7 @@ async def find_ccn_matches(
                 alignment_status = "review_needed"
 
             matches.append(CCNMatchResult(
-                c_id=standard.c_id,
+                ccn_code=standard.ccn_code,
                 discipline=standard.discipline,
                 title=standard.title,
                 descriptor=standard.descriptor,
@@ -968,7 +968,7 @@ async def find_ccn_matches_enhanced(
     session: Session = Depends(get_session),
 ):
     """
-    Enhanced CCN/C-ID matching endpoint with CB wizard integration support.
+    Enhanced CCN matching endpoint with CB wizard integration support.
 
     This endpoint provides more detailed matching than /ccn-match, including:
     - Implied CB codes for each match (CB05, CB03)
@@ -987,7 +987,7 @@ async def find_ccn_matches_enhanced(
     - `course_id`: Reference to course being edited (optional)
 
     **Response:**
-    - `matches`: Array of matching C-ID standards with enhanced data
+    - `matches`: Array of matching CCN standards with enhanced data
     - `best_match`: The highest confidence match (if any)
     - `total_matches`: Number of standards that matched
 
@@ -1083,7 +1083,7 @@ async def find_ccn_matches_enhanced(
 
         return (covered_count / len(ccn_requirements)) * 100
 
-    # Map common subject codes to C-ID disciplines
+    # Map common subject codes to CCN disciplines
     discipline_map = {
         'PSYC': ['PSYCH', 'PSY'],
         'PSYCH': ['PSYC', 'PSY'],
@@ -1191,7 +1191,7 @@ async def find_ccn_matches_enhanced(
                 )
 
             matches.append(CCNMatchResultEnhanced(
-                c_id=standard.c_id,
+                ccn_code=standard.ccn_code,
                 title=standard.title,
                 discipline=standard.discipline,
                 confidence_score=round(min(confidence, 1.0), 3),  # Cap at 1.0
@@ -2620,7 +2620,7 @@ class CCNAdoptResponse(BaseModel):
     """Response for CCN adoption."""
     success: bool
     course_id: uuid.UUID
-    ccn_id: str  # e.g., "MATH C2210"
+    ccn_code: str  # AB 1111 CCN code, e.g., "MATH C2210" (renamed from ccn_id)
     cb_codes_updated: Dict[str, str]  # e.g., {"CB05": "A", "CB03": "1701.00"}
     warnings: List[str]  # e.g., "Units below CCN minimum"
 
@@ -2634,7 +2634,7 @@ async def adopt_ccn_standard(
     """
     Adopt a CCN standard for a course, optionally auto-populating CB codes.
 
-    This endpoint links a course to a C-ID/CCN standard per AB 1111 requirements.
+    This endpoint links a course to a CCN standard per AB 1111 requirements.
     When `auto_populate_cb_codes` is True (default), it will:
     - Set CB05 to "A" (UC+CSU Transferable) - all CCN courses are transferable
     - Set CB03 to the implied TOP code for the CCN discipline
@@ -2647,7 +2647,7 @@ async def adopt_ccn_standard(
     **Response:**
     - `success`: Whether the adoption was successful
     - `course_id`: The course that was updated
-    - `ccn_id`: The C-ID code adopted (e.g., "MATH C2210")
+    - `ccn_code`: The AB 1111 CCN code adopted (e.g., "MATH C2210")
     - `cb_codes_updated`: Dict of CB codes that were updated
     - `warnings`: List of warnings (e.g., unit discrepancies)
 
@@ -2696,8 +2696,8 @@ async def adopt_ccn_standard(
             f"CCN requirement (CB05 must be 'A' for UC+CSU transferable)"
         )
 
-    # Set course.ccn_id to the C-ID code
-    course.ccn_id = ccn_standard.c_id
+    # Set course.ccn_code to the adopted CCN standard's code
+    course.ccn_code = ccn_standard.ccn_code
 
     # Auto-populate CB codes if requested
     if request.auto_populate_cb_codes:
@@ -2750,14 +2750,14 @@ async def adopt_ccn_standard(
     # Log adoption for audit trail
     logger.info(
         f"CCN adoption: user={current_user.id}, course_id={course.id}, "
-        f"ccn_id={ccn_standard.c_id}, cb_codes_updated={cb_codes_updated}, "
+        f"ccn_code={ccn_standard.ccn_code}, cb_codes_updated={cb_codes_updated}, "
         f"warnings={warnings}"
     )
 
     return CCNAdoptResponse(
         success=True,
         course_id=course.id,
-        ccn_id=ccn_standard.c_id,
+        ccn_code=ccn_standard.ccn_code,
         cb_codes_updated=cb_codes_updated,
         warnings=warnings,
     )
@@ -2813,7 +2813,7 @@ async def submit_ccn_non_match_justification(
     Submit a justification for not aligning with a CCN standard.
 
     Per AB 1111 (Common Course Numbering), courses that do not align with
-    a C-ID standard should provide a documented justification.
+    a CCN standard should provide a documented justification.
 
     **Reason Codes:**
     - `specialized`: Course covers specialized content not in CCN templates

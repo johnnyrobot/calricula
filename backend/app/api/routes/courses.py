@@ -17,9 +17,10 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Response
 from sqlmodel import Session, select, func, or_
 from sqlalchemy.orm import joinedload, selectinload
-from pydantic import ConfigDict, BaseModel
+from pydantic import ConfigDict, BaseModel, field_validator
 
 from app.core.database import get_session
+from app.utils.ccn_utils import validate_ccn_format, validate_cid_format
 from app.core.deps import get_current_user, require_role, require_admin, require_reviewer
 from app.models.user import User, UserRole
 from app.models.workflow import WorkflowHistory, EntityType
@@ -218,7 +219,8 @@ class CourseDetailResponse(BaseModel):
     status: CourseStatus
     version: int
     effective_term: Optional[str]
-    ccn_id: Optional[str]
+    ccn_code: Optional[str]
+    c_id: Optional[str] = None
     department_id: uuid.UUID
     department: Optional[DepartmentInfo] = None
     cb_codes: Dict[str, Any]
@@ -589,7 +591,8 @@ async def get_course(
         status=course.status,
         version=course.version,
         effective_term=course.effective_term,
-        ccn_id=course.ccn_id,
+        ccn_code=course.ccn_code,
+        c_id=course.c_id,
         department_id=course.department_id,
         department=dept_info,
         cb_codes=course.cb_codes,
@@ -646,10 +649,37 @@ class CourseCreateRequest(BaseModel):
     outside_of_class_hours: int = 0
     total_student_learning_hours: int = 0
     effective_term: Optional[str] = None
-    ccn_id: Optional[str] = None
+    ccn_code: Optional[str] = None
+    c_id: Optional[str] = None
     cb_codes: Dict[str, Any] = {}
     transferability: Dict[str, Any] = {}
     ge_applicability: Dict[str, Any] = {}
+
+    @field_validator("ccn_code")
+    @classmethod
+    def validate_ccn_code(cls, v: Optional[str]) -> Optional[str]:
+        # AB 1111 CCN format: "SUBJ C####" with optional H/L/S/E suffix.
+        if v is None or v.strip() == "":
+            return None
+        if not validate_ccn_format(v):
+            raise ValueError(
+                f"Invalid CCN code format: '{v}'. Expected AB 1111 format "
+                f"like 'MATH C1051' (SUBJ C#### with optional H/L/S/E suffix)."
+            )
+        return v.strip()
+
+    @field_validator("c_id")
+    @classmethod
+    def validate_legacy_cid(cls, v: Optional[str]) -> Optional[str]:
+        # Legacy C-ID format: "SUBJ ###" (no "C" prefix), distinct from CCN.
+        if v is None or v.strip() == "":
+            return None
+        if not validate_cid_format(v):
+            raise ValueError(
+                f"Invalid C-ID format: '{v}'. Expected legacy C-ID format "
+                f"like 'MATH 220' (SUBJ ### with no 'C' prefix)."
+            )
+        return v.strip()
 
 
 @router.post("", response_model=CourseDetailResponse, status_code=status.HTTP_201_CREATED)
@@ -715,7 +745,8 @@ async def create_course(
         outside_of_class_hours=course_data.outside_of_class_hours,
         total_student_learning_hours=course_data.total_student_learning_hours,
         effective_term=course_data.effective_term,
-        ccn_id=course_data.ccn_id,
+        ccn_code=course_data.ccn_code,
+        c_id=course_data.c_id,
         department_id=course_data.department_id,
         cb_codes=course_data.cb_codes,
         transferability=course_data.transferability,
@@ -755,7 +786,8 @@ async def create_course(
         status=course.status,
         version=course.version,
         effective_term=course.effective_term,
-        ccn_id=course.ccn_id,
+        ccn_code=course.ccn_code,
+        c_id=course.c_id,
         department_id=course.department_id,
         department=dept_info,
         cb_codes=course.cb_codes,
@@ -915,7 +947,8 @@ async def duplicate_course(
         outside_of_class_hours=source_course.outside_of_class_hours,
         total_student_learning_hours=source_course.total_student_learning_hours,
         effective_term=None,  # Clear effective term for new version
-        ccn_id=source_course.ccn_id,
+        ccn_code=source_course.ccn_code,
+        c_id=source_course.c_id,
         department_id=source_course.department_id,
         cb_codes=source_course.cb_codes.copy() if source_course.cb_codes else {},
         transferability=source_course.transferability.copy() if source_course.transferability else {},

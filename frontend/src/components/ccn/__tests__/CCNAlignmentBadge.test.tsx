@@ -3,7 +3,7 @@ import { CCNAlignmentBadge, CCNAlignmentBadgeCompact, CCNAlignmentInfo, CCNStand
 
 describe('CCNAlignmentBadge', () => {
   const mockStandard: CCNStandard = {
-    c_id: 'MATH C2210',
+    ccn_code: 'MATH C2210',
     discipline: 'MATH',
     title: 'Calculus I',
     descriptor: 'Introduction to differential calculus',
@@ -33,10 +33,10 @@ describe('CCNAlignmentBadge', () => {
   };
 
   describe('Aligned status', () => {
-    it('renders aligned badge with C-ID', () => {
+    it('renders aligned badge with CCN', () => {
       render(<CCNAlignmentBadge alignment={alignedInfo} />);
 
-      expect(screen.getByText('C-ID: MATH C2210')).toBeInTheDocument();
+      expect(screen.getByText('CCN: MATH C2210')).toBeInTheDocument();
     });
 
     it('has green styling for aligned status', () => {
@@ -53,8 +53,8 @@ describe('CCNAlignmentBadge', () => {
       fireEvent.click(button);
 
       // Check tooltip content
-      expect(screen.getByText('C-ID Aligned')).toBeInTheDocument();
-      expect(screen.getByText('This course is aligned with a C-ID standard')).toBeInTheDocument();
+      expect(screen.getByText('CCN Aligned')).toBeInTheDocument();
+      expect(screen.getByText('This course is aligned with a CCN standard')).toBeInTheDocument();
     });
 
     it('displays standard info in tooltip', () => {
@@ -62,7 +62,7 @@ describe('CCNAlignmentBadge', () => {
 
       fireEvent.click(screen.getByRole('button'));
 
-      expect(screen.getByText('C-ID Standard')).toBeInTheDocument();
+      expect(screen.getByText('CCN Standard')).toBeInTheDocument();
       expect(screen.getByText('Calculus I')).toBeInTheDocument();
     });
 
@@ -77,7 +77,7 @@ describe('CCNAlignmentBadge', () => {
   });
 
   describe('Potential status', () => {
-    it('renders potential badge with C-ID', () => {
+    it('renders potential badge with CCN', () => {
       render(<CCNAlignmentBadge alignment={potentialInfo} />);
 
       expect(screen.getByText('Potential: MATH C2210')).toBeInTheDocument();
@@ -104,7 +104,7 @@ describe('CCNAlignmentBadge', () => {
     it('renders no match badge', () => {
       render(<CCNAlignmentBadge alignment={noneInfo} />);
 
-      expect(screen.getByText('No C-ID Match')).toBeInTheDocument();
+      expect(screen.getByText('No CCN Match')).toBeInTheDocument();
     });
 
     it('has slate styling for none status', () => {
@@ -119,7 +119,7 @@ describe('CCNAlignmentBadge', () => {
 
       fireEvent.click(screen.getByRole('button'));
 
-      expect(screen.getByText('No matching C-ID standard found')).toBeInTheDocument();
+      expect(screen.getByText('No matching CCN standard found')).toBeInTheDocument();
       expect(screen.getByText(/Specialized or vocational courses/i)).toBeInTheDocument();
     });
   });
@@ -191,7 +191,7 @@ describe('CCNAlignmentBadge', () => {
 
       // Open tooltip
       fireEvent.click(screen.getByRole('button'));
-      expect(screen.getByText('C-ID Aligned')).toBeInTheDocument();
+      expect(screen.getByText('CCN Aligned')).toBeInTheDocument();
 
       // Click backdrop (fixed inset div)
       const backdrop = document.querySelector('.fixed.inset-0');
@@ -200,7 +200,7 @@ describe('CCNAlignmentBadge', () => {
       }
 
       // Tooltip should be closed
-      expect(screen.queryByText('This course is aligned with a C-ID standard')).not.toBeInTheDocument();
+      expect(screen.queryByText('This course is aligned with a CCN standard')).not.toBeInTheDocument();
     });
 
     it('closes tooltip when close button is clicked', () => {
@@ -214,7 +214,7 @@ describe('CCNAlignmentBadge', () => {
       fireEvent.click(closeButton);
 
       // Tooltip content should be gone
-      expect(screen.queryByText('This course is aligned with a C-ID standard')).not.toBeInTheDocument();
+      expect(screen.queryByText('This course is aligned with a CCN standard')).not.toBeInTheDocument();
     });
   });
 
@@ -238,7 +238,7 @@ describe('CCNAlignmentBadge', () => {
       render(<CCNAlignmentBadge alignment={alignedInfo} />);
 
       const button = screen.getByRole('button');
-      expect(button).toHaveAttribute('aria-label', 'C-ID Aligned: MATH C2210');
+      expect(button).toHaveAttribute('aria-label', 'CCN Aligned: MATH C2210');
     });
 
     it('has aria-expanded attribute when tooltip is open', () => {
@@ -263,7 +263,7 @@ describe('CCNAlignmentBadge', () => {
 
 describe('CCNAlignmentBadgeCompact', () => {
   const mockStandard: CCNStandard = {
-    c_id: 'ENGL C1000',
+    ccn_code: 'ENGL C1000',
     discipline: 'ENGL',
     title: 'English Composition',
     minimum_units: 3,
@@ -283,13 +283,13 @@ describe('CCNAlignmentBadgeCompact', () => {
     status: 'none',
   };
 
-  it('renders C-ID for aligned status', () => {
+  it('renders CCN for aligned status', () => {
     render(<CCNAlignmentBadgeCompact alignment={alignedInfo} />);
 
     expect(screen.getByText('ENGL C1000')).toBeInTheDocument();
   });
 
-  it('renders C-ID for potential status', () => {
+  it('renders CCN for potential status', () => {
     render(<CCNAlignmentBadgeCompact alignment={potentialInfo} />);
 
     expect(screen.getByText('ENGL C1000')).toBeInTheDocument();
@@ -314,6 +314,6 @@ describe('CCNAlignmentBadgeCompact', () => {
     render(<CCNAlignmentBadgeCompact alignment={alignedInfo} />);
 
     const button = screen.getByRole('button');
-    expect(button).toHaveAttribute('title', 'C-ID Aligned: English Composition');
+    expect(button).toHaveAttribute('title', 'CCN Aligned: English Composition');
   });
 });

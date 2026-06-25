@@ -1,9 +1,9 @@
 'use client';
 
 // ===========================================
-// CCN C-ID Comparison Modal Component - CUR-77
+// CCN Comparison Modal Component - CUR-77
 // ===========================================
-// Side-by-side comparison view showing course vs C-ID standard requirements.
+// Side-by-side comparison view showing course vs CCN standard requirements.
 // Highlights gaps and alignment status for SLOs and content topics.
 
 import { useState, useMemo } from 'react';
@@ -28,7 +28,7 @@ import { CheckBadgeIcon, SparklesIcon } from '@heroicons/react/24/solid';
 // ===========================================
 
 export interface CCNStandard {
-  c_id: string;
+  ccn_code: string;
   discipline: string;
   title: string;
   descriptor?: string;
@@ -67,7 +67,7 @@ export interface CCNComparisonModalProps {
   isOpen: boolean;
   /** Called when the modal should close */
   onClose: () => void;
-  /** The C-ID standard to compare against */
+  /** The CCN standard to compare against */
   standard: CCNStandard;
   /** The current course data */
   course: CourseData;
@@ -305,10 +305,10 @@ export function CCNComparisonModal({
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                  C-ID Standard Comparison
+                  CCN Standard Comparison
                 </h2>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
-                  {course.subject_code} {course.course_number} vs {standard.c_id}
+                  {course.subject_code} {course.course_number} vs {standard.ccn_code}
                 </p>
               </div>
             </div>
@@ -356,7 +356,7 @@ export function CCNComparisonModal({
                 <div className="flex items-center gap-2 mb-2">
                   <CheckBadgeIcon className="h-5 w-5 text-green-500" />
                   <span className="font-mono font-semibold text-slate-900 dark:text-white">
-                    {standard.c_id}
+                    {standard.ccn_code}
                   </span>
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-400 truncate">

@@ -108,11 +108,11 @@ const CourseCard: React.FC<CourseCardProps> = ({ course, onDelete }) => {
           {/* Status Badge and CCN Badge */}
           <div className="flex flex-col items-end gap-1.5">
             <StatusBadge status={course.status} />
-            {course.ccn_id && (
+            {course.ccn_code && (
               <CCNAlignmentBadgeCompact
                 alignment={{
                   status: 'aligned',
-                  standard: { c_id: course.ccn_id, discipline: '', title: '', minimum_units: 0 },
+                  standard: { ccn_code: course.ccn_code, discipline: '', title: '', minimum_units: 0 },
                 }}
               />
             )}

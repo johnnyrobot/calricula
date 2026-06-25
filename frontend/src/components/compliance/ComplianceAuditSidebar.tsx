@@ -100,7 +100,7 @@ function generateCCNComplianceChecks(course: CourseDetail): ComplianceResult[] {
 
   // CCN-001: Transfer Status Validation
   // CCN-aligned courses must be transferable (CB05 = 'A' for UC+CSU)
-  if (course.ccn_id) {
+  if (course.ccn_code) {
     const cb05Value = cbCodes.CB05 || cbCodes.cb05;
     if (cb05Value === 'A') {
       results.push({
@@ -149,10 +149,10 @@ function generateCCNComplianceChecks(course: CourseDetail): ComplianceResult[] {
     // Show CCN alignment status
     results.push({
       rule_id: 'CCN-000',
-      rule_name: `Aligned with ${course.ccn_id}`,
+      rule_name: `Aligned with ${course.ccn_code}`,
       category: 'CCNAlignment',
       status: 'pass',
-      message: 'Course is aligned with a C-ID standard per AB 1111',
+      message: 'Course is aligned with a CCN standard per AB 1111',
       citation: 'AB 1111 § 66745',
     });
   } else {
@@ -449,7 +449,7 @@ export function ComplianceAuditSidebar({
         transferability: course.transferability || {},
         ge_applicability: course.ge_applicability || {},
         // CCN data for AB 1111 compliance checks
-        ccn_id: course.ccn_id || null,
+        ccn_code: course.ccn_code || null,
         ccn_justification: course.ccn_justification || null,
       };
 
@@ -522,7 +522,7 @@ export function ComplianceAuditSidebar({
   }, [isOpen, course?.id, course?.title, course?.units, course?.lecture_hours,
       course?.lab_hours, course?.outside_of_class_hours, course?.cb_codes,
       course?.slos, course?.content_items, course?.requisites,
-      course?.ccn_id, course?.ccn_justification, runAudit]);
+      course?.ccn_code, course?.ccn_justification, runAudit]);
 
   if (!isOpen) return null;
 

@@ -748,7 +748,7 @@ function CBCodesSection({ course, onChange }: CBCodesSectionProps) {
       ...cbCodes, // CCN-implied codes (CB05="A", CB03=TOP code)
     };
     onChange({
-      ccn_id: ccnId,
+      ccn_code: ccnId,
       cb_codes: updatedCBCodes,
     });
   }, [course.cb_codes, onChange]);

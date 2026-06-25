@@ -10,6 +10,7 @@ from app.utils.ccn_utils import (
     get_top_code_for_discipline,
     parse_ccn_code,
     validate_ccn_format,
+    validate_cid_format,
     get_specialty_flags,
     get_discipline_from_ccn,
     get_implied_cb05_for_ccn,
@@ -18,6 +19,38 @@ from app.utils.ccn_utils import (
     DISCIPLINE_TOP_CODES,
     CCNCodeParts,
 )
+
+
+class TestWS5bCcnVsCidFormats:
+    """WS-5b: the CCN validator and the new legacy C-ID validator are distinct.
+
+    CCN (AB 1111) is "SUBJ C####" (+H/L/S/E); legacy C-ID is "SUBJ ###" with no
+    "C" prefix. A value valid for one must NOT validate for the other.
+    """
+
+    def test_ccn_validator_accepts_ccn_codes(self):
+        assert validate_ccn_format("ENGL C1000") is True
+        assert validate_ccn_format("MATH C1051H") is True
+
+    def test_ccn_validator_rejects_legacy_cid(self):
+        # Legacy C-ID format ("SUBJ ###") is NOT a valid CCN code.
+        assert validate_ccn_format("ENGL 100") is False
+        assert validate_ccn_format("MATH 220") is False
+
+    def test_cid_validator_accepts_legacy_cid(self):
+        assert validate_cid_format("ENGL 100") is True
+        assert validate_cid_format("MATH 220") is True
+        assert validate_cid_format("BIOL 3") is False  # too few digits
+        assert validate_cid_format("HIST 12A") is True  # optional trailing letter
+
+    def test_cid_validator_rejects_ccn_codes(self):
+        # An AB 1111 CCN code is NOT a legacy C-ID.
+        assert validate_cid_format("ENGL C1000") is False
+        assert validate_cid_format("MATH C1051H") is False
+
+    def test_cid_validator_handles_empty(self):
+        assert validate_cid_format("") is False
+        assert validate_cid_format(None) is False
 
 
 class TestGetTopCodeForDiscipline:
