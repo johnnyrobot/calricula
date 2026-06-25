@@ -16,18 +16,18 @@ from app.services import gemini_service as gs
 
 
 # ---------------------------------------------------------------------------
-# Model-ID contract -- the values WS-2 must change on purpose.
-# Both shut down 2026-10-16; replacements gemini-3.5-flash / gemini-3.1-flash-lite.
+# Model-ID contract -- bumped to gemini-3.x in WS-2b. The prior gemini-2.5-flash
+# / gemini-2.5-flash-lite shut down 2026-10-16.
 # ---------------------------------------------------------------------------
 
 def test_file_search_service_default_model_id():
-    """RAG service currently targets gemini-2.5-flash."""
-    assert fss.FileSearchService().model_name == "gemini-2.5-flash"
+    """RAG service targets gemini-3.5-flash (WS-2b bump)."""
+    assert fss.FileSearchService().model_name == "gemini-3.5-flash"
 
 
 def test_gemini_service_model_id():
-    """Curriculum assistant currently targets gemini-2.5-flash-lite."""
-    assert gs.GeminiService().model_name == "gemini-2.5-flash-lite"
+    """Curriculum assistant targets gemini-3.1-flash-lite (WS-2b bump)."""
+    assert gs.GeminiService().model_name == "gemini-3.1-flash-lite"
 
 
 # ---------------------------------------------------------------------------
@@ -55,8 +55,8 @@ def test_client_construction_uses_api_key_and_model(monkeypatch):
 
     fake_client_cls.assert_called_once()
     assert fake_client_cls.call_args.kwargs.get("api_key") == "test-key-not-real"
-    # Model ID is unchanged by WS-2a (the gemini-3.x bump is WS-2b).
-    assert svc.model_name == "gemini-2.5-flash"
+    # Model bumped to gemini-3.x in WS-2b.
+    assert svc.model_name == "gemini-3.5-flash"
     assert svc.client is fake_client_cls.return_value
 
 
@@ -100,8 +100,8 @@ def test_generate_response_contract():
 
     assert result["success"] is True
     assert result["text"] == "An active-voice catalog description."
-    assert result["model"] == "gemini-2.5-flash-lite"
+    assert result["model"] == "gemini-3.1-flash-lite"
     assert (
         svc.client.models.generate_content.call_args.kwargs["model"]
-        == "gemini-2.5-flash-lite"
+        == "gemini-3.1-flash-lite"
     )
