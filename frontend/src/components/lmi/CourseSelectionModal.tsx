@@ -220,6 +220,7 @@ export const CourseSelectionModal: React.FC<CourseSelectionModalProps> = ({
 
                     return (
                       <RadioGroup.Option
+                        as="div"
                         key={course.id}
                         value={course.id}
                         className="relative cursor-pointer"
