@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     # Google AI
     GOOGLE_API_KEY: Optional[str] = None
     GEMINI_FILE_SEARCH_STORE_NAME: str = "calricula-knowledge-base"
+    # AI model IDs (externalized in WS-2a; the gemini-3.x bump + managed File
+    # Search Stores are WS-2b). NOTE: both shut down 2026-10-16.
+    FILE_SEARCH_MODEL: str = "gemini-2.5-flash"   # RAG / file-grounded generation
+    GEMINI_MODEL: str = "gemini-2.5-flash-lite"   # curriculum assistant
 
     # RAG document ingestion
     # Server-side directory that the RAG upload endpoint is allowed to read from.
