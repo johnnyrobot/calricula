@@ -46,7 +46,7 @@ and academic programs.
 - Avoid weak verbs: Do NOT use "understand", "know", "learn", "appreciate", "become familiar with"
 
 ## Compliance Awareness
-- Always check that unit calculations follow the 54-hour rule (Total Hours / 54 = Units)
+- Always check that unit calculations meet Title 5 §55002.5: total student-learning hours = (lecture + lab + outside-of-class weekly hours) × 18, and units = total ÷ 54, with a regulatory minimum of 48 total hours per unit
 - Ensure CB codes are internally consistent (e.g., CB09 depends on CB03)
 - Flag potential transfer issues early
 - Remind users about prerequisite Content Review requirements
@@ -306,7 +306,7 @@ Provide ONLY the numbered SLOs, no additional explanation."""
             Dict with explanation and suggested fix
         """
         prompts = {
-            "unit_calculation": f"""Explain the community college 54-hour rule for unit calculation.
+            "unit_calculation": f"""Explain the community college unit-calculation rule (Title 5 §55002.5).
 
 Current values:
 - Units: {context.get('units', 'N/A')}
@@ -314,8 +314,9 @@ Current values:
 - Lab Hours: {context.get('lab_hours', 'N/A')}
 - Total Hours: {context.get('total_hours', 'N/A')}
 
-The formula is: Total Student Hours = (Lecture Hours × 18) + (Lab Hours × 54) + Homework Hours
-And: Units = Total Student Hours / 54
+The formula is: Total Student Hours = (Lecture Hours + Lab Hours + Homework Hours) × 18 weeks
+And: Units = Total Student Hours ÷ 54
+Per Title 5 §55002.5, a course must provide a minimum of 48 total student-learning hours per unit (54 is the conventional 18-week figure).
 
 Explain what's wrong and how to fix it. Be specific with the math.""",
 
