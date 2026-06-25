@@ -28,6 +28,9 @@ from app.services.compliance_service import (
     ComplianceResult,
     ComplianceStatus,
     ComplianceCategory,
+    check_minimum_hours_per_unit,
+    MIN_HOURS_PER_UNIT,
+    CONVENTIONAL_HOURS_PER_UNIT,
 )
 
 router = APIRouter()
@@ -68,7 +71,7 @@ class QuickCheckResponse(BaseModel):
 
 
 class ValidateUnitsRequest(BaseModel):
-    """Request for validating unit calculation against the 54-hour rule."""
+    """Request for validating unit calculation against Title 5 § 55002.5."""
     units: float
     lecture_hours: float = 0.0
     lab_hours: float = 0.0
@@ -392,7 +395,7 @@ async def audit_course(
     - Title 5: California Code of Regulations requirements
     - PCAH: Program and Course Approval Handbook requirements
     - CB Codes: community college state reporting codes
-    - Units & Hours: 54-hour rule and related validations
+    - Units & Hours: Title 5 § 55002.5 minimum-hours-per-unit and related validations
     - Student Learning Outcomes: SLO requirements and quality checks
     - Course Content: Content outline requirements
     - Requisites: Prerequisite validation requirements
@@ -581,20 +584,25 @@ async def validate_units(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Validate unit calculation against the California 54-hour rule (Title 5 § 55002.5).
+    Validate unit calculation against Title 5 § 55002.5.
 
     This endpoint is designed for real-time validation in the course editor's
     Unit Calculator component. It provides detailed feedback about whether
-    the hours configuration correctly matches the specified unit value.
+    the hours configuration satisfies the minimum student-work requirement for
+    the specified unit value.
 
-    **The 54-Hour Rule:**
-    Total Student Learning Hours = (Lecture Hours × 18) + (Lab Hours × 54) + (Outside Hours × 18)
-    Units = Total Student Learning Hours ÷ 54
+    **Title 5 § 55002.5:** one unit of credit requires a MINIMUM of 48 semester
+    hours of total student work (33 quarter hours). Total Student Learning Hours
+    are computed from WEEKLY hours using a single 18-week semester multiplier for
+    ALL hour types:
+    Total Student Learning Hours = (Lecture + Lab + Outside + Activity + TBA)_weekly × 18
+    Compliant if Total Student Learning Hours >= 48 × units.
 
     **Standard Ratios:**
-    - Lecture: 1 weekly hour = 18 semester hours (assumes 18-week semester)
-    - Lab: 1 weekly hour = 54 semester hours (3:1 ratio, labs count as 3x contact)
+    - All hour types: 1 weekly hour = 18 semester hours (18-week semester)
+    - Lab hours use the SAME ×18 multiplier as lecture (no ×54 weighting)
     - Outside-of-class: Standard is 2 hours per lecture hour (2:1 ratio)
+    - 54 hours/unit is the conventional 18-week target, shown for reference only
 
     **Request Parameters:**
     - `units`: The target unit value (0.5 to 18)
@@ -605,7 +613,7 @@ async def validate_units(
     - `tba_hours`: To-be-arranged hours (optional)
 
     **Response:**
-    - `valid`: Whether the calculation passes the 54-hour rule
+    - `valid`: Whether the hours meet the Title 5 § 55002.5 minimum (48 hours/unit)
     - `errors`: List of validation errors (if any)
     - `warnings`: List of warnings (e.g., unusual ratios)
     - `calculated_values`: Breakdown of all calculated hours
@@ -654,12 +662,14 @@ async def validate_units(
     if total_contact_hours == 0:
         errors.append("Course must have contact hours (lecture, lab, activity, or TBA).")
 
-    # Calculate semester hours (18-week semester)
+    # Calculate semester hours (18-week semester). Title 5 § 55002.5 uses a
+    # single 18-week multiplier for ALL hour types; lab hours are NOT weighted
+    # ×54 (that triple-counts lab time and conflicts with the audit service).
     SEMESTER_WEEKS = Decimal("18")
-    LAB_MULTIPLIER = Decimal("54")  # Labs are 54 semester hours per weekly hour
+    LAB_MULTIPLIER = SEMESTER_WEEKS  # Lab hours use the same ×18 multiplier
 
     semester_lecture_hours = lecture_hours * SEMESTER_WEEKS
-    semester_lab_hours = lab_hours * LAB_MULTIPLIER  # Lab hours already account for 3:1 ratio
+    semester_lab_hours = lab_hours * LAB_MULTIPLIER
     semester_outside_hours = outside_hours * SEMESTER_WEEKS
     semester_activity_hours = activity_hours * SEMESTER_WEEKS
     semester_tba_hours = tba_hours * SEMESTER_WEEKS
@@ -673,24 +683,32 @@ async def validate_units(
         semester_tba_hours
     )
 
-    # Expected units based on 54-hour rule
-    HOURS_PER_UNIT = Decimal("54")
+    # Hours-per-unit and the conventional 18-week reference unit value (for
+    # display only). The compliance gate below uses the regulatory MINIMUM.
+    HOURS_PER_UNIT = CONVENTIONAL_HOURS_PER_UNIT  # 54, conventional reference
     expected_units = (total_student_learning_hours / HOURS_PER_UNIT).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
 
-    # Calculate difference
+    # Calculate difference (vs. the conventional 54-hour reference, for display)
     unit_difference = float(expected_units - units)
 
-    # Check 54-hour rule compliance (allow tolerance for rounding)
+    # Title 5 § 55002.5 compliance: total hours must be at least 48 × units.
     tolerance = Decimal("0.25")
-    is_valid_calculation = abs(expected_units - units) <= tolerance
+    is_valid_calculation, min_required_hours = check_minimum_hours_per_unit(
+        units, total_student_learning_hours, tolerance
+    )
 
     if not is_valid_calculation:
+        hours_per_unit = (
+            total_student_learning_hours / units if units > 0 else Decimal("0")
+        )
         errors.append(
-            f"Hours do not match units. "
-            f"Total Student Learning Hours ({float(total_student_learning_hours)}) ÷ 54 = {float(expected_units)} units, "
-            f"but {float(units)} units specified."
+            f"Insufficient student learning hours for the declared units. "
+            f"Total Student Learning Hours ({float(total_student_learning_hours)}) "
+            f"= {float(hours_per_unit):.1f} hours/unit, below the Title 5 § 55002.5 "
+            f"minimum of {int(MIN_HOURS_PER_UNIT)} hours per unit "
+            f"({float(min_required_hours)} hours required for {float(units)} units)."
         )
 
     # Check for unusual ratios (warnings, not errors)
@@ -707,18 +725,21 @@ async def validate_units(
                 "Standard is 2:1 for lecture courses."
             )
 
-    # Generate recommendation if invalid
+    # Generate recommendation if below the Title 5 § 55002.5 minimum
     recommendation = None
     if errors and not is_valid_calculation:
-        required_total_hours = units * HOURS_PER_UNIT
-        recommendation = (
-            f"To achieve {float(units)} units, you need {float(required_total_hours)} total student learning hours. "
-            f"Current total: {float(total_student_learning_hours)} hours. "
+        shortfall_hours = max(
+            Decimal("0"), min_required_hours - total_student_learning_hours
         )
-        if unit_difference > 0:
-            recommendation += f"You have {abs(unit_difference):.2f} units worth of extra hours. Consider reducing hours or increasing units."
-        else:
-            recommendation += f"You need {abs(unit_difference):.2f} more units worth of hours. Consider adding hours or reducing units."
+        recommendation = (
+            f"Title 5 § 55002.5 requires a minimum of {int(MIN_HOURS_PER_UNIT)} student "
+            f"learning hours per unit. For {float(units)} units you need at least "
+            f"{float(min_required_hours)} hours; current total is "
+            f"{float(total_student_learning_hours)} hours "
+            f"(short by {float(shortfall_hours)} hours). "
+            f"Add hours (the conventional 18-week target is "
+            f"{float(units * CONVENTIONAL_HOURS_PER_UNIT)} hours) or reduce the units."
+        )
 
     # Build calculated values dict for frontend display
     calculated_values = {
@@ -2455,10 +2476,10 @@ async def list_compliance_rules(
             },
             {
                 "rule_id": "UNIT-002",
-                "rule_name": "54-Hour Rule Compliance",
+                "rule_name": "Minimum Hours per Unit (Title 5 § 55002.5)",
                 "category": ComplianceCategory.TITLE_5.value,
                 "section": "Units & Hours",
-                "description": "Total Student Learning Hours / 54 must equal unit value.",
+                "description": "Total Student Learning Hours must be at least 48 per unit (Title 5 § 55002.5 minimum).",
                 "citation": "Title 5 § 55002.5",
             },
             {

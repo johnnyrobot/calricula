@@ -59,13 +59,93 @@ class ComplianceAuditResponse(BaseModel):
     results_by_category: Dict[str, List[ComplianceResult]]
 
 
+# =============================================================================
+# Title 5 § 55002.5 credit-hour standard (shared, authoritative reference)
+# =============================================================================
+#
+# Title 5 § 55002.5(a): "One credit hour of community college work (one unit of
+# credit) shall require a minimum of 48 semester hours of total student work or
+# 33 quarter hours." Total student work may include hours inside OR outside of
+# class (lecture, study, and/or laboratory work).
+#
+# Therefore the regulatory FLOOR is 48 semester hours of student work per unit.
+# 54 is the *conventional* figure many districts use for a standard 18-week term
+# (3 hours of student work per week per unit x 18 weeks = 54), but it is a local
+# convention, not the regulatory minimum. Compliance must be evaluated against
+# the 48-hour minimum, not against an exact 54-hour equality.
+#
+# Total Student Learning Hours are computed from WEEKLY hours using a single
+# 18-week semester multiplier for ALL hour types (lecture, lab, and outside-of-
+# class). Lab hours are NOT weighted x54: that conflates the 18-week term
+# multiplier with the per-unit divisor and triple-counts lab time.
+#
+#   total_student_learning_hours = (lecture + lab + outside)_weekly x 18 weeks
+#   compliant if  total >= 48 x units   (Title 5 § 55002.5 minimum)
+
+SEMESTER_WEEKS = Decimal("18")
+MIN_HOURS_PER_UNIT = Decimal("48")  # Title 5 § 55002.5 regulatory minimum
+CONVENTIONAL_HOURS_PER_UNIT = Decimal("54")  # standard 18-week-term reference only
+TITLE_5_CITATION = "Title 5 § 55002.5"
+
+
+def calculate_total_student_learning_hours(
+    lecture_hours: Decimal,
+    lab_hours: Decimal,
+    outside_hours: Decimal,
+) -> Decimal:
+    """Compute semester Total Student Learning Hours from WEEKLY hours.
+
+    All hour types share the same 18-week semester multiplier. Lab hours use the
+    SAME multiplier as lecture and outside-of-class hours (x18, NOT x54).
+
+    Args:
+        lecture_hours: Weekly lecture hours.
+        lab_hours: Weekly lab hours.
+        outside_hours: Weekly outside-of-class (homework) hours.
+
+    Returns:
+        Total student learning hours for the semester as a Decimal.
+    """
+    lecture = Decimal(str(lecture_hours))
+    lab = Decimal(str(lab_hours))
+    outside = Decimal(str(outside_hours))
+    return (lecture + lab + outside) * SEMESTER_WEEKS
+
+
+def check_minimum_hours_per_unit(
+    units: Decimal,
+    total_hours: Decimal,
+    tolerance_units: Decimal = Decimal("0.25"),
+) -> "tuple[bool, Decimal]":
+    """Check Title 5 § 55002.5 minimum: total hours >= 48 x units.
+
+    A small tolerance (expressed in units, converted to hours) is allowed to
+    absorb rounding so that courses sitting exactly on the boundary are not
+    failed by floating/decimal noise.
+
+    Args:
+        units: Declared unit value.
+        total_hours: Total student learning hours (semester).
+        tolerance_units: Rounding allowance in units (default 0.25).
+
+    Returns:
+        (is_compliant, min_required_hours).
+    """
+    units = Decimal(str(units))
+    total_hours = Decimal(str(total_hours))
+    min_required_hours = units * MIN_HOURS_PER_UNIT
+    allowed_shortfall = Decimal(str(tolerance_units)) * MIN_HOURS_PER_UNIT
+    is_compliant = total_hours + allowed_shortfall >= min_required_hours
+    return is_compliant, min_required_hours
+
+
 class ComplianceService:
     """
     Compliance checking service for community college CORs.
 
     Implements rules from:
     - Title 5 § 55002 (Standards and Criteria for Courses)
-    - Title 5 § 55002.5 (54-hour rule for unit calculation)
+    - Title 5 § 55002.5 (minimum 48 semester hours of student work per unit)
     - Title 5 § 55003 (Policies for Prerequisites, Corequisites, and Advisories)
     - PCAH 8th Edition
     """
@@ -218,7 +298,7 @@ class ComplianceService:
         return results
 
     def _check_units_hours(self, course: Dict[str, Any]) -> List[ComplianceResult]:
-        """Check unit and hours compliance with Title 5 § 55002.5 (54-hour rule)."""
+        """Check unit/hour compliance with Title 5 § 55002.5 (minimum 48 hours/unit)."""
         results = []
 
         # Get hours values (handle both Decimal and int/float)
@@ -255,41 +335,57 @@ class ComplianceService:
                 section="Units & Hours",
             ))
 
-        # Calculate Total Student Learning Hours using the 54-hour rule
-        # Weekly hours × semester weeks (18) = semester hours
-        # Lecture: weekly × 18 weeks
-        # Lab: weekly × 18 weeks
-        # Outside: weekly × 18 weeks
-        calculated_total_hours = (
-            (lecture_hours * 18) +
-            (lab_hours * 18) +
-            (outside_hours * 18)
+        # Calculate Total Student Learning Hours (Title 5 § 55002.5).
+        # Weekly hours x 18 semester weeks for ALL hour types (lecture, lab, and
+        # outside-of-class). Lab uses the same x18 multiplier as everything else.
+        calculated_total_hours = calculate_total_student_learning_hours(
+            lecture_hours, lab_hours, outside_hours
         )
 
-        # Check 54-hour rule: Total Hours / 54 = Units
-        expected_units = calculated_total_hours / 54
+        # Title 5 § 55002.5 sets a MINIMUM of 48 semester hours of student work
+        # per unit. We check the regulatory floor, not exact equality with 54.
+        is_compliant, min_required_hours = check_minimum_hours_per_unit(
+            units, calculated_total_hours
+        )
+        hours_per_unit = (
+            calculated_total_hours / units if units > 0 else Decimal("0")
+        )
 
-        # Allow small tolerance for rounding
-        tolerance = Decimal("0.25")
-        if abs(expected_units - units) > tolerance:
+        if not is_compliant:
             results.append(ComplianceResult(
                 rule_id="UNIT-002",
-                rule_name="54-Hour Rule Compliance",
+                rule_name="Minimum Hours per Unit (Title 5 § 55002.5)",
                 category=ComplianceCategory.TITLE_5,
                 status=ComplianceStatus.FAIL,
-                message=f"Hours do not match units. Total hours ({calculated_total_hours}) ÷ 54 = {expected_units:.2f} units, but {units} units specified.",
+                message=(
+                    f"Insufficient student learning hours for the declared units. "
+                    f"Total hours ({calculated_total_hours}) = {hours_per_unit:.1f} "
+                    f"hours/unit, below the Title 5 § 55002.5 minimum of "
+                    f"{MIN_HOURS_PER_UNIT} hours per unit "
+                    f"({min_required_hours} hours required for {units} units)."
+                ),
                 section="Units & Hours",
                 citation="Title 5 § 55002.5",
-                recommendation=f"Adjust hours so total student learning hours = {units * 54} for {units} units.",
+                recommendation=(
+                    f"Provide at least {min_required_hours} total student learning "
+                    f"hours for {units} units (minimum 48 hours/unit). The "
+                    f"conventional 18-week-term target is "
+                    f"{units * CONVENTIONAL_HOURS_PER_UNIT} hours."
+                ),
             ))
         else:
             results.append(ComplianceResult(
                 rule_id="UNIT-002",
-                rule_name="54-Hour Rule Compliance",
+                rule_name="Minimum Hours per Unit (Title 5 § 55002.5)",
                 category=ComplianceCategory.TITLE_5,
                 status=ComplianceStatus.PASS,
-                message=f"Hours correctly match units per the 54-hour rule ({calculated_total_hours} hours ÷ 54 = {expected_units:.2f} units).",
+                message=(
+                    f"Hours meet the Title 5 § 55002.5 minimum: {calculated_total_hours} "
+                    f"total hours = {hours_per_unit:.1f} hours/unit "
+                    f"(>= {MIN_HOURS_PER_UNIT} hours/unit minimum for {units} units)."
+                ),
                 section="Units & Hours",
+                citation="Title 5 § 55002.5",
             ))
 
         # Check for reasonable homework ratio (typically 2:1 for lectures)

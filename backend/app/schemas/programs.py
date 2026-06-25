@@ -9,7 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 from app.models.program import ProgramType, ProgramStatus, RequirementType
 from app.schemas.departments import DepartmentInfo
@@ -60,8 +60,7 @@ class CourseInProgramItem(BaseModel):
     units_override: Optional[Decimal] = None
     notes: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =============================================================================
@@ -112,8 +111,7 @@ class ProgramListItem(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ProgramListResponse(BaseModel):
@@ -146,5 +144,4 @@ class ProgramDetailResponse(BaseModel):
     approved_at: Optional[datetime]
     courses: List[CourseInProgramItem] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

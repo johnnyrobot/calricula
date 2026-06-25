@@ -110,6 +110,7 @@ export const OccupationSelection: React.FC<OccupationSelectionProps> = ({
         {occupations.map((occupation, index) => {
           return (
             <RadioGroup.Option
+              as="div"
               key={occupation.soc_code || occupation.occupation_title || index}
               value={String(index)}
               className="relative cursor-pointer"

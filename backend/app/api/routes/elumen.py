@@ -8,7 +8,7 @@ This provides a proxy to the eLumen public API for the admin browser.
 
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Query, Depends
-from pydantic import BaseModel
+from pydantic import ConfigDict, BaseModel
 
 from app.core.deps import require_admin
 from app.models.user import User
@@ -77,8 +77,7 @@ class CourseDetail(BaseModel):
     authors: List[dict] = []
     start_term: Optional[str] = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class ProgramListItem(BaseModel):

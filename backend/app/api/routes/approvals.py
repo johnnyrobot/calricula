@@ -14,7 +14,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select, func, or_
-from pydantic import BaseModel
+from pydantic import ConfigDict, BaseModel
 
 from app.core.database import get_session
 from app.core.deps import get_current_user, require_reviewer
@@ -58,8 +58,7 @@ class ApprovalQueueItem(BaseModel):
     submitted_at: datetime  # When it entered current review status
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ApprovalQueueResponse(BaseModel):

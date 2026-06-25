@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import ConfigDict, BaseModel, Field, EmailStr
 
 from app.models.user import UserRole
 
@@ -46,8 +46,7 @@ class UserResponse(UserBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserProfileResponse(BaseModel):
@@ -60,8 +59,7 @@ class UserProfileResponse(BaseModel):
     department_name: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =============================================================================
@@ -97,5 +95,4 @@ class CurrentUserResponse(BaseModel):
     department_name: Optional[str] = None
     permissions: list[str] = Field(default=[], description="User permissions")
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
