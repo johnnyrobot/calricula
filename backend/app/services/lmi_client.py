@@ -16,7 +16,7 @@ and calculates annual wages (hourly * 2080 hours).
 
 from typing import Optional, List, Dict, Any
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 # API Configuration
 CKAN_BASE_URL = "https://data.ca.gov/api/3/action"
@@ -48,8 +48,7 @@ class WageData(BaseModel):
     annual_mean: Optional[float] = None
     annual_median: Optional[float] = None
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class ProjectionData(BaseModel):

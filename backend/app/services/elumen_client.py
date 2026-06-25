@@ -18,7 +18,7 @@ from typing import Optional, AsyncIterator
 from enum import Enum
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 
 # API Configuration
@@ -68,8 +68,7 @@ class TenantResponse(BaseModel):
     display_name: str = Field(alias="displayName")  # e.g., "ELAC"
     base_url: str = Field(alias="baseUrl")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
     @property
     def abbreviation(self) -> str:
@@ -87,8 +86,7 @@ class CreditsAndHours(BaseModel):
     activity_hours: Optional[float] = Field(None, alias="activityHours")
     tba_hours: Optional[float] = Field(None, alias="tbaHours")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class Objective(BaseModel):
@@ -113,8 +111,7 @@ class Outcome(BaseModel):
     outcome_level: Optional[str] = Field(None, alias="outcomeLevel")  # e.g., "CSLO"
     performance_criteria: list[str] = Field(default_factory=list, alias="performanceCriteria")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
     @property
     def text(self) -> Optional[str]:
@@ -127,8 +124,7 @@ class CustomField(BaseModel):
     custom_field_id: str = Field(alias="customFieldID")
     custom_field_value: list[str] = Field(default_factory=list, alias="customFieldValue")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class TaxonomyCode(BaseModel):
@@ -145,8 +141,7 @@ class RequisiteItem(BaseModel):
     description: Optional[str] = None
     non_course: Optional[bool] = Field(None, alias="nonCourse")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class Author(BaseModel):
@@ -154,8 +149,7 @@ class Author(BaseModel):
     first_name: Optional[str] = Field(None, alias="firstName")
     last_name: Optional[str] = Field(None, alias="lastName")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class FullCourseInfo(BaseModel):
@@ -170,8 +164,7 @@ class FullCourseInfo(BaseModel):
     authors: list[Author] = Field(default_factory=list)
     start_term: Optional[str] = Field(None, alias="startTerm")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class CourseResponse(BaseModel):
@@ -185,8 +178,7 @@ class CourseResponse(BaseModel):
     workflow_type: Optional[str] = Field(None, alias="workflowType")
     full_course_info: Optional[FullCourseInfo] = None  # Parsed from JSON string
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
     @property
     def college(self) -> str:
@@ -269,8 +261,7 @@ class ProgramResponse(BaseModel):
     curriculum_id: Optional[str] = Field(None, alias="curriculumId")
     start_term_name: Optional[str] = Field(None, alias="startTermName")
 
-    class Config:
-        populate_by_name = True
+    model_config = ConfigDict(populate_by_name=True)
 
     @property
     def college(self) -> str:

@@ -12,7 +12,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlmodel import Session, select, func
-from pydantic import BaseModel
+from pydantic import ConfigDict, BaseModel
 
 from app.core.database import get_session
 from app.core.deps import get_current_user, require_admin
@@ -41,8 +41,7 @@ class UserInfo(BaseModel):
     full_name: str
     role: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CommentResponse(BaseModel):
@@ -57,8 +56,7 @@ class CommentResponse(BaseModel):
     user: Optional[UserInfo] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CommentListResponse(BaseModel):
@@ -95,8 +93,7 @@ class WorkflowHistoryResponse(BaseModel):
     user: Optional[UserInfo] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =============================================================================

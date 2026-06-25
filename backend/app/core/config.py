@@ -6,7 +6,8 @@ Loads environment variables and provides typed configuration.
 from functools import lru_cache
 from typing import List, Optional
 
-from pydantic_settings import BaseSettings
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -16,6 +17,11 @@ class Settings(BaseSettings):
     APP_NAME: str = "Calricula API"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = False
+
+    # Deployment environment. Anything other than "production" is treated as a
+    # non-production (dev/test/staging) environment where dev/demo auth bypass
+    # flags are permitted. In production these MUST be off (enforced below).
+    ENVIRONMENT: str = "development"
 
     # Logging
     LOG_LEVEL: str = "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
@@ -75,11 +81,37 @@ class Settings(BaseSettings):
     # BLS API (U.S. Bureau of Labor Statistics)
     BLS_API_KEY: Optional[str] = None
 
-    class Config:
-        env_file = "../.env"  # Look in project root
-        extra = "ignore"  # Ignore extra env vars
-        env_file_encoding = "utf-8"
-        case_sensitive = True
+    model_config = SettingsConfigDict(
+        env_file="../.env",  # Look in project root
+        extra="ignore",  # Ignore extra env vars
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+    )
+
+    @model_validator(mode="after")
+    def _enforce_production_safety(self) -> "Settings":
+        """Fail closed: dev/demo auth bypass flags must be off in production.
+
+        AUTH_DEV_MODE and DEMO_MODE relax authentication for local development
+        and public demos. Shipping either in production is an auth bypass, so we
+        refuse to boot if they are enabled while ENVIRONMENT == "production".
+        """
+        if self.ENVIRONMENT.strip().lower() == "production":
+            offenders = [
+                name
+                for name, enabled in (
+                    ("AUTH_DEV_MODE", self.AUTH_DEV_MODE),
+                    ("DEMO_MODE", self.DEMO_MODE),
+                )
+                if enabled
+            ]
+            if offenders:
+                raise ValueError(
+                    "Refusing to start in production with auth bypass flag(s) "
+                    f"enabled: {', '.join(offenders)}. Set them to False (or unset "
+                    "them) in the production environment."
+                )
+        return self
 
 
 @lru_cache()
