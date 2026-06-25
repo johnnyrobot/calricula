@@ -5,7 +5,7 @@ Contains shared response types, error schemas, and pagination models.
 """
 
 from typing import Any, Dict, Generic, List, Optional, TypeVar
-from pydantic import BaseModel, Field
+from pydantic import ConfigDict, BaseModel, Field
 
 T = TypeVar('T')
 
@@ -38,8 +38,8 @@ class ValidationErrorResponse(BaseModel):
     """Standard 422 validation error response format."""
     detail: List[ErrorDetail] = Field(description="List of validation errors")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "detail": [
                     {
@@ -50,18 +50,20 @@ class ValidationErrorResponse(BaseModel):
                 ]
             }
         }
+    )
 
 
 class HTTPErrorResponse(BaseModel):
     """Standard HTTP error response format."""
     detail: str = Field(description="Error message")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "detail": "Resource not found"
             }
         }
+    )
 
 
 # =============================================================================
@@ -72,12 +74,13 @@ class MessageResponse(BaseModel):
     """Simple message response."""
     message: str = Field(description="Status message")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "message": "Operation completed successfully"
             }
         }
+    )
 
 
 class DeleteResponse(BaseModel):
@@ -85,13 +88,14 @@ class DeleteResponse(BaseModel):
     success: bool = Field(description="Whether deletion was successful")
     message: str = Field(description="Status message")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "success": True,
                 "message": "Resource deleted successfully"
             }
         }
+    )
 
 
 # =============================================================================
@@ -104,11 +108,12 @@ class HealthCheckResponse(BaseModel):
     version: str = Field(description="API version")
     database: Optional[str] = Field(None, description="Database connection status")
 
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "status": "healthy",
                 "version": "1.0.0",
                 "database": "connected"
             }
         }
+    )

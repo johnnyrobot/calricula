@@ -26,7 +26,7 @@ router = APIRouter()
 # Response Schemas
 # =============================================================================
 
-from pydantic import BaseModel
+from pydantic import ConfigDict, BaseModel
 
 
 class DivisionInfo(BaseModel):
@@ -34,8 +34,7 @@ class DivisionInfo(BaseModel):
     id: uuid.UUID
     name: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DepartmentResponse(BaseModel):
@@ -46,8 +45,7 @@ class DepartmentResponse(BaseModel):
     division_id: Optional[uuid.UUID] = None
     division: Optional[DivisionInfo] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DepartmentListResponse(BaseModel):
@@ -151,8 +149,7 @@ class DepartmentCourseItem(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class DepartmentCoursesResponse(BaseModel):

@@ -17,7 +17,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
-from app.core.database import create_db_and_tables, get_session, engine, get_pool_status, update_schema_for_lmi
+from app.core.database import create_db_and_tables, get_session, engine, get_pool_status
 from app.core.logging import configure_logging, RequestLoggingMiddleware, get_logger, get_request_id
 from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 
@@ -37,12 +37,11 @@ async def lifespan(app: FastAPI):
         f"Starting {settings.APP_NAME} v{settings.APP_VERSION}",
     )
     logger.info(f"Log level: {settings.LOG_LEVEL}, JSON format: {settings.LOG_JSON_FORMAT}")
-    # Note: In production, use Alembic migrations instead
+    # Schema is managed by Alembic migrations (`alembic upgrade head`), including
+    # the lmi_data columns that used to be added imperatively at startup. We
+    # intentionally do NOT run any DDL from the application lifespan.
     # create_db_and_tables()
-    
-    # Run manual schema update for LMI
-    update_schema_for_lmi()
-    
+
     yield
     # Shutdown
     logger.info("Shutting down...")
