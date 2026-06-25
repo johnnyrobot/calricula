@@ -191,11 +191,11 @@ export function useTOPCodes(search?: string) {
 
 /**
  * Hook to fetch and cache CCN (Common Course Numbering) standards.
- * These are C-ID descriptors from the state.
+ * These are CCN descriptors from the state (AB 1111).
  */
 export interface CCNStandard {
   id: string;
-  c_id: string;
+  ccn_code: string;
   title: string;
   minimum_units: number;
   slo_requirements: string[];

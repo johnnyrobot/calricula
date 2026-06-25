@@ -3,7 +3,7 @@
 // ===========================================
 // CCN Alignment Status Badge Component - CUR-75
 // ===========================================
-// UI indicator showing CCN/C-ID alignment status for a course.
+// UI indicator showing CCN alignment status for a course.
 // Shows green (aligned), yellow (potential), or gray (no match) badges.
 
 import { useState, useCallback, Fragment } from 'react';
@@ -26,7 +26,7 @@ import {
 export type CCNAlignmentStatus = 'aligned' | 'potential' | 'none';
 
 export interface CCNStandard {
-  c_id: string;
+  ccn_code: string;
   discipline: string;
   title: string;
   descriptor?: string;
@@ -58,7 +58,7 @@ export interface CCNAlignmentBadgeProps {
 
 const BADGE_CONFIG = {
   aligned: {
-    label: 'C-ID Aligned',
+    label: 'CCN Aligned',
     shortLabel: 'Aligned',
     bgColor: 'bg-green-100 dark:bg-green-900/30',
     textColor: 'text-green-800 dark:text-green-300',
@@ -66,10 +66,10 @@ const BADGE_CONFIG = {
     hoverBg: 'hover:bg-green-200 dark:hover:bg-green-900/50',
     icon: CheckBadgeSolidIcon,
     iconColor: 'text-green-600 dark:text-green-400',
-    description: 'This course is aligned with a C-ID standard',
+    description: 'This course is aligned with a CCN standard',
   },
   potential: {
-    label: 'Potential C-ID Match',
+    label: 'Potential CCN Match',
     shortLabel: 'Potential',
     bgColor: 'bg-amber-100 dark:bg-amber-900/30',
     textColor: 'text-amber-800 dark:text-amber-300',
@@ -77,10 +77,10 @@ const BADGE_CONFIG = {
     hoverBg: 'hover:bg-amber-200 dark:hover:bg-amber-900/50',
     icon: ExclamationTriangleIcon,
     iconColor: 'text-amber-600 dark:text-amber-400',
-    description: 'This course may match a C-ID standard',
+    description: 'This course may match a CCN standard',
   },
   none: {
-    label: 'No C-ID Match',
+    label: 'No CCN Match',
     shortLabel: 'No Match',
     bgColor: 'bg-slate-100 dark:bg-slate-800',
     textColor: 'text-slate-600 dark:text-slate-400',
@@ -88,7 +88,7 @@ const BADGE_CONFIG = {
     hoverBg: 'hover:bg-slate-200 dark:hover:bg-slate-700',
     icon: MinusCircleIcon,
     iconColor: 'text-slate-400 dark:text-slate-500',
-    description: 'No matching C-ID standard found',
+    description: 'No matching CCN standard found',
   },
 };
 
@@ -161,11 +161,11 @@ function TooltipContent({ alignment, onViewComparison, onClose }: TooltipContent
             {/* Standard Name */}
             <div>
               <div className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                C-ID Standard
+                CCN Standard
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-mono font-medium text-luminous-600 dark:text-luminous-400">
-                  {standard.c_id}
+                  {standard.ccn_code}
                 </span>
                 <span className="text-slate-600 dark:text-slate-300">
                   {standard.title}
@@ -259,7 +259,7 @@ function TooltipContent({ alignment, onViewComparison, onClose }: TooltipContent
             <InformationCircleIcon className="h-5 w-5 text-slate-400 flex-shrink-0 mt-0.5" />
             <div className="text-sm text-slate-600 dark:text-slate-400">
               <p className="mb-2">
-                This course does not match any C-ID standard. This is common for:
+                This course does not match any CCN standard. This is common for:
               </p>
               <ul className="list-disc list-inside space-y-1 text-xs">
                 <li>Specialized or vocational courses</li>
@@ -319,9 +319,9 @@ export function CCNAlignmentBadge({
 
   // Generate label with standard number if aligned
   const label = alignment.status === 'aligned' && alignment.standard
-    ? `C-ID: ${alignment.standard.c_id}`
+    ? `CCN: ${alignment.standard.ccn_code}`
     : alignment.status === 'potential' && alignment.standard
-    ? `Potential: ${alignment.standard.c_id}`
+    ? `Potential: ${alignment.standard.ccn_code}`
     : size === 'sm'
     ? config.shortLabel
     : config.label;
@@ -338,7 +338,7 @@ export function CCNAlignmentBadge({
           rounded-full font-medium transition-all
           focus:outline-none focus-visible:ring-2 focus-visible:ring-luminous-500 focus-visible:ring-offset-2
         `}
-        aria-label={`${config.label}${alignment.standard ? `: ${alignment.standard.c_id}` : ''}`}
+        aria-label={`${config.label}${alignment.standard ? `: ${alignment.standard.ccn_code}` : ''}`}
         aria-expanded={isTooltipOpen}
         aria-haspopup="dialog"
       >
@@ -360,7 +360,7 @@ export function CCNAlignmentBadge({
           <div
             className="absolute z-50 mt-2 left-0"
             role="dialog"
-            aria-label="C-ID alignment details"
+            aria-label="CCN alignment details"
           >
             <TooltipContent
               alignment={alignment}
@@ -398,7 +398,7 @@ export function CCNAlignmentBadgeCompact({
   }
 
   const label = alignment.standard
-    ? alignment.standard.c_id
+    ? alignment.standard.ccn_code
     : alignment.status === 'potential'
     ? 'Potential'
     : 'Aligned';

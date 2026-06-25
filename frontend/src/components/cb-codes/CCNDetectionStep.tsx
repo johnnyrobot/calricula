@@ -120,7 +120,7 @@ function NoMatchState({ subjectCode, onProvideJustification, onSkip }: NoMatchSt
               No CCN Standard Found
             </h3>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-              No matching C-ID standard was found for this {subjectCode} course.
+              No matching CCN standard was found for this {subjectCode} course.
               This is common for specialized, vocational, or locally-developed courses.
             </p>
           </div>
@@ -136,7 +136,7 @@ function NoMatchState({ subjectCode, onProvideJustification, onSkip }: NoMatchSt
           </h4>
           <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
             Per Assembly Bill 1111 (Common Course Numbering), courses that do not align
-            with a C-ID standard should provide a documented justification.
+            with a CCN standard should provide a documented justification.
           </p>
         </div>
       </div>
@@ -221,7 +221,7 @@ function CCNBenefitsPanel() {
           <ul className="text-sm text-green-700 dark:text-green-300 mt-2 space-y-1">
             <li>- CB05 auto-set to &quot;A&quot; (UC+CSU Transferable)</li>
             <li>- CB03 auto-populated with discipline TOP code</li>
-            <li>- Streamlined C-ID articulation process</li>
+            <li>- Streamlined CCN articulation process</li>
             <li>- Enhanced student transferability</li>
           </ul>
         </div>
@@ -325,7 +325,7 @@ export function CCNDetectionStep({
       }
 
       // Call the parent callback with adopted CCN and CB codes
-      onCCNAdopted(standard.c_id, cbCodes);
+      onCCNAdopted(standard.ccn_code, cbCodes);
       onNext();
     } catch (err) {
       console.error('Error adopting CCN standard:', err);
@@ -414,7 +414,7 @@ export function CCNDetectionStep({
             Common Course Numbering (CCN)
           </h2>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Per AB 1111, we&apos;ll check if this course aligns with a C-ID standard.
+            Per AB 1111, we&apos;ll check if this course aligns with a CCN standard.
             Aligned courses get automatic CB code population for transferability.
           </p>
         </div>

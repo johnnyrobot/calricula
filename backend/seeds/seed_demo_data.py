@@ -47,7 +47,7 @@ DEMO_COURSES = [
         "approved_at": datetime.utcnow() - timedelta(days=3),  # Approved 3 days ago
         "catalog_description": "This course introduces students to the principles and practices of effective public speaking in personal, professional, and civic contexts. Students will develop competencies in speech preparation, organization, delivery, and audience analysis while reducing communication apprehension through systematic practice. Topics include selecting and researching topics, analyzing diverse audiences, organizing ideas using various patterns (chronological, spatial, topical, problem-solution, Monroe's Motivated Sequence), constructing effective introductions and conclusions, using evidence and supporting materials ethically, developing persuasive arguments, incorporating visual aids and presentation technology effectively, practicing extemporaneous delivery techniques, and providing constructive feedback. Students will prepare and deliver informative, persuasive, and special occasion speeches, progressing from brief presentations to extended formal addresses. The course emphasizes critical listening skills and the ethical responsibilities of speakers in a democratic society. Video recording of speeches allows students to analyze and improve their delivery. This course fulfills the oral communication requirement for the associate degree and transfers to CSU and UC. No prerequisites required.",
         "effective_term": "Spring 2025",
-        "ccn_id": "COMM C1000",
+        "ccn_code": "COMM C1000",
         "department_code": "COMM",
         "slos": [
             {"sequence": 1, "outcome_text": "Construct and deliver well-organized speeches with clear thesis statements", "bloom_level": BloomLevel.CREATE},
@@ -107,7 +107,7 @@ DEMO_COURSES = [
         "status": CourseStatus.CURRICULUM_COMMITTEE,  # In committee review
         "catalog_description": "This course introduces students to the sociological perspective—the systematic study of human society, social interaction, and social change. Students will develop a sociological imagination that connects personal experiences to broader social structures and historical forces. Topics include the development of sociology as a discipline, major theoretical perspectives (functionalism, conflict theory, symbolic interactionism, feminism), research methods in sociology, culture and socialization, social structure and interaction, groups and organizations, deviance and social control, social stratification (class, race, gender), social institutions (family, education, religion, economy, politics), population, urbanization, and social movements and collective behavior. The course emphasizes the analysis of contemporary social issues including inequality, discrimination, globalization, and technology using sociological concepts and evidence. Students will develop skills in critical thinking, data interpretation, and written communication through assignments that apply sociological concepts to real-world phenomena. This course fulfills the social and behavioral science requirement for the associate degree and transfers to CSU and UC. No prerequisites required.",
         "effective_term": "Fall 2025",
-        "ccn_id": "SOCI C1000",
+        "ccn_code": "SOCI C1000",
         "department_code": "SOC",
         "slos": [
             {"sequence": 1, "outcome_text": "Apply sociological concepts to analyze social phenomena", "bloom_level": BloomLevel.APPLY},
@@ -166,7 +166,7 @@ DEMO_COURSES = [
         "status": CourseStatus.DRAFT,
         "catalog_description": "This course introduces students to cultural anthropology—the comparative study of human societies and cultures around the world. Using the concept of culture as the central organizing principle, students will examine the diversity of human experience and the common patterns that emerge across societies. Topics include the history and methods of anthropology (fieldwork, ethnography, participant observation), the nature of culture and cultural relativism, language and communication, subsistence patterns and economic systems, kinship and family organization, sex, gender, and sexuality across cultures, political organization and social control, religion, magic, and worldview, art, expressive culture, and aesthetics, globalization and culture change, and applied anthropology. The course emphasizes the anthropological perspective: understanding human behavior in cultural context, suspending ethnocentric judgments, and appreciating both cultural differences and human universals. Through ethnographic case studies from around the world—including foraging, pastoral, horticultural, agricultural, and industrial societies—students will develop cross-cultural understanding applicable to our increasingly interconnected world. This course fulfills the social and behavioral science requirement for the associate degree and transfers to CSU and UC. No prerequisites required.",
         "effective_term": "Fall 2025",
-        "ccn_id": "ANTH C1200",
+        "ccn_code": "ANTH C1200",
         "department_code": "ANTH",
         "slos": [
             {"sequence": 1, "outcome_text": "Define key anthropological concepts including culture and ethnocentrism", "bloom_level": BloomLevel.UNDERSTAND},
@@ -221,7 +221,7 @@ DEMO_COURSES = [
         "status": CourseStatus.DRAFT,
         "catalog_description": "This course provides a comprehensive introduction to the American political system, examining the constitutional foundations, institutions, processes, and policies of government at the federal, state, and local levels with emphasis on California. Students will analyze the principles underlying American democracy and evaluate how well our institutions achieve democratic ideals. Topics include the constitutional framework (separation of powers, federalism, checks and balances), civil liberties and civil rights, political participation and voting behavior, interest groups and political parties, the mass media and public opinion, Congress, the presidency, the federal bureaucracy, the federal judiciary, and domestic and foreign policy making. The course also examines state and local government in California including the California Constitution, legislature, governor, judiciary, and direct democracy (initiatives, referenda, and recall). Students will develop skills in political analysis, critical evaluation of information sources, and civic engagement. Through the study of current political issues and debates, students will gain tools to become informed, effective citizens in a democratic society. This course fulfills the American government requirement for the associate degree, satisfies the U.S. Constitution requirement, and transfers to CSU and UC. No prerequisites required.",
         "effective_term": "Spring 2026",
-        "ccn_id": "POLI C1010",
+        "ccn_code": "POLI C1010",
         "department_code": "POLI",
         "slos": [],  # Intentionally empty - draft in progress
         "content_items": [
