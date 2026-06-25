@@ -18,6 +18,10 @@ from app.services.compliance_service import (
     ComplianceCategory,
     ComplianceResult,
     ComplianceAuditResponse,
+    calculate_total_student_learning_hours,
+    check_minimum_hours_per_unit,
+    MIN_HOURS_PER_UNIT,
+    CONVENTIONAL_HOURS_PER_UNIT,
 )
 
 
@@ -465,3 +469,121 @@ class TestComplianceModels:
 
         assert result.citation == "Title 5 § 55002.5"
         assert result.recommendation is not None
+
+
+# =============================================================================
+# WS-5a: Title 5 § 55002.5 unit/hour accuracy
+#
+# These tests pin the CORRECTED behavior:
+#  1. Lab hours use a single 18-week multiplier (NOT x54). The previous x54 lab
+#     weighting in courses.py was a bug that disagreed with this service by 3x.
+#  2. Compliance is a MINIMUM check (total >= 48 x units per Title 5 § 55002.5),
+#     not an exact-54 equality check. 54 is only a conventional 18-week target.
+# =============================================================================
+
+class TestTitle5StudentLearningHours:
+    """Shared Title 5 § 55002.5 hour calculation helpers."""
+
+    def test_lab_hours_use_18_week_multiplier_not_54(self):
+        """Lab hours must use x18 (same as lecture/outside), NOT x54.
+
+        3 weekly lab hours = 1 unit (3 x 18 = 54 semester hours). The old buggy
+        courses.py computed 3 x 54 = 162, triple-counting lab time.
+        """
+        assert calculate_total_student_learning_hours(0, 3, 0) == Decimal("54")
+        # All hour types share the same multiplier:
+        assert calculate_total_student_learning_hours(3, 3, 6) == Decimal("216")
+
+    def test_minimum_is_48_hours_per_unit(self):
+        """MIN_HOURS_PER_UNIT is the Title 5 § 55002.5 regulatory floor (48)."""
+        assert MIN_HOURS_PER_UNIT == Decimal("48")
+        assert CONVENTIONAL_HOURS_PER_UNIT == Decimal("54")
+
+    def test_exactly_48_per_unit_passes(self):
+        """A course at exactly 48 hours/unit meets the regulatory minimum."""
+        # 3 units -> minimum 144 hours. 8 weekly hours x 18 = 144.
+        is_ok, required = check_minimum_hours_per_unit(Decimal("3"), Decimal("144"))
+        assert is_ok is True
+        assert required == Decimal("144")
+
+    def test_below_48_per_unit_fails(self):
+        """A course well below 48 hours/unit fails the minimum check."""
+        # 3 units -> need 144 hours; 72 is far below even with tolerance.
+        is_ok, required = check_minimum_hours_per_unit(Decimal("3"), Decimal("72"))
+        assert is_ok is False
+        assert required == Decimal("144")
+
+    def test_above_conventional_54_still_passes(self):
+        """More than 54 hours/unit still satisfies the 48-hour MINIMUM.
+
+        Intentional behavior change from the old strict ==54 check: the
+        regulation sets a floor, so generous hours do not fail § 55002.5.
+        """
+        is_ok, _ = check_minimum_hours_per_unit(Decimal("3"), Decimal("300"))
+        assert is_ok is True
+
+
+class TestModuleAgreementOnLabHours:
+    """The audit service and the courses-route validator must AGREE.
+
+    This is the reconciled internal-consistency bug: for the SAME lab course,
+    both modules must compute the same total and the same pass/fail result.
+    """
+
+    def test_lab_course_agrees_across_modules(self, compliance_service):
+        # A 1-unit pure-lab course: 3 weekly lab hours.
+        course = {
+            "units": Decimal("1"),
+            "lecture_hours": Decimal("0"),
+            "lab_hours": Decimal("3"),
+            "outside_of_class_hours": Decimal("0"),
+        }
+
+        # Audit service result
+        results = compliance_service._check_units_hours(course)
+        svc_result = next(r for r in results if r.rule_id == "UNIT-002")
+        assert svc_result.status == ComplianceStatus.PASS
+
+        # Courses-route validator (previously used the buggy lab x54)
+        from app.api.routes.courses import validate_54_hour_rule
+        is_valid, error = validate_54_hour_rule(
+            units=Decimal("1"),
+            lecture_hours=0,
+            lab_hours=3,
+            outside_of_class_hours=0,
+        )
+        assert is_valid is True
+        assert error is None
+
+        # Both modules compute the SAME total student learning hours (54), not
+        # 162 (the old x54 lab bug would have produced 3 units' worth).
+        assert calculate_total_student_learning_hours(0, 3, 0) == Decimal("54")
+
+    def test_lab_heavy_course_not_over_credited(self, compliance_service):
+        """A 4-unit lecture+lab course agrees and passes at the minimum.
+
+        lecture 3 + lab 3 + outside 6 (weekly) -> (3+3+6) x 18 = 216 hours
+        216 / 4 units = 54 hours/unit, comfortably above the 48 minimum.
+        Under the old courses.py bug, lab x54 made the route compute
+        3*18 + 3*54 + 6*18 = 378 hours, disagreeing with this service's 216.
+        """
+        course = {
+            "units": Decimal("4"),
+            "lecture_hours": Decimal("3"),
+            "lab_hours": Decimal("3"),
+            "outside_of_class_hours": Decimal("6"),
+        }
+        results = compliance_service._check_units_hours(course)
+        svc_result = next(r for r in results if r.rule_id == "UNIT-002")
+        assert svc_result.status == ComplianceStatus.PASS
+
+        from app.api.routes.courses import validate_54_hour_rule
+        is_valid, error = validate_54_hour_rule(
+            units=Decimal("4"),
+            lecture_hours=3,
+            lab_hours=3,
+            outside_of_class_hours=6,
+        )
+        assert is_valid is True
+        assert error is None
+        assert calculate_total_student_learning_hours(3, 3, 6) == Decimal("216")
