@@ -1,46 +1,18 @@
 """
 Characterization tests for the AI layer (WS-0 safety net).
 
-These tests PIN CURRENT BEHAVIOR of the Gemini integration *before* the WS-2
-migration (legacy ``google-generativeai`` -> ``google-genai``, managed File
-Search, and model-ID bumps to gemini-3.x). They intentionally assert the values
-as they are TODAY. When WS-2 changes them, a maintainer updates these asserts on
-purpose and sees exactly what changed -- that is the point of a characterization
-test.
-
-Runnable in isolation (no DB / no full-app import) with:
-
-    cd backend && python -m pytest tests/test_ai_characterization.py --noconftest
-
-The deprecated ``google-generativeai`` SDK is stubbed only if it is not installed
-(CI installs it from requirements.txt; local/dev envs often lack it).
+These tests PIN the behavior of the Gemini integration. After WS-2a, BOTH
+services use the unified ``google-genai`` SDK (the legacy ``google-generativeai``
+package, EOL 2025-11-30, has been removed). The model IDs and the regex-based
+citation scraping are still the pre-WS-2b values: the gemini-3.x bump and the
+managed File Search Stores migration are WS-2b and will update these asserts on
+purpose -- that is the point of a characterization test.
 """
 import asyncio
-import sys
-import types
 from unittest.mock import MagicMock
 
-import pytest
-
-# --- Stub the deprecated google-generativeai SDK only if it isn't importable ---
-try:  # pragma: no cover - exercised differently per environment
-    import google.generativeai  # noqa: F401
-except Exception:  # ImportError (or partial-install error) -> inject a stub
-    import google  # real namespace package (google.genai ships separately)
-
-    _legacy = types.ModuleType("google.generativeai")
-    _legacy.configure = MagicMock(name="configure")
-    _legacy.GenerativeModel = MagicMock(name="GenerativeModel")
-    _legacy.GenerationConfig = MagicMock(name="GenerationConfig")
-    _legacy.upload_file = MagicMock(name="upload_file")
-    _legacy.get_file = MagicMock(name="get_file")
-    _legacy.delete_file = MagicMock(name="delete_file")
-    sys.modules["google.generativeai"] = _legacy
-    setattr(google, "generativeai", _legacy)
-
-
-from app.services import file_search_service as fss  # noqa: E402
-from app.services import gemini_service as gs  # noqa: E402
+from app.services import file_search_service as fss
+from app.services import gemini_service as gs
 
 
 # ---------------------------------------------------------------------------
@@ -59,33 +31,33 @@ def test_gemini_service_model_id():
 
 
 # ---------------------------------------------------------------------------
-# Dual-SDK split -- WS-2a collapses both services onto google-genai.
+# Unified SDK -- WS-2a collapsed both services onto google-genai.
 # ---------------------------------------------------------------------------
 
-def test_dual_sdk_split_is_present():
-    """file_search_service uses the LEGACY SDK; gemini_service uses the NEW SDK."""
-    assert fss.genai.__name__ == "google.generativeai"  # deprecated, EOL 2025-11-30
+def test_both_services_use_unified_sdk():
+    """After WS-2a, both services import the unified google-genai SDK."""
+    assert fss.genai.__name__ == "google.genai"  # migrated in WS-2a
     assert gs.genai.__name__ == "google.genai"  # unified GA SDK
 
 
 # ---------------------------------------------------------------------------
-# Legacy configuration pattern -- WS-2a replaces configure()/GenerativeModel.
+# Unified-SDK configuration pattern -- WS-2a replaced configure()/GenerativeModel
+# with a genai.Client constructed from the API key.
 # ---------------------------------------------------------------------------
 
-def test_legacy_configure_and_model_construction(monkeypatch):
+def test_client_construction_uses_api_key_and_model(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "test-key-not-real")
-    monkeypatch.setattr(fss.genai, "configure", MagicMock(), raising=False)
-    monkeypatch.setattr(fss.genai, "GenerationConfig", MagicMock(), raising=False)
-    fake_model_cls = MagicMock(name="GenerativeModel")
-    monkeypatch.setattr(fss.genai, "GenerativeModel", fake_model_cls, raising=False)
+    fake_client_cls = MagicMock(name="Client")
+    monkeypatch.setattr(fss.genai, "Client", fake_client_cls, raising=False)
 
     svc = fss.FileSearchService()
     svc._ensure_configured()
 
-    fss.genai.configure.assert_called_once()
-    assert fss.genai.configure.call_args.kwargs.get("api_key") == "test-key-not-real"
-    fake_model_cls.assert_called_once()
-    assert fake_model_cls.call_args.kwargs.get("model_name") == "gemini-2.5-flash"
+    fake_client_cls.assert_called_once()
+    assert fake_client_cls.call_args.kwargs.get("api_key") == "test-key-not-real"
+    # Model ID is unchanged by WS-2a (the gemini-3.x bump is WS-2b).
+    assert svc.model_name == "gemini-2.5-flash"
+    assert svc.client is fake_client_cls.return_value
 
 
 # ---------------------------------------------------------------------------
