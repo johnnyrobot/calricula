@@ -10,6 +10,7 @@ from datetime import datetime
 
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from sqlmodel import Session, text
 from slowapi import _rate_limit_exceeded_handler
@@ -81,6 +82,14 @@ app = FastAPI(
 # Configure rate limiter
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+# Reject requests with an untrusted/forged Host header (defense-in-depth that
+# pairs with the Starlette BadHost fix, CVE-2026-48710). Effective only when
+# ALLOWED_HOSTS is restricted away from the "*" default — production should set it.
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=settings.ALLOWED_HOSTS,
+)
 
 # Configure CORS
 app.add_middleware(
