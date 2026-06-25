@@ -2,14 +2,16 @@
 Google File Search RAG Service for Calricula
 
 Provides document-based Retrieval Augmented Generation (RAG) using Google's
-Generative AI File API. This enables the AI assistant to reference uploaded
-documents (PCAH, Title 5, course templates, etc.) when generating responses.
+managed File Search Stores (google-genai). Documents are indexed once into a
+persistent store (no 48h Files-API expiry) and the FileSearch tool retrieves
+them at query time, returning native page-level grounding citations.
 
-The File Search API allows:
-- Uploading documents for indexing
-- Querying documents with semantic search
+This enables the AI assistant to reference uploaded documents (PCAH, Title 5,
+course templates, etc.) when generating responses:
+- Importing documents into a persistent File Search Store
+- Querying the store with semantic search via the FileSearch tool
 - Generating responses grounded in document content
-- Extracting citations from responses
+- Extracting native citations from the response's grounding metadata
 """
 
 import os
@@ -73,8 +75,8 @@ class FileSearchService:
     - Response generation grounded in documents
     - Citation extraction
 
-    Uses the unified google-genai client's Files API for document management
-    and caching for efficient repeated queries.
+    Uses the managed google-genai File Search Stores for persistent document
+    indexing and native, page-level citations.
     """
 
     # Default chunk settings for document processing
@@ -102,6 +104,7 @@ class FileSearchService:
         self.model_name = model_name or settings.FILE_SEARCH_MODEL
         self.client: Optional[genai.Client] = None
         self._generation_config: Optional[types.GenerateContentConfig] = None
+        self._store_name: Optional[str] = None
         self._configured = False
         self._uploaded_files: Dict[str, DocumentMetadata] = {}
         self._cache: Any = None
@@ -116,6 +119,34 @@ class FileSearchService:
                 max_output_tokens=4096,
             )
             self._configured = True
+
+    def _ensure_store(self) -> str:
+        """Get or create the persistent managed File Search Store.
+
+        Unlike the legacy Files API (uploads expire after 48h), a File Search
+        Store persists, so documents are indexed once and reused across queries.
+        Identified by settings.GEMINI_FILE_SEARCH_STORE_NAME.
+        """
+        self._ensure_configured()
+        if self._store_name:
+            return self._store_name
+
+        display_name = settings.GEMINI_FILE_SEARCH_STORE_NAME
+        try:
+            for store in self.client.file_search_stores.list():
+                if getattr(store, "display_name", None) == display_name:
+                    self._store_name = store.name
+                    logger.info(f"Using existing file search store: {self._store_name}")
+                    return self._store_name
+        except Exception as e:  # listing is best-effort; fall through to create
+            logger.warning(f"Could not list file search stores: {e}")
+
+        store = self.client.file_search_stores.create(
+            config=types.CreateFileSearchStoreConfig(display_name=display_name)
+        )
+        self._store_name = store.name
+        logger.info(f"Created file search store: {self._store_name}")
+        return self._store_name
 
     def _get_api_key(self) -> str:
         """Get Google API key from environment or file."""
@@ -183,36 +214,42 @@ class FileSearchService:
                 logger.info(f"Document already uploaded: {doc.display_name}")
                 return doc
 
-        # Upload to Google File API
+        # Import the document into the persistent File Search Store
         try:
-            logger.info(f"Uploading document: {path.name}")
+            logger.info(f"Importing document into file search store: {path.name}")
+            store_name = self._ensure_store()
 
-            # Use the unified client's Files API
-            uploaded_file = self.client.files.upload(
+            operation = self.client.file_search_stores.upload_to_file_search_store(
+                file_search_store_name=store_name,
                 file=str(path),
-                config=types.UploadFileConfig(
+                config=types.UploadToFileSearchStoreConfig(
                     display_name=display_name or path.stem,
                     mime_type=mime_type,
                 ),
             )
 
-            # Wait for file to be processed (bounded to avoid hanging forever
-            # if the provider leaves the file in PROCESSING state).
-            deadline = asyncio.get_running_loop().time() + 120
-            while uploaded_file.state.name == "PROCESSING":
+            # Importing + indexing is a long-running operation; poll it (bounded).
+            deadline = asyncio.get_running_loop().time() + 300
+            while not operation.done:
                 if asyncio.get_running_loop().time() > deadline:
                     raise TimeoutError(
-                        f"Timed out waiting for file processing: {uploaded_file.name}"
+                        f"Timed out importing document into store: {path.name}"
                     )
-                await asyncio.sleep(1)
-                uploaded_file = self.client.files.get(name=uploaded_file.name)
+                await asyncio.sleep(2)
+                operation = self.client.operations.get(operation)
 
-            if uploaded_file.state.name == "FAILED":
-                raise ValueError(f"File processing failed: {uploaded_file.name}")
+            if getattr(operation, "error", None):
+                raise ValueError(f"Document import failed: {operation.error}")
+
+            # Resource name of the imported document (best-effort across SDK shapes).
+            doc_name = (
+                getattr(getattr(operation, "response", None), "name", None)
+                or f"{store_name}/documents/{file_hash}"
+            )
 
             # Create metadata
             metadata = DocumentMetadata(
-                file_id=uploaded_file.name,
+                file_id=doc_name,
                 filename=path.name,
                 display_name=display_name or path.stem,
                 mime_type=mime_type,
@@ -296,25 +333,29 @@ class FileSearchService:
 
     async def delete_document(self, file_id: str) -> bool:
         """
-        Delete an uploaded document.
+        Delete a document from the File Search Store (best-effort).
 
         Args:
-            file_id: The file ID from DocumentMetadata
+            file_id: The store document resource name from DocumentMetadata.
 
         Returns:
-            True if deleted successfully
+            True if the store document was deleted. Local tracking is always
+            cleared. NOTE: the per-document delete surface is confirmed by the
+            smoke test (scripts/smoke_test_file_search.py).
         """
         self._ensure_configured()
 
+        deleted = False
         try:
-            self.client.files.delete(name=file_id)
-            if file_id in self._uploaded_files:
-                del self._uploaded_files[file_id]
-            logger.info(f"Document deleted: {file_id}")
-            return True
+            self.client.file_search_stores.documents.delete(name=file_id)
+            deleted = True
+            logger.info(f"Store document deleted: {file_id}")
         except Exception as e:
-            logger.error(f"Failed to delete document: {str(e)}")
-            return False
+            logger.warning(f"Could not delete store document {file_id}: {str(e)}")
+
+        if file_id in self._uploaded_files:
+            del self._uploaded_files[file_id]
+        return deleted
 
     async def generate_with_rag(
         self,
@@ -336,74 +377,61 @@ class FileSearchService:
 
         Returns:
             RAGResponse with text, citations, and metadata
+
+        Note:
+            The managed File Search Store is searched natively by the FileSearch
+            tool (semantic retrieval). ``file_ids`` and ``document_types`` are now
+            advisory and no longer pre-filter the corpus; the whole store is
+            searched. Citations come from the model's native (page-level)
+            grounding metadata, not regex scraping of the answer text.
         """
-        self._ensure_configured()
+        store_name = self._ensure_store()
 
-        # Determine which files to use
-        files_to_use = []
-
-        if file_ids:
-            # Use specified files
-            for fid in file_ids:
-                try:
-                    file_obj = self.client.files.get(name=fid)
-                    files_to_use.append(file_obj)
-                except Exception as e:
-                    logger.warning(f"Could not get file {fid}: {str(e)}")
-        else:
-            # Use all files matching document_types filter
-            for doc in self._uploaded_files.values():
-                if document_types is None or doc.document_type in document_types:
-                    try:
-                        file_obj = self.client.files.get(name=doc.file_id)
-                        files_to_use.append(file_obj)
-                    except Exception as e:
-                        logger.warning(f"Could not get file {doc.file_id}: {str(e)}")
-
-        if not files_to_use:
-            # Do NOT silently fall back to ungrounded generation: in a regulatory
-            # context an answer with no source documents must not be presented as
-            # authoritative. Surface an explicit failure instead.
-            return RAGResponse(
-                text="",
-                citations=[],
-                success=False,
-                error="No uploaded documents matched this RAG request.",
-            )
-
-        # Build the prompt with system instructions
+        # Build the prompt. We no longer ask the model to inline [Source: ...]
+        # markers -- the FileSearch tool returns structured grounding instead.
         full_prompt = ""
         if system_prompt:
             full_prompt = f"{system_prompt}\n\n---\n\n"
-
-        if include_citations:
-            full_prompt += """When answering, cite specific sections from the provided documents.
-Format citations as [Source: document_name, Section: section_name].
-
----
-
-"""
-
         full_prompt += f"Question: {query}"
 
         try:
-            # Generate with file context
             response = self.client.models.generate_content(
                 model=self.model_name,
-                contents=[*files_to_use, full_prompt],
-                config=self._generation_config,
+                contents=full_prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.4,  # Lower temp for factual responses
+                    max_output_tokens=4096,
+                    tools=[
+                        types.Tool(
+                            file_search=types.FileSearch(
+                                file_search_store_names=[store_name],
+                            )
+                        )
+                    ],
+                ),
             )
 
-            # Extract citations from response
-            citations = []
-            if include_citations:
-                citations = self._extract_citations(response.text, files_to_use)
+            grounding = self._extract_grounding_metadata(response)
+            citations = (
+                self._extract_citations_from_grounding(response)
+                if include_citations else []
+            )
+
+            # Fail closed: in a regulatory context, an answer for which the model
+            # retrieved no source documents must not be presented as authoritative.
+            if include_citations and grounding is None:
+                return RAGResponse(
+                    text="",
+                    citations=[],
+                    success=False,
+                    error="No source documents were retrieved from the knowledge base for this query.",
+                )
 
             return RAGResponse(
                 text=response.text,
                 citations=citations,
                 success=True,
-                grounding_metadata=self._extract_grounding_metadata(response),
+                grounding_metadata=grounding,
             )
 
         except Exception as e:
@@ -448,53 +476,59 @@ Format citations as [Source: document_name, Section: section_name].
                 error=str(e),
             )
 
-    def _extract_citations(
-        self,
-        response_text: str,
-        files: List[Any],
-    ) -> List[Citation]:
+    def _extract_citations_from_grounding(self, response: Any) -> List[Citation]:
         """
-        Extract citations from response text.
+        Extract native citations from the model's grounding metadata.
 
-        Looks for citation patterns like [Source: filename, Section: section]
+        Replaces the legacy regex scraping of ``[Source: ...]`` markers with the
+        File Search tool's structured, page-level grounding chunks.
         """
-        import re
-
-        citations = []
-
-        # Pattern: [Source: filename, Section: section_name]
-        pattern = r'\[Source:\s*([^,\]]+)(?:,\s*Section:\s*([^\]]+))?\]'
-
-        for match in re.finditer(pattern, response_text):
-            source_file = match.group(1).strip()
-            section = match.group(2).strip() if match.group(2) else None
-
-            citations.append(Citation(
-                text=match.group(0),
-                source_file=source_file,
-                section=section,
-            ))
-
+        citations: List[Citation] = []
+        try:
+            candidate = response.candidates[0]
+            gm = getattr(candidate, "grounding_metadata", None)
+            chunks = getattr(gm, "grounding_chunks", None) if gm else None
+            for chunk in chunks or []:
+                ctx = getattr(chunk, "retrieved_context", None)
+                if not ctx:
+                    continue
+                citations.append(Citation(
+                    text=getattr(ctx, "text", None) or "",
+                    source_file=(
+                        getattr(ctx, "title", None)
+                        or getattr(ctx, "uri", None)
+                        or "knowledge base"
+                    ),
+                    page_number=getattr(ctx, "page_number", None),
+                    section=getattr(ctx, "section", None),
+                ))
+        except Exception:
+            pass
         return citations
 
     def _extract_grounding_metadata(self, response: Any) -> Optional[Dict[str, Any]]:
-        """Extract grounding metadata from Gemini response if available."""
+        """Extract grounding metadata from the response, or None if absent.
+
+        Returns None when the model performed no grounding (i.e. the File Search
+        tool retrieved nothing). Callers rely on this to fail closed rather than
+        present an ungrounded answer as authoritative.
+        """
         try:
-            if hasattr(response, 'candidates') and response.candidates:
-                candidate = response.candidates[0]
-                if hasattr(candidate, 'grounding_metadata'):
-                    return {
-                        "grounding_attributions": getattr(
-                            candidate.grounding_metadata,
-                            'grounding_attributions',
-                            []
-                        ),
-                        "web_search_queries": getattr(
-                            candidate.grounding_metadata,
-                            'web_search_queries',
-                            []
-                        ),
-                    }
+            candidates = getattr(response, "candidates", None)
+            if not candidates:
+                return None
+            gm = getattr(candidates[0], "grounding_metadata", None)
+            if gm is None:
+                return None
+            chunks = getattr(gm, "grounding_chunks", None) or []
+            supports = getattr(gm, "grounding_supports", None) or []
+            if not chunks and not supports:
+                return None
+            return {
+                "grounding_chunks_count": len(chunks),
+                "grounding_supports_count": len(supports),
+                "web_search_queries": getattr(gm, "web_search_queries", None) or [],
+            }
         except Exception:
             pass
         return None
