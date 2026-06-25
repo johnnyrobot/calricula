@@ -39,12 +39,18 @@ from app.models.course import (
 from app.models.department import Department
 from app.services.lmi_client import LMIClient
 from app.services.pdf_generator import generate_lmi_pdf
+from app.services.compliance_service import (
+    calculate_total_student_learning_hours,
+    check_minimum_hours_per_unit,
+    MIN_HOURS_PER_UNIT,
+    CONVENTIONAL_HOURS_PER_UNIT,
+)
 
 router = APIRouter()
 
 
 # =============================================================================
-# 54-Hour Rule Validation Helper
+# Title 5 § 55002.5 Unit/Hour Validation Helper
 # =============================================================================
 
 def validate_54_hour_rule(
@@ -55,42 +61,49 @@ def validate_54_hour_rule(
     tolerance: Decimal = Decimal("0.25"),
 ) -> tuple[bool, Optional[str]]:
     """
-    Validate that the unit/hour calculation complies with Title 5 § 55002.5 (54-hour rule).
+    Validate that the unit/hour calculation complies with Title 5 § 55002.5.
 
-    The 54-hour rule states:
-    - Total Student Learning Hours = (Lecture Hours × 18) + (Lab Hours × 54) + (Outside Hours × 18)
-    - Units = Total Student Learning Hours ÷ 54
+    Title 5 § 55002.5 requires a MINIMUM of 48 semester hours of total student
+    work per unit of credit (33 quarter hours). Total Student Learning Hours are
+    computed from WEEKLY hours using a single 18-week semester multiplier for ALL
+    hour types (lecture, lab, and outside-of-class):
+
+    - Total Student Learning Hours = (Lecture + Lab + Outside)_weekly × 18 weeks
+    - Compliant if Total Student Learning Hours >= 48 × units
+
+    Lab hours use the SAME ×18 multiplier as lecture/outside hours. The previous
+    ×54 lab weighting was a bug that triple-counted lab time and disagreed with
+    the compliance service by 3×. The conventional 54-hours-per-unit figure is a
+    local 18-week-term convention, not the regulatory minimum, so this is a
+    minimum-threshold check rather than an exact-54 equality check.
 
     Args:
         units: The specified unit value
         lecture_hours: Weekly lecture hours
         lab_hours: Weekly lab hours
         outside_of_class_hours: Weekly outside-of-class (homework) hours
-        tolerance: Allowed deviation from exact calculation (default 0.25 units)
+        tolerance: Rounding allowance in units (default 0.25)
 
     Returns:
         Tuple of (is_valid, error_message). If valid, error_message is None.
     """
-    # Calculate total student learning hours
-    total_hours = (
-        (lecture_hours * 18) +      # Lecture hours × 18 weeks
-        (lab_hours * 54) +           # Lab hours × 54 (direct mapping)
-        (outside_of_class_hours * 18)  # Outside hours × 18 weeks
+    # Calculate total student learning hours (lab uses ×18, same as everything).
+    total_hours = calculate_total_student_learning_hours(
+        lecture_hours, lab_hours, outside_of_class_hours
     )
 
-    # Calculate expected units
-    expected_units = Decimal(str(total_hours)) / Decimal("54")
+    is_compliant, min_required_hours = check_minimum_hours_per_unit(
+        units, total_hours, tolerance
+    )
 
-    # Check if within tolerance
-    difference = abs(expected_units - units)
-
-    if difference > tolerance:
+    if not is_compliant:
+        hours_per_unit = total_hours / units if units > 0 else Decimal("0")
         return False, (
-            f"54-Hour Rule Violation: Hours do not match units. "
-            f"Total Student Learning Hours ({total_hours}) ÷ 54 = {expected_units:.2f} units, "
-            f"but {units} units specified. "
-            f"Adjust hours or units to comply with Title 5 § 55002.5. "
-            f"Required hours for {units} units: {int(units * 54)}."
+            f"Title 5 § 55002.5 Violation: insufficient student learning hours. "
+            f"Total Student Learning Hours ({total_hours}) = {hours_per_unit:.1f} "
+            f"hours/unit, below the minimum of {MIN_HOURS_PER_UNIT} hours per unit. "
+            f"Provide at least {min_required_hours} hours for {units} units "
+            f"(conventional 18-week target: {int(units * CONVENTIONAL_HOURS_PER_UNIT)} hours)."
         )
 
     return True, None
@@ -550,17 +563,14 @@ async def get_course(
             content_review=req.content_review,
         ))
 
-    # Calculate total student hours using the 54-hour rule (Title 5 § 55002.5)
-    # Users enter WEEKLY hours, we calculate SEMESTER totals:
-    # - Lecture: weekly hours × 18 weeks per semester
-    # - Lab: weekly hours × 54 (labs count 1:1 with student hours)
-    # - Outside of class (homework): weekly hours × 18 weeks per semester
-    # Total Student Hours / 54 = Units
-    calculated_total_hours = (
-        (int(course.lecture_hours) * 18) +  # Lecture hours × 18 weeks
-        (int(course.lab_hours) * 54) +      # Lab hours × 54 (direct mapping)
-        (int(course.outside_of_class_hours) * 18)   # Outside-of-class hours × 18 weeks
-    )
+    # Calculate total student hours per Title 5 § 55002.5.
+    # Users enter WEEKLY hours; we compute SEMESTER totals using a single 18-week
+    # multiplier for ALL hour types (lecture, lab, outside-of-class).
+    calculated_total_hours = int(calculate_total_student_learning_hours(
+        int(course.lecture_hours),
+        int(course.lab_hours),
+        int(course.outside_of_class_hours),
+    ))
 
     # Look up creator email for ownership checks in frontend
     creator_email = None
@@ -683,7 +693,7 @@ async def create_course(
             detail=f"Course {course_data.subject_code} {course_data.course_number} already exists"
         )
 
-    # Validate 54-hour rule compliance (Title 5 § 55002.5) if hours are specified
+    # Validate Title 5 § 55002.5 unit/hour compliance if hours are specified
     if course_data.lecture_hours or course_data.lab_hours or course_data.outside_of_class_hours:
         is_valid, error_message = validate_54_hour_rule(
             units=course_data.units,
@@ -727,12 +737,13 @@ async def create_course(
     # Return full course detail
     dept_info = DepartmentInfo(id=dept.id, name=dept.name, code=dept.code)
 
-    # Calculate total student hours using the 54-hour rule (Title 5 § 55002.5)
-    calculated_total_hours = (
-        (int(course.lecture_hours) * 18) +  # Lecture hours × 18 weeks
-        (int(course.lab_hours) * 54) +      # Lab hours × 54 (direct mapping)
-        (int(course.outside_of_class_hours) * 18)   # Outside-of-class hours × 18 weeks
-    )
+    # Calculate total student hours per Title 5 § 55002.5 (single 18-week
+    # multiplier for all hour types; lab uses ×18, same as everything else).
+    calculated_total_hours = int(calculate_total_student_learning_hours(
+        int(course.lecture_hours),
+        int(course.lab_hours),
+        int(course.outside_of_class_hours),
+    ))
 
     return CourseDetailResponse(
         id=course.id,
@@ -809,7 +820,7 @@ async def update_course(
     for key, value in update_data.items():
         setattr(course, key, value)
 
-    # Validate 54-hour rule compliance (Title 5 § 55002.5)
+    # Validate Title 5 § 55002.5 unit/hour compliance
     # Get the final values after update (use new values if provided, else existing)
     final_units = update_data.get("units", course.units)
     final_lecture_hours = update_data.get("lecture_hours", course.lecture_hours)
