@@ -229,7 +229,7 @@ export function CCNNonMatchForm({
             </h3>
             <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
               Per Assembly Bill 1111 (Common Course Numbering), courses that do not align
-              with a C-ID standard must provide a documented justification. This
+              with a CCN standard must provide a documented justification. This
               justification will be included in your course proposal for review.
             </p>
           </div>

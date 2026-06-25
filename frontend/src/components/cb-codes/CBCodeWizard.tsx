@@ -671,7 +671,7 @@ function SummaryViewWithCCN({
                 CCN Aligned: {adoptedCCN}
               </h4>
               <p className="text-sm text-green-700 dark:text-green-300 mt-1">
-                This course is aligned with the C-ID standard. CB05 (Transfer Status) and CB03 (TOP Code)
+                This course is aligned with the CCN standard. CB05 (Transfer Status) and CB03 (TOP Code)
                 have been automatically set per AB 1111 requirements.
               </p>
             </div>

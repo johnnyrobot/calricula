@@ -78,7 +78,7 @@ test.describe('CCN Detection Step', () => {
 
           if (result === 'match') {
             // Verify match display
-            await expect(page.locator('text=C-ID Standard Match Found')).toBeVisible();
+            await expect(page.locator('text=CCN Standard Match Found')).toBeVisible();
 
             // Should show Adopt button
             await expect(page.locator('button:has-text("Adopt")')).toBeVisible();
@@ -166,7 +166,7 @@ test.describe('CCN Detection Step', () => {
 
             // Fill textarea
             const textarea = page.locator('textarea');
-            await textarea.fill('This is a career technical education course not covered by C-ID standards.');
+            await textarea.fill('This is a career technical education course not covered by CCN standards.');
 
             // Submit
             await page.click('button:has-text("Submit")');

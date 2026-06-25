@@ -87,12 +87,14 @@ class TOPCodeRead(TOPCodeBase):
 
 
 # =============================================================================
-# CCN Standards (Common Course Numbering / C-ID)
+# CCN Standards (Common Course Numbering, AB 1111)
 # =============================================================================
 
 class CCNStandardBase(SQLModel):
     """Base CCN standard fields."""
-    c_id: str = Field(index=True)  # e.g., "MATH C2210"
+    # AB 1111 CCN code, e.g., "MATH C2210" (renamed from c_id; holds CCN data,
+    # not legacy C-ID). Format: SUBJ C#### with optional H/L/S/E suffix.
+    ccn_code: str = Field(index=True)
     discipline: str = Field(index=True)  # e.g., "MATH"
     title: str
     descriptor: Optional[str] = None  # Catalog description
@@ -126,10 +128,11 @@ class CCNStandardBase(SQLModel):
 
 class CCNStandard(CCNStandardBase, table=True):
     """
-    Common Course Numbering (CCN) / C-ID standard model.
+    Common Course Numbering (CCN) standard model (AB 1111).
 
-    State-mandated course standards for AB 1111 compliance.
-    Courses can align to these standards for transferability.
+    State-mandated course standards for AB 1111 compliance. These hold CCN
+    codes (SUBJ C####), NOT legacy C-ID identifiers. Courses can align to
+    these standards for transferability.
     """
     __tablename__ = "ccn_standards"
 

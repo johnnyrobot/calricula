@@ -105,7 +105,7 @@ def test_ccn_standard(db_session):
     """Create a test CCN standard."""
     unique_id = uuid.uuid4().hex[:4]
     standard = CCNStandard(
-        c_id=f"MATH C2{unique_id}",
+        ccn_code=f"MATH C2{unique_id}",
         discipline="MATH",
         title="Calculus I",
         descriptor="Introduction to differential and integral calculus covering limits, derivatives, and applications.",
@@ -140,7 +140,7 @@ def test_ccn_standard_english(db_session):
     """Create an English CCN standard for negative match testing."""
     unique_id = uuid.uuid4().hex[:4]
     standard = CCNStandard(
-        c_id=f"ENGL C1{unique_id}",
+        ccn_code=f"ENGL C1{unique_id}",
         discipline="ENGL",
         title="English Composition",
         descriptor="Introduction to academic writing and critical thinking.",
@@ -176,7 +176,7 @@ class TestCCNStandardsCRUD:
         """Test creating a CCN standard in the database."""
         unique_id = uuid.uuid4().hex[:4]
         standard = CCNStandard(
-            c_id=f"MATH C99{unique_id}",
+            ccn_code=f"MATH C99{unique_id}",
             discipline="MATH",
             title="Test Course",
             minimum_units=4.0,
@@ -188,7 +188,7 @@ class TestCCNStandardsCRUD:
         db_session.refresh(standard)
 
         assert standard.id is not None
-        assert standard.c_id == f"MATH C99{unique_id}"
+        assert standard.ccn_code == f"MATH C99{unique_id}"
         assert standard.discipline == "MATH"
         assert len(standard.slo_requirements) == 1
 
@@ -202,10 +202,10 @@ class TestCCNStandardsCRUD:
         # Verify our test standard is in results
         assert any(s.id == test_ccn_standard.id for s in results)
 
-    def test_ccn_standard_query_by_c_id(self, db_session, test_ccn_standard):
-        """Test querying CCN standards by C-ID."""
+    def test_ccn_standard_query_by_ccn_code(self, db_session, test_ccn_standard):
+        """Test querying CCN standards by CCN code."""
         result = db_session.exec(
-            select(CCNStandard).where(CCNStandard.c_id == test_ccn_standard.c_id)
+            select(CCNStandard).where(CCNStandard.ccn_code == test_ccn_standard.ccn_code)
         ).first()
 
         assert result is not None
@@ -226,7 +226,7 @@ class TestCCNStandardsCRUD:
         """Test deleting a CCN standard."""
         unique_id = uuid.uuid4().hex[:4]
         standard = CCNStandard(
-            c_id=f"TEST C{unique_id}",
+            ccn_code=f"TEST C{unique_id}",
             discipline="TEST",
             title="Deletable Course",
             minimum_units=3.0,
@@ -505,10 +505,17 @@ class TestCCNAdoptionIntegration:
                 data = response.json()
                 assert data["success"] is True
                 assert data["course_id"] == str(test_course.id)
+                # WS-5b: response field renamed ccn_id -> ccn_code and must carry
+                # the adopted CCN standard's code.
+                assert data["ccn_code"] == test_ccn_standard.ccn_code
                 assert "cb_codes_updated" in data
                 # CCN adoption should set CB05 to A
                 if data["cb_codes_updated"]:
                     assert data["cb_codes_updated"].get("CB05") == "A"
+
+                # WS-5b: the adopt flow must persist ccn_code on the course.
+                db_session.refresh(test_course)
+                assert test_course.ccn_code == test_ccn_standard.ccn_code
 
     def test_ccn_adopt_invalid_course(
         self, client, test_user_faculty, test_ccn_standard
@@ -576,6 +583,39 @@ class TestCCNReferenceEndpoints:
         # All returned should be MATH discipline
         for standard in data:
             assert standard["discipline"] == "MATH"
+
+
+# =============================================================================
+# WS-5b: CCN vs legacy C-ID distinction
+# =============================================================================
+
+class TestCourseCcnAndCidDistinct:
+    """A course can carry an AB 1111 CCN code AND a legacy C-ID as distinct values."""
+
+    def test_course_stores_ccn_code_and_c_id_separately(
+        self, db_session, test_department, test_user_faculty
+    ):
+        """ccn_code (SUBJ C####) and c_id (SUBJ ###) are independent fields."""
+        unique_num = uuid.uuid4().hex[:4]
+        course = Course(
+            subject_code="ENGL",
+            course_number=f"1{unique_num}",
+            title="English Composition",
+            department_id=test_department.id,
+            created_by=test_user_faculty.id,
+            status=CourseStatus.DRAFT,
+            units=Decimal("3.0"),
+            ccn_code="ENGL C1000",  # AB 1111 CCN code
+            c_id="ENGL 100",        # legacy C-ID (no "C" prefix)
+        )
+        db_session.add(course)
+        db_session.commit()
+        db_session.refresh(course)
+
+        # They are stored as distinct strings, neither overwriting the other.
+        assert course.ccn_code == "ENGL C1000"
+        assert course.c_id == "ENGL 100"
+        assert course.ccn_code != course.c_id
 
 
 # =============================================================================

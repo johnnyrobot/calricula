@@ -39,7 +39,7 @@ def ccn_aligned_course_data() -> Dict[str, Any]:
             "limits, derivatives, integrals, and applications. Students will develop "
             "skills in mathematical reasoning and problem solving."
         ),
-        "ccn_id": "MATH C2210",
+        "ccn_code": "MATH C2210",
         "units": Decimal("4"),
         "ccn_minimum_units": Decimal("4"),
         "lecture_hours": Decimal("4"),
@@ -64,7 +64,7 @@ def non_ccn_course_data() -> Dict[str, Any]:
             "Exploration of current topics and emerging trends in technology. "
             "Topics vary each semester based on industry developments and student interest."
         ),
-        "ccn_id": None,  # Not CCN-aligned
+        "ccn_code": None,  # Not CCN-aligned
         "units": Decimal("3"),
         "lecture_hours": Decimal("3"),
         "lab_hours": Decimal("0"),
@@ -482,9 +482,9 @@ class TestCCNEdgeCases:
         # Should still produce a result without crashing
         assert len(results) > 0
 
-    def test_empty_ccn_id_treated_as_non_ccn(self, compliance_service, ccn_aligned_course_data):
-        """Empty string ccn_id should be treated as non-CCN."""
-        ccn_aligned_course_data["ccn_id"] = ""
+    def test_empty_ccn_code_treated_as_non_ccn(self, compliance_service, ccn_aligned_course_data):
+        """Empty string ccn_code should be treated as non-CCN."""
+        ccn_aligned_course_data["ccn_code"] = ""
 
         results = compliance_service._check_ccn_alignment(ccn_aligned_course_data)
 
@@ -496,9 +496,9 @@ class TestCCNEdgeCases:
         """CCN compliance category should have correct value."""
         assert ComplianceCategory.CCN.value == "CCN/AB 1111"
 
-    def test_various_ccn_id_formats(self, compliance_service, ccn_aligned_course_data):
+    def test_various_ccn_code_formats(self, compliance_service, ccn_aligned_course_data):
         """Should handle various valid CCN ID formats."""
-        valid_ccn_ids = [
+        valid_ccn_codes = [
             "MATH C2210",
             "ENGL C1000",
             "BIOL C1001L",
@@ -506,10 +506,10 @@ class TestCCNEdgeCases:
             "STAT C1000E",
         ]
 
-        for ccn_id in valid_ccn_ids:
-            ccn_aligned_course_data["ccn_id"] = ccn_id
+        for ccn_code in valid_ccn_codes:
+            ccn_aligned_course_data["ccn_code"] = ccn_code
             results = compliance_service._check_ccn_alignment(ccn_aligned_course_data)
 
             ccn_001_result = next(r for r in results if r.rule_id == "CCN-001")
             # With CB05='A', all should pass
-            assert ccn_001_result.status == ComplianceStatus.PASS, f"Failed for {ccn_id}"
+            assert ccn_001_result.status == ComplianceStatus.PASS, f"Failed for {ccn_code}"

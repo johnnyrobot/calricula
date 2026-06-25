@@ -30,7 +30,7 @@ import { CCNComparisonModal } from '@/components/ccn';
 
 interface CCNStandardMatch {
   id: string;
-  c_id: string;
+  ccn_code: string;
   discipline: string;
   title: string;
   descriptor?: string;
@@ -442,13 +442,13 @@ export function ReviewSection({
         </div>
       </div>
 
-      {/* C-ID Alignment Section */}
+      {/* CCN Alignment Section */}
       <div className="border border-luminous-200 dark:border-luminous-800 rounded-lg overflow-hidden bg-gradient-to-r from-luminous-50 to-indigo-50 dark:from-luminous-900/20 dark:to-indigo-900/20">
         <div className="px-4 py-3 border-b border-luminous-200 dark:border-luminous-800 bg-white/50 dark:bg-slate-800/50">
           <div className="flex items-center gap-2">
             <CheckBadgeIcon className="h-5 w-5 text-luminous-500" />
             <h4 className="text-sm font-medium text-slate-900 dark:text-white">
-              C-ID Standard Alignment (AB 1111)
+              CCN Standard Alignment (AB 1111)
             </h4>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
@@ -459,13 +459,13 @@ export function ReviewSection({
           {isLoadingCCN ? (
             <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
               <div className="animate-spin h-4 w-4 border-2 border-luminous-500 border-t-transparent rounded-full" />
-              Searching for matching C-ID standards...
+              Searching for matching CCN standards...
             </div>
           ) : ccnMatches.length > 0 ? (
             <div className="space-y-3">
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 <SparklesIcon className="h-4 w-4 inline text-luminous-500 mr-1" />
-                Found {ccnMatches.length} potential C-ID standard{ccnMatches.length > 1 ? 's' : ''} for this course:
+                Found {ccnMatches.length} potential CCN standard{ccnMatches.length > 1 ? 's' : ''} for this course:
               </p>
               <div className="space-y-2">
                 {ccnMatches.slice(0, 3).map((match) => (
@@ -478,7 +478,7 @@ export function ReviewSection({
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-semibold text-slate-900 dark:text-white">
-                            {match.c_id}
+                            {match.ccn_code}
                           </span>
                           <span className="text-xs px-2 py-0.5 rounded-full bg-luminous-100 dark:bg-luminous-900/30 text-luminous-700 dark:text-luminous-300">
                             Min {match.minimum_units} units
@@ -512,7 +512,7 @@ export function ReviewSection({
             <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400">
               <MagnifyingGlassIcon className="h-5 w-5 flex-shrink-0" />
               <p>
-                No matching C-ID standards found for {course.subject_code} courses.
+                No matching CCN standards found for {course.subject_code} courses.
                 This course may not have a statewide common course number, which is acceptable for unique local offerings.
               </p>
             </div>
@@ -529,7 +529,7 @@ export function ReviewSection({
             setSelectedStandard(null);
           }}
           standard={{
-            c_id: selectedStandard.c_id,
+            ccn_code: selectedStandard.ccn_code,
             discipline: selectedStandard.discipline,
             title: selectedStandard.title,
             descriptor: selectedStandard.descriptor,

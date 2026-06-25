@@ -1,6 +1,6 @@
 """
-Calricula - CCN/C-ID Standards Seed Data
-Seeds Common Course Numbering (C-ID) standards for course alignment.
+Calricula - CCN (AB 1111) Standards Seed Data
+Seeds Common Course Numbering (CCN) standards for course alignment.
 
 Loads data from extracted CCN template PDFs (ccn_templates_extracted.json)
 """
@@ -90,8 +90,10 @@ def transform_extracted_to_model(extracted: dict) -> dict:
     minimum_units = raw_minimum_units if (raw_minimum_units and raw_minimum_units > 0) else 3.0
 
     return {
-        # Core identification
-        "c_id": extracted.get("c_id", ""),
+        # Core identification. The extracted source JSON uses the legacy key
+        # "c_id", but it actually holds an AB 1111 CCN code (e.g. "MATH C2210"),
+        # so it maps to the model's ccn_code field.
+        "ccn_code": extracted.get("c_id", ""),
         "discipline": discipline,
         "title": extracted.get("title", ""),
         "descriptor": extracted.get("description", ""),
@@ -136,7 +138,7 @@ def transform_extracted_to_model(extracted: dict) -> dict:
 
 def seed_ccn_standards():
     """
-    Seed CCN/C-ID standards into the database from extracted JSON.
+    Seed CCN (AB 1111) standards into the database from extracted JSON.
     Uses upsert logic: update existing records, create new ones.
     """
     # Load extracted data
@@ -152,11 +154,12 @@ def seed_ccn_standards():
         skipped_count = 0
 
         for extracted in extracted_data:
-            c_id = extracted.get("c_id", "")
+            # Source JSON key "c_id" actually holds the AB 1111 CCN code.
+            ccn_code = extracted.get("c_id", "")
 
-            # Skip entries without a valid C-ID
-            if not c_id or not c_id.strip():
-                print(f"  Skipping entry without C-ID: {extracted.get('source_file', 'unknown')}")
+            # Skip entries without a valid CCN code
+            if not ccn_code or not ccn_code.strip():
+                print(f"  Skipping entry without CCN code: {extracted.get('source_file', 'unknown')}")
                 skipped_count += 1
                 continue
 
@@ -165,7 +168,7 @@ def seed_ccn_standards():
 
             # Check if CCN standard already exists
             existing = session.exec(
-                select(CCNStandard).where(CCNStandard.c_id == c_id)
+                select(CCNStandard).where(CCNStandard.ccn_code == ccn_code)
             ).first()
 
             if existing:
@@ -174,16 +177,16 @@ def seed_ccn_standards():
                     if value is not None:  # Only update non-None values
                         setattr(existing, key, value)
                 existing.updated_at = datetime.utcnow()
-                print(f"  Updated: {c_id} - {model_data.get('title', 'Unknown')}")
+                print(f"  Updated: {ccn_code} - {model_data.get('title', 'Unknown')}")
                 updated_count += 1
             else:
                 # Create new record
                 ccn = CCNStandard(**model_data)
                 session.add(ccn)
-                print(f"  Created: {c_id} - {model_data.get('title', 'Unknown')}")
+                print(f"  Created: {ccn_code} - {model_data.get('title', 'Unknown')}")
                 created_count += 1
 
-        # Fail fast if too many entries were skipped for invalid C-IDs, which
+        # Fail fast if too many entries were skipped for invalid CCN codes, which
         # would otherwise ship partial CCN coverage without warning.
         total = len(extracted_data)
         skip_ratio = (skipped_count / total) if total else 0
@@ -191,7 +194,7 @@ def seed_ccn_standards():
             session.rollback()
             raise ValueError(
                 f"Aborting seed: {skipped_count}/{total} entries "
-                f"({skip_ratio:.0%}) were skipped for missing/invalid C-IDs, "
+                f"({skip_ratio:.0%}) were skipped for missing/invalid CCN codes, "
                 f"exceeding the 10% threshold."
             )
 
@@ -221,7 +224,7 @@ def list_disciplines():
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("Seeding CCN/C-ID Standards from Extracted PDF Data")
+    print("Seeding CCN (AB 1111) Standards from Extracted PDF Data")
     print("=" * 60)
 
     # Show discipline mapping first
