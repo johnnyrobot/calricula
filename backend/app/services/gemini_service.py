@@ -88,7 +88,7 @@ class GeminiService:
     def __init__(self):
         from app.core.config import settings
         self.client: Optional[genai.Client] = None
-        self.model_name = settings.GEMINI_MODEL  # externalized in WS-2a (default gemini-2.5-flash-lite)
+        self.model_name = settings.GEMINI_MODEL  # externalized in WS-2a; default gemini-3.1-flash-lite (WS-2b)
         self._configured = False
 
     def _ensure_configured(self):
