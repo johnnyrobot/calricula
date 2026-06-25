@@ -86,8 +86,9 @@ class GeminiService:
     """Service for interacting with Google Gemini AI using the new google-genai SDK."""
 
     def __init__(self):
+        from app.core.config import settings
         self.client: Optional[genai.Client] = None
-        self.model_name = "gemini-2.5-flash-lite"  # Use Gemini 2.5 Flash Lite
+        self.model_name = settings.GEMINI_MODEL  # externalized in WS-2a (default gemini-2.5-flash-lite)
         self._configured = False
 
     def _ensure_configured(self):

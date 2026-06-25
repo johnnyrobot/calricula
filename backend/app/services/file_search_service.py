@@ -22,8 +22,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 import hashlib
 
-import google.generativeai as genai
-# from google.generativeai import caching
+from google import genai
+from google.genai import types
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +73,7 @@ class FileSearchService:
     - Response generation grounded in documents
     - Citation extraction
 
-    Uses the google-generativeai library's File API for document management
+    Uses the unified google-genai client's Files API for document management
     and caching for efficient repeated queries.
     """
 
@@ -89,34 +91,31 @@ class FileSearchService:
         ".json": "application/json",
     }
 
-    def __init__(self, model_name: str = "gemini-2.5-flash"):
+    def __init__(self, model_name: Optional[str] = None):
         """
         Initialize the File Search Service.
 
         Args:
-            model_name: The Gemini model to use for generation
+            model_name: The Gemini model to use for generation. Defaults to
+                settings.FILE_SEARCH_MODEL (externalized in WS-2a).
         """
-        self.model_name = model_name
-        self.model = None
+        self.model_name = model_name or settings.FILE_SEARCH_MODEL
+        self.client: Optional[genai.Client] = None
+        self._generation_config: Optional[types.GenerateContentConfig] = None
         self._configured = False
         self._uploaded_files: Dict[str, DocumentMetadata] = {}
         self._cache: Any = None
 
     def _ensure_configured(self) -> None:
-        """Ensure the Gemini API is configured."""
-        if not self._configured:
+        """Ensure the unified google-genai client is initialized."""
+        if not self._configured or self.client is None:
             api_key = self._get_api_key()
-            genai.configure(api_key=api_key)
-            self._configured = True
-
-        if self.model is None:
-            self.model = genai.GenerativeModel(
-                model_name=self.model_name,
-                generation_config=genai.GenerationConfig(
-                    temperature=0.4,  # Lower temp for factual responses
-                    max_output_tokens=4096,
-                )
+            self.client = genai.Client(api_key=api_key)
+            self._generation_config = types.GenerateContentConfig(
+                temperature=0.4,  # Lower temp for factual responses
+                max_output_tokens=4096,
             )
+            self._configured = True
 
     def _get_api_key(self) -> str:
         """Get Google API key from environment or file."""
@@ -188,11 +187,13 @@ class FileSearchService:
         try:
             logger.info(f"Uploading document: {path.name}")
 
-            # Use genai.upload_file for the File API
-            uploaded_file = genai.upload_file(
-                path=str(path),
-                display_name=display_name or path.stem,
-                mime_type=mime_type,
+            # Use the unified client's Files API
+            uploaded_file = self.client.files.upload(
+                file=str(path),
+                config=types.UploadFileConfig(
+                    display_name=display_name or path.stem,
+                    mime_type=mime_type,
+                ),
             )
 
             # Wait for file to be processed (bounded to avoid hanging forever
@@ -204,7 +205,7 @@ class FileSearchService:
                         f"Timed out waiting for file processing: {uploaded_file.name}"
                     )
                 await asyncio.sleep(1)
-                uploaded_file = genai.get_file(uploaded_file.name)
+                uploaded_file = self.client.files.get(name=uploaded_file.name)
 
             if uploaded_file.state.name == "FAILED":
                 raise ValueError(f"File processing failed: {uploaded_file.name}")
@@ -306,7 +307,7 @@ class FileSearchService:
         self._ensure_configured()
 
         try:
-            genai.delete_file(file_id)
+            self.client.files.delete(name=file_id)
             if file_id in self._uploaded_files:
                 del self._uploaded_files[file_id]
             logger.info(f"Document deleted: {file_id}")
@@ -345,7 +346,7 @@ class FileSearchService:
             # Use specified files
             for fid in file_ids:
                 try:
-                    file_obj = genai.get_file(fid)
+                    file_obj = self.client.files.get(name=fid)
                     files_to_use.append(file_obj)
                 except Exception as e:
                     logger.warning(f"Could not get file {fid}: {str(e)}")
@@ -354,7 +355,7 @@ class FileSearchService:
             for doc in self._uploaded_files.values():
                 if document_types is None or doc.document_type in document_types:
                     try:
-                        file_obj = genai.get_file(doc.file_id)
+                        file_obj = self.client.files.get(name=doc.file_id)
                         files_to_use.append(file_obj)
                     except Exception as e:
                         logger.warning(f"Could not get file {doc.file_id}: {str(e)}")
@@ -387,7 +388,11 @@ Format citations as [Source: document_name, Section: section_name].
 
         try:
             # Generate with file context
-            response = self.model.generate_content([*files_to_use, full_prompt])
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=[*files_to_use, full_prompt],
+                config=self._generation_config,
+            )
 
             # Extract citations from response
             citations = []
@@ -424,7 +429,11 @@ Format citations as [Source: document_name, Section: section_name].
         full_prompt += query
 
         try:
-            response = self.model.generate_content(full_prompt)
+            response = self.client.models.generate_content(
+                model=self.model_name,
+                contents=full_prompt,
+                config=self._generation_config,
+            )
             return RAGResponse(
                 text=response.text,
                 citations=[],
