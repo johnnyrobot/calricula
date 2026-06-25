@@ -41,6 +41,12 @@ class Settings(BaseSettings):
         "http://frontend:3000",
     ]
 
+    # Trusted hosts (defense-in-depth for the Host header; pairs with the
+    # Starlette BadHost fix, CVE-2026-48710). Defaults to "*" to avoid breaking
+    # availability; PRODUCTION SHOULD set ALLOWED_HOSTS to the real domains,
+    # e.g. ALLOWED_HOSTS='["calricula.com","api.calricula.com"]'.
+    ALLOWED_HOSTS: List[str] = ["*"]
+
     # Firebase
     FIREBASE_PROJECT_ID: Optional[str] = None
     FIREBASE_SERVICE_ACCOUNT_PATH: Optional[str] = None
