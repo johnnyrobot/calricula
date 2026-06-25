@@ -87,9 +87,15 @@ def create_db_and_tables():
 
 
 def update_schema_for_lmi():
-    """
-    Manually add lmi_data column if it doesn't exist.
-    This is a temporary migration helper.
+    """Idempotently ensure the lmi_data columns exist (test/CI bootstrap only).
+
+    The production source of truth for these columns is the Alembic migration
+    ``add_lmi_data_jsonb`` (run via ``alembic upgrade head``); the app no longer
+    calls this at startup. It is retained because the test suite (conftest) and
+    the CI "Seed reference data" step build their schema from
+    ``SQLModel.metadata.create_all`` rather than Alembic, and call this helper to
+    guarantee the columns are present. The ``IF NOT EXISTS`` guards make it a
+    safe no-op once the migration (or create_all) has already added them.
     """
     with engine.connect() as conn:
         try:

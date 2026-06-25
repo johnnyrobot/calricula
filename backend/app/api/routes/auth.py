@@ -12,7 +12,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from pydantic import ConfigDict, BaseModel
 from sqlmodel import Session, select
 
 from app.core.database import get_session
@@ -46,8 +46,7 @@ class UserProfileResponse(BaseModel):
     department_id: Optional[uuid.UUID] = None
     department: Optional[DepartmentInfo] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LoginResponse(BaseModel):

@@ -9,7 +9,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import ConfigDict, BaseModel, Field, field_validator
 
 from app.models.course import CourseStatus, BloomLevel, RequisiteType
 from app.schemas.departments import DepartmentInfo
@@ -45,8 +45,7 @@ class SLOResponse(SLOBase):
     sequence: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SLOItem(BaseModel):
@@ -57,8 +56,7 @@ class SLOItem(BaseModel):
     bloom_level: str
     performance_criteria: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =============================================================================
@@ -93,8 +91,7 @@ class ContentResponse(ContentBase):
     sequence: int
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ContentItem(BaseModel):
@@ -106,8 +103,7 @@ class ContentItem(BaseModel):
     hours_allocated: Decimal
     linked_slos: List[str]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =============================================================================
@@ -148,8 +144,7 @@ class RequisiteResponse(RequisiteBase):
     id: uuid.UUID
     requisite_course: Optional[RequisiteCourseInfo] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class RequisiteItem(BaseModel):
@@ -161,8 +156,7 @@ class RequisiteItem(BaseModel):
     requisite_text: Optional[str] = None
     content_review: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # =============================================================================
@@ -237,8 +231,7 @@ class CourseListItem(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CourseListResponse(BaseModel):
@@ -289,8 +282,7 @@ class CourseDetailResponse(BaseModel):
     content_items: List[ContentItem] = []
     requisites: List[RequisiteItem] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CourseDuplicateRequest(BaseModel):
