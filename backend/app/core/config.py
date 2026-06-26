@@ -90,11 +90,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _enforce_production_safety(self) -> "Settings":
-        """Fail closed: dev/demo auth bypass flags must be off in production.
+        """Fail closed in production: no auth bypass and no wildcard hosts.
 
         AUTH_DEV_MODE and DEMO_MODE relax authentication for local development
         and public demos. Shipping either in production is an auth bypass, so we
         refuse to boot if they are enabled while ENVIRONMENT == "production".
+
+        ALLOWED_HOSTS defaults to "*" (wildcard) for dev convenience, but a
+        wildcard (or empty) trusted-host list in production leaves the app open
+        to Host-header attacks, so we likewise refuse to boot until the operator
+        sets the real hostnames.
         """
         if self.ENVIRONMENT.strip().lower() == "production":
             offenders = [
@@ -110,6 +115,15 @@ class Settings(BaseSettings):
                     "Refusing to start in production with auth bypass flag(s) "
                     f"enabled: {', '.join(offenders)}. Set them to False (or unset "
                     "them) in the production environment."
+                )
+
+            if not self.ALLOWED_HOSTS or "*" in self.ALLOWED_HOSTS:
+                raise ValueError(
+                    "Refusing to start in production with a wildcard or empty "
+                    "ALLOWED_HOSTS (current value: "
+                    f"{self.ALLOWED_HOSTS!r}). Set the real trusted hostnames to "
+                    "defend against Host-header attacks, e.g. "
+                    "ALLOWED_HOSTS='[\"calricula.com\",\"api.calricula.com\"]'."
                 )
         return self
 
