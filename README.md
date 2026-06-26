@@ -17,9 +17,6 @@ An AI-assisted curriculum management platform that enables faculty to create, mo
 
 ![Registrar's-desk dashboard showing status counts, the approvals queue, and recent curriculum activity](docs/images/dashboard.png)
 
-<details>
-<summary><strong>More screens</strong> — Course Outline of Record, CB Code Wizard, Approvals</summary>
-
 **Course Outline of Record** — the document/read view (centerpiece)
 
 ![Course Outline of Record document view with units, requisites, student learning outcomes, and content](docs/images/course-outline.png)
@@ -31,8 +28,6 @@ An AI-assisted curriculum management platform that enables faculty to create, mo
 **Approvals** — role-based review queue
 
 ![Approvals queue showing Course Outlines of Record routed through the review workflow](docs/images/approvals.png)
-
-</details>
 
 ## Features
 
