@@ -135,7 +135,7 @@ const EmptyState: React.FC = () => (
   <div className="text-center py-8">
     <DocumentTextIcon className="h-12 w-12 mx-auto text-slate-300 dark:text-slate-600 mb-4" />
     <p className="text-slate-500 dark:text-slate-400">
-      You haven't created any courses yet.
+      You haven&apos;t created any courses yet.
     </p>
     <Link
       href="/courses/new"

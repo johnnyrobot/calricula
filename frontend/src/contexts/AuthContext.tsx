@@ -212,7 +212,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const profile = await response.json();
       return profile;
-    } catch (error: any) {
+    } catch (error) {
       console.error('Failed to fetch user profile:', error);
       throw error;
     }
@@ -305,10 +305,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           const profile = await fetchUserProfile(idToken);
           setUser(profile);
           setError(null);
-        } catch (error: any) {
+        } catch (error) {
           setUser(null);
           // Don't show error on initial load, only on explicit actions
-          console.warn('Could not fetch user profile:', error.message);
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn('Could not fetch user profile:', message);
         } finally {
           setProfileLoading(false);
         }
@@ -356,8 +357,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const idToken = await credential.user.getIdToken();
       const profile = await fetchUserProfile(idToken);
       setUser(profile);
-    } catch (error: any) {
-      setError(error.message);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
       throw error;
     } finally {
       setProfileLoading(false);
@@ -380,8 +381,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       await signOut();
       setUser(null);
-    } catch (error: any) {
-      setError(error.message);
+    } catch (error) {
+      setError(error instanceof Error ? error.message : String(error));
       throw error;
     }
   };
@@ -484,7 +485,7 @@ export const withAuth = <P extends object>(
           <div className="text-center">
             <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
             <p className="text-gray-600">
-              You don't have permission to access this page.
+              You don&apos;t have permission to access this page.
             </p>
           </div>
         </div>
