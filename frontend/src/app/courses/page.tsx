@@ -3,33 +3,33 @@
 // ===========================================
 // Courses List Page - Browse All Courses
 // ===========================================
-// Displays paginated list of courses with search and filtering
+// Course Outlines of Record presented as a ruled academic data table
+// (academic redesign, board 04 "Courses"). Status shown as restrained seals.
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   MagnifyingGlassIcon,
   PlusIcon,
-  FunnelIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  DocumentTextIcon,
   TrashIcon,
   PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import { PageShell } from '@/components/layout';
 import { useToast } from '@/components/toast';
 import { useConfirmDialog } from '@/components/confirm-dialog';
-import { CourseCardSkeleton } from '@/components/loading';
 import { EmptyCoursesState } from '@/components/empty-state';
 import { useAuth } from '@/contexts/AuthContext';
-import { api, CourseListItem, CourseListResponse, CourseStatus } from '@/lib/api';
+import { api, CourseListItem, CourseStatus } from '@/lib/api';
 import { invalidateCourseCache } from '@/lib/swr';
-import { CCNAlignmentBadgeCompact } from '@/components/ccn';
 
 // ===========================================
-// Status Badge Component
+// Status Seal Component
 // ===========================================
+// Restrained "seal" (not a bright pill). Granular workflow statuses are kept
+// faithful to the data model but share the ochre in-review register.
 
 interface StatusBadgeProps {
   status: CourseStatus;
@@ -37,136 +37,145 @@ interface StatusBadgeProps {
 
 const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
   const statusConfig: Record<CourseStatus, { label: string; className: string }> = {
-    Draft: {
-      label: 'Draft',
-      className: 'luminous-badge luminous-badge-draft',
-    },
-    DeptReview: {
-      label: 'Dept Review',
-      className: 'luminous-badge luminous-badge-warning',
-    },
-    CurriculumCommittee: {
-      label: 'Committee',
-      className: 'luminous-badge luminous-badge-review',
-    },
-    ArticulationReview: {
-      label: 'Articulation',
-      className: 'luminous-badge luminous-badge-review',
-    },
-    Approved: {
-      label: 'Approved',
-      className: 'luminous-badge luminous-badge-approved',
-    },
+    Draft: { label: 'Draft', className: 'luminous-badge luminous-badge-draft' },
+    DeptReview: { label: 'Dept Review', className: 'luminous-badge luminous-badge-warning' },
+    CurriculumCommittee: { label: 'Committee', className: 'luminous-badge luminous-badge-review' },
+    ArticulationReview: { label: 'Articulation', className: 'luminous-badge luminous-badge-review' },
+    Approved: { label: 'Approved', className: 'luminous-badge luminous-badge-approved' },
   };
 
   const config = statusConfig[status] || statusConfig.Draft;
-
   return <span className={config.className}>{config.label}</span>;
 };
 
 // ===========================================
-// Course Card Component
+// Status Filter Tabs
 // ===========================================
 
-interface CourseCardProps {
+const STATUS_TABS: { value: CourseStatus | ''; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'Draft', label: 'Draft' },
+  { value: 'DeptReview', label: 'Dept Review' },
+  { value: 'CurriculumCommittee', label: 'Committee' },
+  { value: 'ArticulationReview', label: 'Articulation' },
+  { value: 'Approved', label: 'Approved' },
+];
+
+// ===========================================
+// Course Row Component
+// ===========================================
+
+interface CourseRowProps {
   course: CourseListItem;
   onDelete?: (course: CourseListItem) => void;
 }
 
-const CourseCard: React.FC<CourseCardProps> = ({ course, onDelete }) => {
-  // Only allow delete for Draft courses
+const CourseRow: React.FC<CourseRowProps> = ({ course, onDelete }) => {
+  const router = useRouter();
   const canDelete = course.status === 'Draft';
+  const href = `/courses/${course.id}`;
 
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (onDelete) {
-      onDelete(course);
-    }
+    onDelete?.(course);
   };
 
   return (
-    <div className="luminous-card group relative">
-      <Link href={`/courses/${course.id}`} className="block">
-        <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            {/* Course Code */}
-            <p className="text-sm font-medium text-luminous-600 dark:text-luminous-400">
-              {course.subject_code} {course.course_number}
-            </p>
-            {/* Course Title */}
-            <h3 className="mt-1 text-lg font-semibold text-slate-900 dark:text-white truncate group-hover:text-luminous-600 dark:group-hover:text-luminous-400 transition-colors">
-              {course.title}
-            </h3>
-            {/* Department */}
-            {course.department && (
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {course.department.name}
-              </p>
-            )}
-          </div>
-          {/* Status Badge and CCN Badge */}
-          <div className="flex flex-col items-end gap-1.5">
-            <StatusBadge status={course.status} />
-            {course.ccn_code && (
-              <CCNAlignmentBadgeCompact
-                alignment={{
-                  status: 'aligned',
-                  standard: { ccn_code: course.ccn_code, discipline: '', title: '', minimum_units: 0 },
-                }}
-              />
-            )}
-          </div>
-        </div>
+    <tr
+      className="group border-b border-hairline last:border-b-0 cursor-pointer transition-colors hover:bg-surface-2/60"
+      onClick={() => router.push(href)}
+    >
+      {/* Course code */}
+      <td className="py-[15px] px-6 align-middle font-mono text-sm text-ink whitespace-nowrap">
+        {course.subject_code} {course.course_number}
+      </td>
 
-        {/* Footer */}
-        <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-          <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
-            <span className="font-medium">{course.units} units</span>
+      {/* Title + department */}
+      <td className="py-[15px] px-6 align-middle">
+        <Link
+          href={href}
+          onClick={(e) => e.stopPropagation()}
+          className="font-serif text-base leading-5 text-ink-2 hover:text-navy
+                     focus:outline-none focus-visible:underline"
+        >
+          {course.title}
+        </Link>
+        {course.department && (
+          <p className="mt-0.5 font-sans text-xs text-muted truncate">{course.department.name}</p>
+        )}
+      </td>
+
+      {/* Units */}
+      <td className="py-[15px] px-6 align-middle text-right font-mono text-sm text-ink-2 tabular-nums">
+        {course.units.toFixed(1)}
+      </td>
+
+      {/* C-ID (CA articulation number) — closest real analog to transfer */}
+      <td className="py-[15px] px-6 align-middle text-center font-mono text-xs text-muted">
+        {course.c_id || '—'}
+      </td>
+
+      {/* Status seal */}
+      <td className="py-[15px] px-6 align-middle">
+        <StatusBadge status={course.status} />
+      </td>
+
+      {/* Updated + hover actions */}
+      <td className="py-[15px] px-6 align-middle">
+        <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+            <Link
+              href={`/courses/${course.id}/edit`}
+              onClick={(e) => e.stopPropagation()}
+              className="p-1 border border-hairline-strong bg-surface text-muted
+                         hover:text-navy hover:border-navy transition-colors"
+              title="Edit course"
+              aria-label={`Edit ${course.subject_code} ${course.course_number}`}
+            >
+              <PencilSquareIcon className="h-4 w-4" />
+            </Link>
+            {canDelete && (
+              <button
+                onClick={handleDelete}
+                className="p-1 border border-hairline-strong bg-surface text-muted
+                           hover:text-seal-returned hover:border-seal-returned transition-colors"
+                title="Delete course"
+                aria-label={`Delete ${course.subject_code} ${course.course_number}`}
+              >
+                <TrashIcon className="h-4 w-4" />
+              </button>
+            )}
           </div>
-          <span className="text-xs text-slate-500 dark:text-slate-400">
-            Updated {new Date(course.updated_at).toLocaleDateString()}
+          <span className="font-mono text-xs text-muted whitespace-nowrap tabular-nums">
+            {new Date(course.updated_at).toLocaleDateString('en-US', {
+              month: 'short',
+              day: '2-digit',
+            })}
           </span>
         </div>
-      </Link>
-
-      {/* Action buttons - only show on hover for draft courses */}
-      {canDelete && (
-        <div className="absolute top-3 right-20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-          <Link
-            href={`/courses/${course.id}/edit`}
-            onClick={(e) => e.stopPropagation()}
-            className="p-1.5 rounded-md bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-500 hover:text-luminous-600 hover:border-luminous-300 dark:hover:text-luminous-400 transition-colors shadow-sm"
-            title="Edit course"
-          >
-            <PencilSquareIcon className="h-4 w-4" />
-          </Link>
-          <button
-            onClick={handleDelete}
-            className="p-1.5 rounded-md bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-500 hover:text-red-600 hover:border-red-300 dark:hover:text-red-400 transition-colors shadow-sm"
-            title="Delete course"
-          >
-            <TrashIcon className="h-4 w-4" />
-          </button>
-        </div>
-      )}
-    </div>
+      </td>
+    </tr>
   );
 };
 
 // ===========================================
-// Loading State Component
+// Table Skeleton (loading)
 // ===========================================
 
-const LoadingState: React.FC = () => {
-  return (
-    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fadeIn">
-      {[...Array(9)].map((_, i) => (
-        <CourseCardSkeleton key={i} />
-      ))}
-    </div>
-  );
-};
+const TableSkeleton: React.FC = () => (
+  <div className="bg-surface border border-hairline animate-fadeIn">
+    {[...Array(8)].map((_, i) => (
+      <div key={i} className="flex items-center gap-6 py-[15px] px-6 border-b border-hairline last:border-b-0">
+        <div className="h-4 w-20 animate-shimmer" />
+        <div className="h-4 flex-1 animate-shimmer" />
+        <div className="h-4 w-10 animate-shimmer" />
+        <div className="h-5 w-20 animate-shimmer" />
+        <div className="h-4 w-16 animate-shimmer" />
+      </div>
+    ))}
+  </div>
+);
 
 // ===========================================
 // Pagination Component
@@ -180,40 +189,36 @@ interface PaginationProps {
   onPageChange: (page: number) => void;
 }
 
-const Pagination: React.FC<PaginationProps> = ({
-  page,
-  pages,
-  total,
-  limit,
-  onPageChange,
-}) => {
+const Pagination: React.FC<PaginationProps> = ({ page, pages, total, limit, onPageChange }) => {
   const start = (page - 1) * limit + 1;
   const end = Math.min(page * limit, total);
 
   if (pages <= 1) return null;
 
   return (
-    <div className="flex items-center justify-between mt-8 px-4 py-3 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-      <div className="text-sm text-slate-500 dark:text-slate-400">
-        Showing <span className="font-medium text-slate-900 dark:text-white">{start}</span> to{' '}
-        <span className="font-medium text-slate-900 dark:text-white">{end}</span> of{' '}
-        <span className="font-medium text-slate-900 dark:text-white">{total}</span> courses
+    <div className="flex items-center justify-between mt-6 px-4 py-3 bg-surface border border-hairline">
+      <div className="font-sans text-sm text-muted">
+        Showing <span className="font-mono text-ink tabular-nums">{start}</span>–
+        <span className="font-mono text-ink tabular-nums">{end}</span> of{' '}
+        <span className="font-mono text-ink tabular-nums">{total}</span> outlines
       </div>
       <div className="flex items-center gap-2">
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
           className="luminous-button-secondary px-3 py-2"
+          aria-label="Previous page"
         >
           <ChevronLeftIcon className="h-4 w-4" />
         </button>
-        <span className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300">
-          Page {page} of {pages}
+        <span className="px-3 font-mono text-sm text-ink-soft tabular-nums">
+          {page} / {pages}
         </span>
         <button
           onClick={() => onPageChange(page + 1)}
           disabled={page >= pages}
           className="luminous-button-secondary px-3 py-2"
+          aria-label="Next page"
         >
           <ChevronRightIcon className="h-4 w-4" />
         </button>
@@ -258,16 +263,12 @@ export default function CoursesPage() {
     setLoading(true);
     setError(null);
     try {
-      // Set token for authenticated requests
       const token = await getToken();
       if (token) {
         api.setToken(token);
       }
 
-      const params: Parameters<typeof api.listCourses>[0] = {
-        page,
-        limit,
-      };
+      const params: Parameters<typeof api.listCourses>[0] = { page, limit };
       if (debouncedSearch) params.search = debouncedSearch;
       if (statusFilter) params.status = statusFilter;
 
@@ -312,11 +313,8 @@ export default function CoursesPage() {
         api.setToken(token);
       }
       await api.deleteCourse(course.id);
-
-      // Invalidate course cache
       await invalidateCourseCache(course.id);
 
-      // Remove from local state
       setCourses((prev) => prev.filter((c) => c.id !== course.id));
       setTotal((prev) => prev - 1);
 
@@ -333,65 +331,76 @@ export default function CoursesPage() {
     }
   };
 
-  // Check if any filters are active
   const hasFilters = Boolean(debouncedSearch || statusFilter);
 
   return (
     <PageShell>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Courses</h1>
-            <p className="mt-1 text-slate-600 dark:text-slate-400">
-              Browse and manage Course Outlines of Record
+      <div className="max-w-[1200px] mx-auto px-6 lg:px-10 py-8">
+        {/* Document title block */}
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+          <div className="flex flex-col gap-2">
+            <p className="font-mono text-xs tracking-[0.16em] uppercase text-gold-ink">
+              Course Catalog
+            </p>
+            <h1 className="font-serif text-[32px] leading-[40px] font-semibold text-ink tracking-tight">
+              Course Outlines of Record
+            </h1>
+            <p className="font-mono text-sm text-muted tabular-nums">
+              {total} {total === 1 ? 'outline' : 'outlines'}
             </p>
           </div>
-          <Link href="/courses/new" className="luminous-button-primary">
-            <PlusIcon className="h-5 w-5 mr-2" />
+          <Link href="/courses/new" className="luminous-button-primary self-start sm:self-auto">
+            <PlusIcon className="h-4 w-4 mr-2" />
             New Course
           </Link>
         </div>
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          {/* Search */}
-          <div className="flex-1 relative">
-            <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search courses..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="luminous-input pl-10 w-full"
-            />
+        {/* Controls: status tabs + search */}
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between border-b border-hairline-strong mb-6">
+          <div className="flex flex-wrap items-end -mb-px" role="tablist" aria-label="Filter by status">
+            {STATUS_TABS.map((tab) => {
+              const active = statusFilter === tab.value;
+              return (
+                <button
+                  key={tab.label}
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => handleStatusChange(tab.value)}
+                  className={`py-[10px] px-[18px] border-b-2 font-sans text-sm transition-colors ${
+                    active
+                      ? 'border-navy text-ink font-semibold'
+                      : 'border-transparent text-muted hover:text-ink'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
 
-          {/* Status Filter */}
-          <div className="relative">
-            <FunnelIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => handleStatusChange(e.target.value as CourseStatus | '')}
-              className="luminous-select pl-10 pr-10 min-w-[180px]"
-            >
-              <option value="">All Statuses</option>
-              <option value="Draft">Draft</option>
-              <option value="DeptReview">Dept Review</option>
-              <option value="CurriculumCommittee">Committee</option>
-              <option value="ArticulationReview">Articulation</option>
-              <option value="Approved">Approved</option>
-            </select>
+          {/* Search */}
+          <div className="relative pb-2 lg:w-72">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search by course or title…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="Search courses"
+              className="w-full bg-surface border border-hairline-strong rounded-sm pl-9 pr-3 py-2
+                         font-sans text-sm text-ink placeholder:text-muted
+                         focus:outline-none focus:border-navy focus:ring-1 focus:ring-navy"
+            />
           </div>
         </div>
 
         {/* Error State */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-            <p className="text-red-700 dark:text-red-400">{error}</p>
+          <div className="mb-6 p-4 bg-surface border border-seal-returned" role="alert">
+            <p className="font-sans text-sm text-seal-returned">{error}</p>
             <button
               onClick={fetchCourses}
-              className="mt-2 text-sm font-medium text-red-600 dark:text-red-400 hover:underline"
+              className="mt-2 font-sans text-sm font-semibold text-navy hover:underline"
             >
               Try again
             </button>
@@ -399,23 +408,49 @@ export default function CoursesPage() {
         )}
 
         {/* Loading State */}
-        {loading && <LoadingState />}
+        {loading && <TableSkeleton />}
 
         {/* Empty State */}
         {!loading && !error && courses.length === 0 && (
           <EmptyCoursesState hasFilters={hasFilters} />
         )}
 
-        {/* Course Grid */}
+        {/* Ruled data table */}
         {!loading && !error && courses.length > 0 && (
           <>
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {courses.map((course) => (
-                <CourseCard key={course.id} course={course} onDelete={handleDeleteCourse} />
-              ))}
+            <div className="bg-surface border border-hairline overflow-x-auto">
+              <table className="w-full table-fixed border-collapse">
+                <caption className="sr-only">Course Outlines of Record</caption>
+                <thead>
+                  <tr className="bg-surface-2 border-b border-hairline-strong text-left">
+                    <th scope="col" className="w-[104px] py-[11px] px-6 font-sans text-[10px] tracking-[0.1em] uppercase font-semibold text-muted">
+                      Course
+                    </th>
+                    <th scope="col" className="py-[11px] px-6 font-sans text-[10px] tracking-[0.1em] uppercase font-semibold text-muted">
+                      Title
+                    </th>
+                    <th scope="col" className="w-[72px] py-[11px] px-6 text-right font-sans text-[10px] tracking-[0.1em] uppercase font-semibold text-muted">
+                      Units
+                    </th>
+                    <th scope="col" className="w-[120px] py-[11px] px-6 text-center font-sans text-[10px] tracking-[0.1em] uppercase font-semibold text-muted">
+                      C-ID
+                    </th>
+                    <th scope="col" className="w-[140px] py-[11px] px-6 font-sans text-[10px] tracking-[0.1em] uppercase font-semibold text-muted">
+                      Status
+                    </th>
+                    <th scope="col" className="w-[150px] py-[11px] px-6 text-right font-sans text-[10px] tracking-[0.1em] uppercase font-semibold text-muted">
+                      Updated
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {courses.map((course) => (
+                    <CourseRow key={course.id} course={course} onDelete={handleDeleteCourse} />
+                  ))}
+                </tbody>
+              </table>
             </div>
 
-            {/* Pagination */}
             <Pagination
               page={page}
               pages={pages}
