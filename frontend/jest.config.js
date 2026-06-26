@@ -66,15 +66,53 @@ const config = {
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
 
   // Coverage thresholds: a ratchet FLOOR set a couple points below the current
-  // measured global coverage so the gate can't flake but still fails the build
-  // if coverage regresses. Measured (2026-06): statements 6.07%, branches 5.72%,
-  // functions 5.41%, lines 6.28%. Raise these as coverage improves.
+  // measured coverage so the gate can't flake but still fails the build if
+  // coverage regresses.
+  //
+  // Measured overall coverage (2026-06, after high-risk-flow tests): statements
+  // 14.71%, branches 10.26%, functions 12.61%, lines 15.05% (up from ~6%).
+  //
+  // NOTE: Jest SUBTRACTS files matched by the per-path keys below from the
+  // `global` pool and applies `global` only to the *remaining* files. With the
+  // four high-risk modules pinned separately, the remaining-files coverage
+  // measures statements 7.09%, branches 6.25%, functions 6.20%, lines 7.29%, so
+  // the global floor is set a couple points under that to ratchet without
+  // flaking. The per-module pins below lock in the high coverage we added.
+  // Raise these as coverage improves.
   coverageThreshold: {
     global: {
-      branches: 4,
-      functions: 4,
-      lines: 5,
-      statements: 5,
+      branches: 5,
+      functions: 5,
+      lines: 6,
+      statements: 6,
+    },
+    // Pure compliance util (LMI data-age gating) — fully covered, keep it so.
+    './src/utils/lmiValidation.ts': {
+      branches: 95,
+      functions: 95,
+      lines: 95,
+      statements: 95,
+    },
+    // Form validation gating course/program creation.
+    './src/components/form/useFormValidation.ts': {
+      branches: 90,
+      functions: 95,
+      lines: 95,
+      statements: 95,
+    },
+    // Security-critical auth state machine.
+    './src/contexts/AuthContext.tsx': {
+      branches: 55,
+      functions: 60,
+      lines: 70,
+      statements: 70,
+    },
+    // API client: request building, auth header injection, error normalization.
+    './src/lib/api.ts': {
+      branches: 16,
+      functions: 25,
+      lines: 24,
+      statements: 22,
     },
   },
 };
