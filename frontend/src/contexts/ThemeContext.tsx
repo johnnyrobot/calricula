@@ -21,25 +21,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   // Get system preference
-  const getSystemTheme = (): 'light' | 'dark' => {
-    if (typeof window !== 'undefined') {
-      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-    }
-    return 'light';
-  };
+  // Academic theme is light-only ("dark parchment" is inauthentic to the
+  // register), so system preference always resolves to light.
+  const getSystemTheme = (): 'light' | 'dark' => 'light';
 
-  // Apply theme to document
-  const applyTheme = (newTheme: Theme) => {
+  // Apply theme to document. The academic redesign is light-only: the `dark`
+  // class is never applied, regardless of the requested/stored preference.
+  const applyTheme = (_newTheme: Theme) => {
     const root = document.documentElement;
-    const effectiveTheme = newTheme === 'system' ? getSystemTheme() : newTheme;
-
-    if (effectiveTheme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-
-    setResolvedTheme(effectiveTheme);
+    root.classList.remove('dark');
+    setResolvedTheme('light');
   };
 
   // Set theme and persist to localStorage

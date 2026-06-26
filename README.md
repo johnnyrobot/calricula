@@ -5,6 +5,35 @@
 
 An AI-assisted curriculum management platform that enables faculty to create, modify, and route Course Outlines of Record (CORs) and Programs through approval workflows.
 
+## Screenshots
+
+> A traditional academic "catalog of record" interface — parchment ground, navy crest, gold rules, and ruled data tables. Shown from the approved design mockups.
+
+**Courses — Course Outlines of Record**
+
+![Courses list: a ruled data table of Course Outlines of Record with course codes, titles, units, C-ID, status seals, and last-updated dates](docs/images/courses.png)
+
+**Dashboard**
+
+![Registrar's-desk dashboard showing status counts, the approvals queue, and recent curriculum activity](docs/images/dashboard.png)
+
+<details>
+<summary><strong>More screens</strong> — Course Outline of Record, CB Code Wizard, Approvals</summary>
+
+**Course Outline of Record** — the document/read view (centerpiece)
+
+![Course Outline of Record document view with units, requisites, student learning outcomes, and content](docs/images/course-outline.png)
+
+**CB Code Wizard** — natural language → 27 compliance codes
+
+![CB Code Wizard translating plain-language questions into Title 5 / PCAH compliance codes](docs/images/cb-code-wizard.png)
+
+**Approvals** — role-based review queue
+
+![Approvals queue showing Course Outlines of Record routed through the review workflow](docs/images/approvals.png)
+
+</details>
+
 ## Features
 
 - **AI-Assisted Authoring**: Google Gemini 2.5 Flash integration for intelligent suggestions
@@ -15,13 +44,13 @@ An AI-assisted curriculum management platform that enables faculty to create, mo
 - **Approval Workflows**: Role-based review process (Faculty → Department → Committee → Articulation → Approved)
 - **Program Management**: Degree and certificate program builder with 60-unit limit validation
 - **Labor Market Data**: BLS integration with occupational wages, employment projections, and county employment data
-- **Dark Mode Support**: Full light/dark theme with system preference detection
+- **Academic "Catalog of Record" Design**: Traditional collegiate interface — parchment ground, navy crest, gold rules, and ruled data tables (light-only, WCAG 2.2 AA)
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|------------|
-| Frontend | Next.js 15 (App Router) + Tailwind CSS + Luminous Design System |
+| Frontend | Next.js 15 (App Router) + Tailwind CSS + Academic Design System |
 | Backend | Python FastAPI + PostgreSQL + SQLModel ORM |
 | AI | Google Gemini 2.5 Flash with File Search API for RAG |
 | Auth | Firebase Authentication (Email/Password) |

@@ -118,3 +118,18 @@ coverage/
 # Linear Project State
 # ===========================================
 .linear_project.json
+
+# ===========================================
+# Session Handoff Notes (working scratch)
+# ===========================================
+/HANDOFF.md
+
+# ===========================================
+# Local Claude Code config, plugins, worktrees
+# ===========================================
+/.claude/
+
+# ===========================================
+# graphify knowledge-graph output (regenerable, multi-MB)
+# ===========================================
+/graphify-out/

@@ -264,10 +264,10 @@ const PageShell: React.FC<PageShellProps> = ({ children }) => {
   // Show loading state
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+      <div className="min-h-screen flex items-center justify-center bg-ground">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-luminous-600" />
-          <p className="text-slate-600 dark:text-slate-400">Loading...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-navy" />
+          <p className="text-muted">Loading...</p>
         </div>
       </div>
     );
@@ -276,17 +276,17 @@ const PageShell: React.FC<PageShellProps> = ({ children }) => {
   // Show loading while redirecting
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+      <div className="min-h-screen flex items-center justify-center bg-ground">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-luminous-600" />
-          <p className="text-slate-600 dark:text-slate-400">Redirecting to login...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-navy" />
+          <p className="text-muted">Redirecting to login...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+    <div className="min-h-screen bg-ground">
       {/* Skip to main content link for keyboard users */}
       <a href="#main-content" className="skip-link">
         Skip to main content
@@ -324,13 +324,13 @@ const PageShell: React.FC<PageShellProps> = ({ children }) => {
       {/* Main Content Area */}
       <div className="lg:pl-64">
         {/* Desktop Header - shown only on large screens */}
-        <header className="hidden lg:flex sticky top-0 z-30 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 h-16 items-center justify-end px-6 gap-2">
+        <header className="hidden lg:flex sticky top-0 z-30 bg-surface border-b border-hairline-strong h-16 items-center justify-end px-6 gap-2">
           <ThemeToggle />
           <NotificationBell />
         </header>
 
         {/* Mobile Header */}
-        <header className="sticky top-0 z-30 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 lg:hidden">
+        <header className="sticky top-0 z-30 bg-surface border-b border-hairline-strong lg:hidden">
           <div className="flex items-center justify-between h-16 px-4">
             <button
               onClick={() => setSidebarOpen(true)}
