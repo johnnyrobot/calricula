@@ -173,7 +173,7 @@ const EmptyState: React.FC = () => (
   <div className="text-center py-6">
     <CheckCircleIcon className="h-10 w-10 mx-auto text-slate-300 dark:text-slate-600 mb-3" />
     <p className="text-sm text-slate-600 dark:text-slate-400">
-      You're all caught up!
+      You&apos;re all caught up!
     </p>
     <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
       No new notifications

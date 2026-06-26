@@ -50,9 +50,10 @@ export default function LoginPage() {
       await login(email, password);
       // Redirect to dashboard on success
       router.push('/dashboard');
-    } catch (err: any) {
+    } catch (err) {
       // Map Firebase error codes to user-friendly messages
-      const errorMessage = getErrorMessage(err.code || err.message);
+      const firebaseErr = err as { code?: string; message?: string };
+      const errorMessage = getErrorMessage(firebaseErr.code || firebaseErr.message || '');
       setError(errorMessage);
     } finally {
       setIsSubmitting(false);

@@ -29,19 +29,22 @@ const eslintConfig = [
     // The Next.js 16 ESLint config newly enables the React Compiler rules from
     // eslint-plugin-react-hooks v6 and several stricter rules that the project
     // never enforced before (it previously shipped without an ESLint config).
-    // These flag pre-existing, functioning patterns across the codebase rather
-    // than anything introduced by the Next 16 / React 19 upgrade itself (the
-    // production build is clean and all unit tests pass). Surface them as
-    // warnings here so the new lint gate is usable; clearing this pre-existing
-    // tech debt is tracked as separate follow-up work, not part of this
-    // dependency migration.
+    //
+    // The two NON-behavioral groups have now been fixed and are enforced at the
+    // default `error` severity (no override needed): `react/no-unescaped-entities`
+    // (JSX text entities escaped) and `@typescript-eslint/no-explicit-any`
+    // (catch-clause `any`s narrowed to `unknown`/precise error shapes).
+    //
+    // The four remaining rules below are the React-Compiler hook rules. Fixing
+    // them is a behavioral refactor (e.g. removing setState-in-effect) that
+    // requires runtime test coverage we are deliberately not adding now, so they
+    // stay as warnings to keep the lint gate usable. Promoting them to errors is
+    // tracked as separate follow-up work.
     rules: {
       'react-hooks/set-state-in-effect': 'warn',
       'react-hooks/static-components': 'warn',
       'react-hooks/refs': 'warn',
       'react-hooks/immutability': 'warn',
-      'react/no-unescaped-entities': 'warn',
-      '@typescript-eslint/no-explicit-any': 'warn',
     },
   },
 ];
