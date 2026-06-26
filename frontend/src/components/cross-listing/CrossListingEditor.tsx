@@ -91,6 +91,7 @@ function CourseSearchModal({
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional imperative reset of local search state when the modal closes
       setSearch('');
       setCourses([]);
     }
@@ -650,6 +651,7 @@ export function CrossListingEditor({ courseId, readOnly = false }: CrossListingE
   }, [courseId, getToken, toast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; fetchCrossListings sets loading/result state (no data-fetch library in use)
     fetchCrossListings();
   }, [fetchCrossListings]);
 

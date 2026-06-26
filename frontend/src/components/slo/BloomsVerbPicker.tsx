@@ -271,6 +271,7 @@ export function BloomsVerbPicker({
   // Reset focused index when dropdown closes
   useEffect(() => {
     if (!isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional imperative reset of keyboard focus index when the dropdown closes
       setFocusedVerbIndex(-1);
     }
   }, [isOpen]);

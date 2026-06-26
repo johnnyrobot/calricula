@@ -20,6 +20,7 @@ export function AnimationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Check for reduced motion preference
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from the matchMedia external store (unavailable during SSR) on mount
     setPrefersReducedMotion(mediaQuery.matches);
 
     const handleChange = (e: MediaQueryListEvent) => {

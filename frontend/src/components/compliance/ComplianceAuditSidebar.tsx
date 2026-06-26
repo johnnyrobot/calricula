@@ -517,6 +517,7 @@ export function ComplianceAuditSidebar({
   // Run audit when sidebar opens or course changes
   useEffect(() => {
     if (isOpen && course?.id) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; runAudit sets loading/result state (no data-fetch library in use)
       runAudit();
     }
   }, [isOpen, course?.id, course?.title, course?.units, course?.lecture_hours,

@@ -232,6 +232,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           try {
             const devUser = JSON.parse(storedUser);
             console.log('[DEV MODE] Restored session for:', devUser.email);
+            // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring a persisted dev session from sessionStorage (external store) on mount
             setUser(devUser);
           } catch (e) {
             console.warn('[DEV MODE] Failed to restore session');

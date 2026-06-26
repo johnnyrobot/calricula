@@ -111,6 +111,7 @@ const NotificationItem: React.FC<NotificationItemProps> = ({
     >
       {/* Icon */}
       <div className={`flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center ${colorClass}`}>
+        {/* eslint-disable-next-line react-hooks/static-components -- Icon is a stable module-level heroicon selected by notification type, not a component created during render */}
         <Icon className="w-5 h-5" />
       </div>
 
@@ -190,6 +191,7 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ className = '' }) =
 
   // Fetch on mount and periodically
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; fetchNotifications sets loading/result state (no data-fetch library in use)
     fetchNotifications();
     // Refresh every 30 seconds
     const interval = setInterval(fetchNotifications, 30000);

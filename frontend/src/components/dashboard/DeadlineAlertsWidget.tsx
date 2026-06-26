@@ -239,6 +239,7 @@ export const DeadlineAlertsWidget: React.FC<DeadlineAlertsWidgetProps> = ({
   }, [getToken, draftThresholdDays, reviewThresholdDays]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; fetchData sets loading/result state (no data-fetch library in use)
     fetchData();
   }, [fetchData]);
 

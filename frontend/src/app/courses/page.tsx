@@ -284,6 +284,7 @@ export default function CoursesPage() {
   }, [page, debouncedSearch, statusFilter, limit, getToken]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; fetchCourses sets loading/result state (no data-fetch library in use)
     fetchCourses();
   }, [fetchCourses]);
 

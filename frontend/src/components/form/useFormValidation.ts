@@ -192,6 +192,7 @@ export function useFormValidation<T extends FieldConfigs>(
   const [submitted, setSubmittedState] = useState(false);
 
   const configsRef = useRef(fieldConfigs);
+  // eslint-disable-next-line react-hooks/refs -- latest-ref sync so the stable (empty-dep) memoized callbacks always read the current field configs
   configsRef.current = fieldConfigs;
 
   // Validate a single field
@@ -298,7 +299,7 @@ export function useFormValidation<T extends FieldConfigs>(
     .filter(([, error]) => error)
     .map(([field, message]) => ({
       field,
-      label: configsRef.current[field]?.label || field,
+      label: fieldConfigs[field]?.label || field,
       message: message!,
     }));
 

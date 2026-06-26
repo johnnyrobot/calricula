@@ -1011,6 +1011,7 @@ export default function CourseEditorPage() {
 
     if (!isAdmin && !isOwner) {
       // Set flag to prevent multiple redirects
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot guard flag gating an imperative redirect side effect
       setIsRedirecting(true);
       // Redirect to view page where reviewer actions are available
       toast.info(

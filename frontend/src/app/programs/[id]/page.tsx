@@ -213,6 +213,7 @@ export default function ProgramDetailPage() {
   }, [programId, getToken]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; fetchProgram sets loading/result state (no data-fetch library in use)
     fetchProgram();
   }, [fetchProgram]);
 
