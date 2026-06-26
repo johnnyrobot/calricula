@@ -388,6 +388,35 @@ class ComplianceService:
                 citation="Title 5 § 55002.5",
             ))
 
+        # Title 5 § 55002.5(b): units must be commensurate with the hours of
+        # student work. A course whose total student-learning hours far exceed
+        # the declared units (e.g. 96 hours awarded only 1 unit) under-credits
+        # students for the work required and generally should carry more units.
+        # This is the upper-bound complement to the UNIT-002 minimum check; it
+        # is advisory (WARN) to avoid failing legitimate high-contact courses.
+        if units > 0 and hours_per_unit > CONVENTIONAL_HOURS_PER_UNIT:
+            implied_units = calculated_total_hours / CONVENTIONAL_HOURS_PER_UNIT
+            results.append(ComplianceResult(
+                rule_id="UNIT-005",
+                rule_name="Units Commensurate with Hours (Title 5 § 55002.5)",
+                category=ComplianceCategory.TITLE_5,
+                status=ComplianceStatus.WARN,
+                message=(
+                    f"Total student learning hours ({calculated_total_hours}) = "
+                    f"{hours_per_unit:.1f} hours/unit, above the conventional "
+                    f"{CONVENTIONAL_HOURS_PER_UNIT} hours/unit. The declared "
+                    f"{units} unit(s) may under-credit students for the required work."
+                ),
+                section="Units & Hours",
+                citation="Title 5 § 55002.5(b)",
+                recommendation=(
+                    f"Consider whether the course should award more units: "
+                    f"{calculated_total_hours} hours implies ~{implied_units:.1f} units "
+                    f"at the {CONVENTIONAL_HOURS_PER_UNIT}-hour standard "
+                    f"(e.g., 96 hours typically warrants at least 2 units)."
+                ),
+            ))
+
         # Check for reasonable homework ratio (typically 2:1 for lectures)
         if lecture_hours > 0 and outside_hours > 0:
             homework_ratio = outside_hours / lecture_hours
