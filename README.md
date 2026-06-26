@@ -1,33 +1,48 @@
 # Calricula - Intelligent Curriculum Management System
 
-[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/johnnyphung-laccd/calricula)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/johnnyrobot/calricula)
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](LICENSE)
 
 An AI-assisted curriculum management platform that enables faculty to create, modify, and route Course Outlines of Record (CORs) and Programs through approval workflows.
 
 ## Screenshots
 
-> A traditional academic "catalog of record" interface — parchment ground, navy crest, gold rules, and ruled data tables. Shown from the approved design mockups.
+A traditional academic "catalog of record" interface — parchment ground, a deep‑navy index rail, and a single gold accent for rules and status seals, with Source Serif 4 display type and IBM Plex Mono numerals. Screens were authored in [Paper](https://paper.design) and exported to the live Tailwind theme. (Desktop; the redesign is light‑only.)
 
-**Courses — Course Outlines of Record**
+### Dashboard
 
-![Courses list: a ruled data table of Course Outlines of Record with course codes, titles, units, C-ID, status seals, and last-updated dates](docs/images/courses.png)
+![Registrar's-desk dashboard with status counts, the approvals queue, and recent curriculum activity](docs/images/dashboard.png)
 
-**Dashboard**
+### Courses & Course Outline of Record
 
-![Registrar's-desk dashboard showing status counts, the approvals queue, and recent curriculum activity](docs/images/dashboard.png)
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/courses.png" alt="Course Outlines of Record — ruled data table with codes, units, C-ID, and status seals" /></td>
+    <td width="50%"><img src="docs/images/course-outline.png" alt="Course Outline of Record — document view with units, requisites, SLOs, and content" /></td>
+  </tr>
+</table>
 
-**Course Outline of Record** — the document/read view (centerpiece)
+### SLO Editor & CB Code Wizard
 
-![Course Outline of Record document view with units, requisites, student learning outcomes, and content](docs/images/course-outline.png)
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/slo-editor.png" alt="Student Learning Outcomes editor with Bloom's verb picker and cognitive-level distribution" /></td>
+    <td width="50%"><img src="docs/images/cb-code-wizard.png" alt="CB Code Wizard translating plain-language questions into Title 5 / PCAH compliance codes" /></td>
+  </tr>
+</table>
 
-**CB Code Wizard** — natural language → 27 compliance codes
+### Approvals & Sign In
 
-![CB Code Wizard translating plain-language questions into Title 5 / PCAH compliance codes](docs/images/cb-code-wizard.png)
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/approvals.png" alt="Approvals review queue showing Course Outlines of Record routed through the workflow" /></td>
+    <td width="50%"><img src="docs/images/login.png" alt="Sign in" /></td>
+  </tr>
+</table>
 
-**Approvals** — role-based review queue
+### Design System
 
-![Approvals queue showing Course Outlines of Record routed through the review workflow](docs/images/approvals.png)
+![Academic design system — palette, type scale, status seals, and components](docs/images/design-system.png)
 
 ## Features
 
@@ -64,7 +79,7 @@ An AI-assisted curriculum management platform that enables faculty to create, mo
 
 ```bash
 # Clone the repository
-git clone https://github.com/johnnyphung-laccd/calricula.git
+git clone https://github.com/johnnyrobot/calricula.git
 cd calricula
 
 # Create environment file from template
