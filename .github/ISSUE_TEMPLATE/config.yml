@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report (private)
+    url: mailto:johnny@johnnyrobot.ai
+    about: Please report security vulnerabilities privately by email, not as a public issue.
+  - name: Question / discussion
+    url: https://github.com/johnnyrobot/calricula/discussions
+    about: For general questions and ideas, start a discussion.
