@@ -306,6 +306,7 @@ export default function ApprovalsPage() {
   // Fetch data on mount and when filters change
   useEffect(() => {
     if (user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; fetch callbacks set loading/result state (no data-fetch library in use)
       fetchCounts();
       fetchItems();
     }

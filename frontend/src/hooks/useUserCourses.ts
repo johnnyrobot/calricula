@@ -102,6 +102,7 @@ export function useUserCourses({
   // Auto-fetch on mount if enabled
   useEffect(() => {
     if (autoFetch) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; fetchCourses sets loading/result state (no data-fetch library in use)
       fetchCourses(initialQuery);
     }
   }, [autoFetch, initialQuery, cteOnly]);

@@ -30,21 +30,19 @@ const eslintConfig = [
     // eslint-plugin-react-hooks v6 and several stricter rules that the project
     // never enforced before (it previously shipped without an ESLint config).
     //
-    // The two NON-behavioral groups have now been fixed and are enforced at the
-    // default `error` severity (no override needed): `react/no-unescaped-entities`
-    // (JSX text entities escaped) and `@typescript-eslint/no-explicit-any`
-    // (catch-clause `any`s narrowed to `unknown`/precise error shapes).
-    //
-    // The four remaining rules below are the React-Compiler hook rules. Fixing
-    // them is a behavioral refactor (e.g. removing setState-in-effect) that
-    // requires runtime test coverage we are deliberately not adding now, so they
-    // stay as warnings to keep the lint gate usable. Promoting them to errors is
-    // tracked as separate follow-up work.
+    // All groups are now enforced at `error`:
+    // - `react/no-unescaped-entities` and `@typescript-eslint/no-explicit-any`
+    //   (non-behavioral, fixed in a prior PR);
+    // - the four React-Compiler hook rules below. Every remaining site has been
+    //   either fixed properly or annotated with a SCOPED, justified
+    //   `eslint-disable-next-line` (manual data-fetch effects, external-store
+    //   syncs, post-mount flags, prop-driven resets, dynamic-icon selection,
+    //   and the latest-ref pattern), so these are safe to enforce as errors.
     rules: {
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/static-components': 'warn',
-      'react-hooks/refs': 'warn',
-      'react-hooks/immutability': 'warn',
+      'react-hooks/set-state-in-effect': 'error',
+      'react-hooks/static-components': 'error',
+      'react-hooks/refs': 'error',
+      'react-hooks/immutability': 'error',
     },
   },
 ];

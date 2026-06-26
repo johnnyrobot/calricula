@@ -266,6 +266,7 @@ export default function BLSDataPage() {
   // Fetch projection data when OES data is loaded
   useEffect(() => {
     if (oesData.length > 0 && selectedOccupation) {
+      // eslint-disable-next-line react-hooks/immutability -- fetchProjectionData is a stable function declared later in the component; the effect runs post-render when the binding is initialized (TDZ is a static-analysis-only false positive)
       fetchProjectionData(selectedOccupation.code);
     }
   }, [oesData, selectedOccupation?.code]);
@@ -383,6 +384,7 @@ export default function BLSDataPage() {
   // Load initial data
   useEffect(() => {
     if (activeTab === 'oes' && oesData.length === 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; fetch callbacks set loading/result state (no data-fetch library in use)
       fetchOesData();
     } else if (activeTab === 'unemployment' && unemploymentData.length === 0) {
       fetchUnemploymentData();

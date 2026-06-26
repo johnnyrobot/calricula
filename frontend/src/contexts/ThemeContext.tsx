@@ -68,6 +68,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       console.warn('Failed to read theme preference:', error);
     }
     const initialTheme = savedTheme || 'light';
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is unavailable during SSR; theme is read post-mount to avoid a hydration mismatch
     setThemeState(initialTheme);
     applyTheme(initialTheme);
     setMounted(true);

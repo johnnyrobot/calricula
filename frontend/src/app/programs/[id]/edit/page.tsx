@@ -128,6 +128,7 @@ const CourseSearchModal: React.FC<CourseSearchModalProps> = ({
   // Reset on close
   useEffect(() => {
     if (!isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional imperative reset of local search state when the picker closes
       setSearch('');
       setCourses([]);
     }
@@ -399,6 +400,7 @@ export default function ProgramBuilderPage() {
   }, [programId, getToken]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; fetchProgram sets loading/result state (no data-fetch library in use)
     fetchProgram();
   }, [fetchProgram]);
 

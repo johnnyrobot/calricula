@@ -30,6 +30,7 @@ export default function LoginPage() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount flag to gate client-only redirect and avoid SSR hydration mismatch
     setMounted(true);
   }, []);
 
