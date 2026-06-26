@@ -192,7 +192,14 @@ def test_production_rejects_both_flags():
 
 @pytest.mark.unit
 def test_production_allows_flags_off():
-    s = Settings(ENVIRONMENT="production", AUTH_DEV_MODE=False, DEMO_MODE=False)
+    # Real ALLOWED_HOSTS are required in production (wildcard fails closed, see
+    # the ALLOWED_HOSTS guard tests below), so supply concrete hostnames here.
+    s = Settings(
+        ENVIRONMENT="production",
+        AUTH_DEV_MODE=False,
+        DEMO_MODE=False,
+        ALLOWED_HOSTS=["calricula.com", "api.calricula.com"],
+    )
     assert s.ENVIRONMENT == "production"
     assert s.AUTH_DEV_MODE is False
     assert s.DEMO_MODE is False
@@ -218,3 +225,51 @@ def test_default_environment_allows_dev_mode():
     s = Settings(AUTH_DEV_MODE=True)
     assert s.ENVIRONMENT != "production"
     assert s.AUTH_DEV_MODE is True
+
+
+# --- ALLOWED_HOSTS fail-closed guard (Host-header hardening) -----------------
+
+
+@pytest.mark.unit
+def test_production_rejects_wildcard_allowed_hosts():
+    """A wildcard trusted-host list is refused in production (Host-header risk)."""
+    with pytest.raises(ValidationError) as exc:
+        Settings(
+            ENVIRONMENT="production",
+            AUTH_DEV_MODE=False,
+            DEMO_MODE=False,
+            ALLOWED_HOSTS=["*"],
+        )
+    assert "ALLOWED_HOSTS" in str(exc.value)
+
+
+@pytest.mark.unit
+def test_production_rejects_empty_allowed_hosts():
+    """An empty trusted-host list is treated like a wildcard and refused."""
+    with pytest.raises(ValidationError) as exc:
+        Settings(
+            ENVIRONMENT="production",
+            AUTH_DEV_MODE=False,
+            DEMO_MODE=False,
+            ALLOWED_HOSTS=[],
+        )
+    assert "ALLOWED_HOSTS" in str(exc.value)
+
+
+@pytest.mark.unit
+def test_production_allows_real_allowed_hosts():
+    """Concrete hostnames satisfy the production guard."""
+    s = Settings(
+        ENVIRONMENT="production",
+        AUTH_DEV_MODE=False,
+        DEMO_MODE=False,
+        ALLOWED_HOSTS=["calricula.com", "api.calricula.com"],
+    )
+    assert s.ALLOWED_HOSTS == ["calricula.com", "api.calricula.com"]
+
+
+@pytest.mark.unit
+def test_non_production_allows_wildcard_allowed_hosts():
+    """Outside production, the wildcard default remains acceptable."""
+    s = Settings(ENVIRONMENT="development", ALLOWED_HOSTS=["*"])
+    assert s.ALLOWED_HOSTS == ["*"]
