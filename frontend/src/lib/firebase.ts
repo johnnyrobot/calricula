@@ -105,9 +105,10 @@ export const signIn = async (email: string, password: string) => {
   try {
     const userCredential = await signInWithEmailAndPassword(firebaseAuth, email, password);
     return userCredential;
-  } catch (error: any) {
+  } catch (error) {
     // Provide user-friendly error messages
-    const errorCode = error?.code || 'unknown';
+    const firebaseErr = error as { code?: string; message?: string };
+    const errorCode = firebaseErr?.code || 'unknown';
     const errorMessages: Record<string, string> = {
       'auth/invalid-email': 'Invalid email address format.',
       'auth/user-disabled': 'This account has been disabled.',
@@ -117,7 +118,7 @@ export const signIn = async (email: string, password: string) => {
       'auth/too-many-requests': 'Too many failed attempts. Please try again later.',
     };
 
-    throw new Error(errorMessages[errorCode] || `Authentication failed: ${error.message}`);
+    throw new Error(errorMessages[errorCode] || `Authentication failed: ${firebaseErr.message}`);
   }
 };
 
@@ -131,8 +132,9 @@ export const signOut = async () => {
 
   try {
     await firebaseSignOut(firebaseAuth);
-  } catch (error: any) {
-    throw new Error(`Sign out failed: ${error.message}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Sign out failed: ${message}`);
   }
 };
 

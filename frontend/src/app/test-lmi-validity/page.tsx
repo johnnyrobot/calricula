@@ -28,7 +28,7 @@ export default function LMIValidityTestPage() {
               Test 1: Valid Status (2 months old)
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Should display green check icon with "Valid" status
+              Should display green check icon with &quot;Valid&quot; status
             </p>
 
             <div className="space-y-4">
@@ -86,7 +86,7 @@ export default function LMIValidityTestPage() {
               Test 2: Warning Status (20 months old)
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Should display amber warning icon with "Warning" status and message
+              Should display amber warning icon with &quot;Warning&quot; status and message
             </p>
 
             <div className="space-y-4">
@@ -144,7 +144,7 @@ export default function LMIValidityTestPage() {
               Test 3: Invalid Status (35 months old)
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
-              Should display red X icon with "Invalid" status and blocking message
+              Should display red X icon with &quot;Invalid&quot; status and blocking message
             </p>
 
             <div className="space-y-4">
