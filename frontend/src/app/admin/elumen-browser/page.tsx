@@ -584,11 +584,13 @@ export default function ElumenBrowserPage() {
   }, [activeTab, selectedCollege, debouncedSearch, page, pageSize]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; fetchData sets loading/result state (no data-fetch library in use)
     fetchData();
   }, [fetchData]);
 
   // Reset page when tab or college changes
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional imperative reset of pagination when the active tab/college changes
     setPage(1);
     setItems([]);
     setTotal(0);

@@ -46,6 +46,7 @@ export function ConfirmDialog({
   // Reset input when dialog opens/closes
   useEffect(() => {
     if (isOpen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional imperative reset of dialog input state when it opens
       setInputValue('');
       setIsConfirming(false);
       // Focus on input if confirmation text required, otherwise cancel button

@@ -92,6 +92,7 @@ const ActivityItem: React.FC<ActivityItemProps> = ({ activity }) => {
     >
       {/* Icon */}
       <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${colorClass}`}>
+        {/* eslint-disable-next-line react-hooks/static-components -- Icon is a stable module-level heroicon selected by activity type, not a component created during render */}
         <Icon className="w-5 h-5" />
       </div>
 
@@ -272,6 +273,7 @@ export const ActivityTimeline: React.FC<ActivityTimelineProps> = ({
 
   // Initial fetch and refetch on filter change
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional pagination reset + manual refetch when the filter changes
     setOffset(0);
     fetchActivities(0, false);
   }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
