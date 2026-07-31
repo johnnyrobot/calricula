@@ -180,14 +180,22 @@ export async function verifyFreshCheckout() {
     const freshPublication = await sealPublicationPackage({
       cwd: canonicalCheckout,
     });
-    if (
-      freshSource !== source ||
-      filesystemSource !== source ||
-      freshArtifacts.fingerprint !== filesystemArtifacts.fingerprint ||
-      freshPublication.fingerprint !== filesystemPublication.fingerprint
-    ) {
+    const mismatches = [
+      ...(freshSource !== source ? ['recorded source'] : []),
+      ...(filesystemSource !== source ? ['filesystem source'] : []),
+      ...(freshArtifacts.fingerprint !== filesystemArtifacts.fingerprint
+        ? ['build artifacts']
+        : []),
+      ...(freshPublication.fingerprint !==
+      filesystemPublication.fingerprint
+        ? ['publication package']
+        : []),
+    ];
+    if (mismatches.length > 0) {
       throw new Error(
-        'The exact recorded commit did not reproduce the validated source, build, and publication fingerprints.',
+        `The exact recorded commit did not reproduce: ${mismatches.join(
+          ', ',
+        )}.`,
       );
     }
     for (const relativePath of [
