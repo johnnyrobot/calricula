@@ -13,9 +13,12 @@ import {
   parseDeployOutput,
   parseDeploymentStatus,
   parseReleaseVersionAbsence,
+  parseVersionDeployOutput,
+  parseVersionUploadOutput,
   parseVersionProof,
   parseWranglerIdentity,
   reconcilePublishedVersion,
+  resolveReleaseVersionByMessage,
   resolveCloudflareTargetSelection,
   validateOwnershipRecord,
   wranglerReadOnlyEnvironment,
@@ -228,7 +231,7 @@ describe('Cloudflare release target evidence', () => {
     ).toThrow('unambiguous');
   });
 
-  it('reconciles Wrangler deploy output with the exact target and message', () => {
+  it('reconciles Wrangler deploy output with the exact target and message', async () => {
     expect(
       parseDeployOutput(
         JSON.stringify({
@@ -246,6 +249,47 @@ describe('Cloudflare release target evidence', () => {
       origin: 'https://calricula-demo.owner.workers.dev',
       versionId: VERSION_ID,
     });
+    const versionOutput = [
+      JSON.stringify({
+        type: 'version-upload',
+        version: 1,
+        worker_name: 'calricula-demo',
+        version_id: VERSION_ID,
+        preview_url:
+          'https://22222222-calricula-demo.owner.workers.dev',
+      }),
+      JSON.stringify({
+        type: 'version-deploy',
+        version: 1,
+        worker_name: 'calricula-demo',
+        deployment_id: DEPLOYMENT_ID,
+        version_traffic: {},
+      }),
+    ].join('\n');
+    expect(
+      parseVersionUploadOutput(versionOutput, 'calricula-demo'),
+    ).toEqual({
+      origin: 'https://calricula-demo.owner.workers.dev',
+      previewOrigin:
+        'https://22222222-calricula-demo.owner.workers.dev',
+      versionId: VERSION_ID,
+    });
+    expect(
+      parseVersionDeployOutput(
+        versionOutput,
+        'calricula-demo',
+        VERSION_ID,
+      ),
+    ).toEqual({
+      deploymentId: DEPLOYMENT_ID,
+      versionId: VERSION_ID,
+    });
+    expect(() =>
+      parseVersionUploadOutput(
+        `${versionOutput}\n${versionOutput.split('\n')[0]}`,
+        'calricula-demo',
+      ),
+    ).toThrow('unambiguous');
     expect(
       parseVersionProof(
         result([
@@ -259,6 +303,45 @@ describe('Cloudflare release target evidence', () => {
         'calricula-full-proof',
       ),
     ).toEqual({ versionId: VERSION_ID });
+    await expect(
+      resolveReleaseVersionByMessage({
+        workerName: 'calricula-demo',
+        releaseMessage: 'calricula-full-proof',
+        runReadOnly: async () =>
+          result([
+            {
+              id: VERSION_ID,
+              metadata: { source: 'wrangler' },
+              annotations: {
+                'workers/message': 'calricula-full-proof',
+              },
+            },
+          ]),
+      }),
+    ).resolves.toEqual({ versionId: VERSION_ID });
+    await expect(
+      resolveReleaseVersionByMessage({
+        workerName: 'calricula-demo',
+        releaseMessage: 'calricula-full-proof',
+        runReadOnly: async () =>
+          result([
+            {
+              id: VERSION_ID,
+              metadata: { source: 'wrangler' },
+              annotations: {
+                'workers/message': 'calricula-full-proof',
+              },
+            },
+            {
+              id: '33333333-3333-4333-8333-333333333333',
+              metadata: { source: 'wrangler' },
+              annotations: {
+                'workers/message': 'calricula-full-proof',
+              },
+            },
+          ]),
+      }),
+    ).rejects.toThrow('unambiguous');
     expect(
       parseReleaseVersionAbsence(
         result([

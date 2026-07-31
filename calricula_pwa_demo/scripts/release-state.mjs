@@ -2,11 +2,14 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
   chmod,
+  cp,
   lstat,
+  mkdir,
   mkdtemp,
   readFile,
   readdir,
   realpath,
+  rename,
   rm,
   stat,
   writeFile,
@@ -14,6 +17,8 @@ import {
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+
+import { parseWranglerJsonc } from './wrangler-config.mjs';
 
 export class ReleaseStateError extends Error {}
 
@@ -67,6 +72,10 @@ async function collectFiles(directory, prefix) {
         relativePath,
         size: (await stat(absolutePath)).size,
       });
+    } else {
+      throw new ReleaseStateError(
+        `Release artifact is not a regular file: ${relativePath}`,
+      );
     }
   }
   return files;
@@ -120,6 +129,213 @@ export async function computeArtifactFingerprint(options = {}) {
     fingerprint: `sha256:${hash.digest('hex')}`,
     files: files.length,
     totalBytes,
+  };
+}
+
+async function publicationFiles(directory) {
+  const files = [];
+  for (const [child, prefix] of [
+    ['worker.js', 'worker.js'],
+    ['wrangler.jsonc', 'wrangler.jsonc'],
+  ]) {
+    const absolutePath = path.join(directory, child);
+    const file = await lstat(absolutePath);
+    if (!file.isFile() || file.isSymbolicLink()) {
+      throw new ReleaseStateError(
+        `Sealed publication input is not a regular file: ${child}`,
+      );
+    }
+    files.push({
+      absolutePath,
+      relativePath: prefix,
+      size: file.size,
+    });
+  }
+  files.push(...(await collectFiles(path.join(directory, 'out'), 'out')));
+  return files.sort((left, right) =>
+    left.relativePath.localeCompare(right.relativePath),
+  );
+}
+
+async function computePublicationFingerprint(directory) {
+  const files = await publicationFiles(directory);
+  const hash = createHash('sha256');
+  let totalBytes = 0;
+  for (const file of files) {
+    hash.update(file.relativePath);
+    hash.update('\0');
+    hash.update(await readFile(file.absolutePath));
+    hash.update('\0');
+    totalBytes += file.size;
+  }
+  return {
+    fingerprint: `sha256:${hash.digest('hex')}`,
+    files: files.length,
+    totalBytes,
+  };
+}
+
+async function makeReadOnly(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const absolutePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await makeReadOnly(absolutePath);
+      await chmod(absolutePath, 0o500);
+    } else if (entry.isFile()) {
+      await chmod(absolutePath, 0o400);
+    } else {
+      throw new ReleaseStateError(
+        `Sealed publication contains a non-regular entry: ${entry.name}`,
+      );
+    }
+  }
+}
+
+export async function sealPublicationPackage(options = {}) {
+  const cwd = path.resolve(options.cwd ?? process.cwd());
+  const sourceConfigPath = path.join(cwd, 'wrangler.jsonc');
+  const sourceWorkerPath = path.join(
+    cwd,
+    '.wrangler',
+    'dry-run',
+    'index.js',
+  );
+  const sourceAssetsPath = path.join(cwd, 'out');
+  let config;
+  try {
+    config = parseWranglerJsonc(
+      await readFile(sourceConfigPath, 'utf8'),
+    );
+    const worker = await lstat(sourceWorkerPath);
+    const assets = await lstat(sourceAssetsPath);
+    if (
+      !worker.isFile() ||
+      worker.isSymbolicLink() ||
+      !assets.isDirectory() ||
+      assets.isSymbolicLink()
+    ) {
+      throw new Error('invalid publication inputs');
+    }
+  } catch {
+    throw new ReleaseStateError(
+      'Validated Worker, asset, and Wrangler inputs are required before sealing.',
+    );
+  }
+
+  const root = path.join(cwd, '.release-artifacts', 'sealed');
+  await mkdir(root, { recursive: true, mode: 0o700 });
+  const temporary = await mkdtemp(path.join(root, '.pending-'));
+  try {
+    await cp(sourceWorkerPath, path.join(temporary, 'worker.js'), {
+      errorOnExist: true,
+      force: false,
+    });
+    await cp(sourceAssetsPath, path.join(temporary, 'out'), {
+      errorOnExist: true,
+      force: false,
+      recursive: true,
+    });
+    const sealedConfig = {
+      ...config,
+      main: './worker.js',
+      assets: {
+        ...config.assets,
+        directory: './out',
+      },
+      upload_source_maps: false,
+    };
+    await writeFile(
+      path.join(temporary, 'wrangler.jsonc'),
+      `${JSON.stringify(sealedConfig, null, 2)}\n`,
+      { encoding: 'utf8', flag: 'wx', mode: 0o600 },
+    );
+    const publication = await computePublicationFingerprint(temporary);
+    const destination = path.join(
+      root,
+      publication.fingerprint.slice('sha256:'.length),
+    );
+    const manifest = {
+      schemaVersion: 1,
+      createdAt: new Date().toISOString(),
+      publication,
+      workerEntry: 'worker.js',
+      assetsDirectory: 'out',
+      configFile: 'wrangler.jsonc',
+    };
+    await writeFile(
+      path.join(temporary, 'manifest.json'),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+      { encoding: 'utf8', flag: 'wx', mode: 0o600 },
+    );
+    try {
+      await rename(temporary, destination);
+      await makeReadOnly(destination);
+      await chmod(destination, 0o500);
+    } catch (error) {
+      if (error?.code !== 'EEXIST' && error?.code !== 'ENOTEMPTY') {
+        throw error;
+      }
+      await rm(temporary, { force: true, recursive: true });
+    }
+    return verifySealedPublicationPackage(
+      {
+        ...publication,
+        directory: destination,
+      },
+      { cwd },
+    );
+  } catch (error) {
+    await rm(temporary, { force: true, recursive: true }).catch(
+      () => undefined,
+    );
+    if (error instanceof ReleaseStateError) throw error;
+    throw new ReleaseStateError('The publication package could not be sealed.');
+  }
+}
+
+export async function verifySealedPublicationPackage(
+  expected,
+  options = {},
+) {
+  const cwd = path.resolve(options.cwd ?? process.cwd());
+  const root = await realpath(
+    path.join(cwd, '.release-artifacts', 'sealed'),
+  );
+  const directory = await realpath(expected?.directory ?? '');
+  if (
+    directory === root ||
+    !directory.startsWith(`${root}${path.sep}`) ||
+    !/^sha256:[0-9a-f]{64}$/.test(expected?.fingerprint ?? '')
+  ) {
+    throw new ReleaseStateError(
+      'Sealed publication metadata is invalid or outside the release directory.',
+    );
+  }
+  const manifestStat = await lstat(path.join(directory, 'manifest.json'));
+  if (!manifestStat.isFile() || manifestStat.isSymbolicLink()) {
+    throw new ReleaseStateError(
+      'Sealed publication manifest is not a regular file.',
+    );
+  }
+  const current = await computePublicationFingerprint(directory);
+  if (
+    current.fingerprint !== expected.fingerprint ||
+    current.files !== expected.files ||
+    current.totalBytes !== expected.totalBytes ||
+    path.basename(directory) !==
+      expected.fingerprint.slice('sha256:'.length)
+  ) {
+    throw new ReleaseStateError(
+      'Sealed publication bytes no longer match release evidence.',
+    );
+  }
+  return {
+    ...current,
+    directory,
+    configPath: path.join(directory, 'wrangler.jsonc'),
+    workerPath: path.join(directory, 'worker.js'),
+    assetsPath: path.join(directory, 'out'),
   };
 }
 

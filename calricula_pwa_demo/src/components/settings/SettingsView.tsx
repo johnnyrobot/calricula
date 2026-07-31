@@ -423,6 +423,9 @@ export function SettingsView() {
                 <Database aria-hidden="true" />
                 <span>
                   The worker does not persist or log prompt and response content.
+                  For abuse prevention, Cloudflare stores a pseudonymous,
+                  HMAC-derived browser identifier, daily attempt count,
+                  one-time request IDs, and expiry metadata for a short period.
                   Requests ask providers to deny data collection and use
                   zero-data-retention routing, but provider handling remains
                   subject to OpenRouter and provider policies.

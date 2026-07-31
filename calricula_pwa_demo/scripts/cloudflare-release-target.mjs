@@ -568,6 +568,99 @@ export function parseDeployOutput(text, workerName) {
   };
 }
 
+function parseWranglerOutputEntries(text) {
+  return String(text)
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return undefined;
+      }
+    })
+    .filter(Boolean);
+}
+
+export function parseVersionUploadOutput(text, workerName) {
+  const uploads = parseWranglerOutputEntries(text).filter(
+    (entry) =>
+      entry.type === 'version-upload' &&
+      entry.version === 1 &&
+      entry.worker_name === workerName,
+  );
+  if (uploads.length !== 1) {
+    throw new CloudflareTargetError(
+      'Wrangler did not record one unambiguous version upload.',
+    );
+  }
+  const upload = uploads[0];
+  if (
+    !UUID_PATTERN.test(upload.version_id ?? '') ||
+    typeof upload.preview_url !== 'string'
+  ) {
+    throw new CloudflareTargetError(
+      'Wrangler version upload evidence is incomplete.',
+    );
+  }
+  let preview;
+  try {
+    preview = new URL(upload.preview_url);
+  } catch {
+    throw new CloudflareTargetError(
+      'Wrangler version upload preview URL is invalid.',
+    );
+  }
+  const versionPrefix = upload.version_id.slice(0, 8);
+  const previewPrefix = `${versionPrefix}-${workerName}.`;
+  if (
+    preview.protocol !== 'https:' ||
+    preview.pathname !== '/' ||
+    preview.search ||
+    preview.hash ||
+    !preview.hostname.startsWith(previewPrefix) ||
+    !preview.hostname.endsWith('.workers.dev')
+  ) {
+    throw new CloudflareTargetError(
+      'Wrangler version upload did not report the expected workers.dev preview hostname.',
+    );
+  }
+  const stableHostname = preview.hostname.slice(
+    versionPrefix.length + 1,
+  );
+  return {
+    origin: `https://${stableHostname}`,
+    previewOrigin: preview.origin,
+    versionId: upload.version_id,
+  };
+}
+
+export function parseVersionDeployOutput(
+  text,
+  workerName,
+  versionId,
+) {
+  const deployments = parseWranglerOutputEntries(text).filter(
+    (entry) =>
+      entry.type === 'version-deploy' &&
+      entry.version === 1 &&
+      entry.worker_name === workerName,
+  );
+  if (
+    deployments.length !== 1 ||
+    !UUID_PATTERN.test(deployments[0].deployment_id ?? '') ||
+    !UUID_PATTERN.test(versionId ?? '')
+  ) {
+    throw new CloudflareTargetError(
+      'Wrangler did not record one unambiguous version deployment.',
+    );
+  }
+  return {
+    deploymentId: deployments[0].deployment_id,
+    versionId,
+  };
+}
+
 export function parseVersionProof(result, versionId, releaseMessage) {
   const versions = parseSuccessfulJson(
     result,
@@ -633,6 +726,56 @@ export async function confirmReleaseVersionAbsent({
     ]),
     expectedMessage,
   );
+}
+
+export async function confirmReleaseVersion({
+  workerName,
+  versionId,
+  releaseMessage: expectedMessage,
+  runReadOnly = runWranglerReadOnly,
+}) {
+  return parseVersionProof(
+    await runReadOnly([
+      'versions',
+      'list',
+      '--name',
+      workerName,
+      '--json',
+    ]),
+    versionId,
+    expectedMessage,
+  );
+}
+
+export async function resolveReleaseVersionByMessage({
+  workerName,
+  releaseMessage: expectedMessage,
+  runReadOnly = runWranglerReadOnly,
+}) {
+  const versions = parseSuccessfulJson(
+    await runReadOnly([
+      'versions',
+      'list',
+      '--name',
+      workerName,
+      '--json',
+    ]),
+    'Cloudflare release version lookup',
+  );
+  const matches = Array.isArray(versions)
+    ? versions.filter(
+        (entry) =>
+          entry?.metadata?.source === 'wrangler' &&
+          entry?.annotations?.['workers/message'] === expectedMessage &&
+          UUID_PATTERN.test(entry?.id ?? ''),
+      )
+    : [];
+  if (matches.length !== 1) {
+    throw new CloudflareTargetError(
+      'Cloudflare did not expose one unambiguous version for this release attempt.',
+    );
+  }
+  return { versionId: matches[0].id };
 }
 
 function workerNameFromConfig(wranglerConfig) {
@@ -1009,11 +1152,20 @@ export function releaseMessage({
   attemptId,
   sourceFingerprint,
   artifactFingerprint,
+  publicationFingerprint,
   gitCommit,
 }) {
-  if (!UUID_PATTERN.test(attemptId ?? '')) {
+  if (
+    !UUID_PATTERN.test(attemptId ?? '') ||
+    ![sourceFingerprint, artifactFingerprint, publicationFingerprint]
+      .every(
+        (value) =>
+          typeof value === 'string' && value.startsWith('sha256:'),
+      ) ||
+    !/^[0-9a-f]{40}$/i.test(gitCommit ?? '')
+  ) {
     throw new CloudflareTargetError(
-      'A unique release attempt ID is required.',
+      'A unique release attempt and complete release fingerprints are required.',
     );
   }
   const digest = createHash('sha256')
@@ -1023,6 +1175,7 @@ export function releaseMessage({
         attemptId,
         sourceFingerprint,
         artifactFingerprint,
+        publicationFingerprint,
         gitCommit,
       ].join('\0'),
     )

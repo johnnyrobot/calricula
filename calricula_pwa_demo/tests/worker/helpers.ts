@@ -5,6 +5,7 @@ import {
   type Env,
   type WorkerDependencies,
 } from "../../worker/index";
+import { createMemoryDailyQuotaNamespace } from "./quota-harness";
 
 export const APP_ORIGIN = "https://demo.calricula.test";
 export const NOW_MS = Date.UTC(2026, 6, 30, 12, 0, 0);
@@ -16,6 +17,7 @@ export const FREE_MODELS = [
   "qwen/qwen3-4b:free",
   "meta-llama/llama-3.3-8b-instruct:free",
 ] as const;
+let aiRequestSequence = 100;
 
 export type JsonEnvelope<T = unknown> = {
   success: boolean;
@@ -103,6 +105,7 @@ export function baseEnv(overrides: Partial<Env> = {}): Env {
     SESSION_RATE_LIMIT: {
       limit: vi.fn(async () => ({ success: true })),
     },
+    DAILY_AI_QUOTA: createMemoryDailyQuotaNamespace(),
     ...overrides,
   };
 }
@@ -249,6 +252,10 @@ export async function runAi(options: {
     options.env ?? baseEnv(),
     dependencies(fetchMock, {
       now: () => options.now ?? NOW_MS,
+      randomUUID: () =>
+        `00000000-0000-4000-8000-${String(
+          (aiRequestSequence += 1),
+        ).padStart(12, "0")}`,
       upstreamTimeoutMs: options.upstreamTimeoutMs ?? 100,
     }),
   );

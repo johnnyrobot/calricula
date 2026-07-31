@@ -15,8 +15,10 @@ import {
   isRealTurnstileSiteKey,
   requireCleanGitReleaseState,
   resolveTurnstileSiteKey,
+  sealPublicationPackage,
   siteKeyDigest,
 } from './release-state.mjs';
+import { assertTrackedReleaseInputs } from './release-inputs.mjs';
 
 export const RELEASE_GATE_STEPS = [
   'audit:production',
@@ -27,6 +29,7 @@ export const RELEASE_GATE_STEPS = [
   'release:clean-generated',
   'build',
   'deploy:dry-run',
+  'release:fresh-checkout',
   'test:e2e:full',
   'verify:production:local',
   'lighthouse:local',
@@ -97,11 +100,13 @@ export async function runNpmScript(script, options = {}) {
 }
 
 async function recordLocalGate(mode, steps, context) {
+  const sealedPublication = await sealPublicationPackage();
   const [sourceFingerprint, toolVersions, artifacts, git] = await Promise.all([
     computeReleaseFingerprint(),
     currentToolVersions(),
     computeArtifactFingerprint(),
     inspectGitReleaseState().then(requireCleanGitReleaseState),
+    assertTrackedReleaseInputs(),
   ]);
   if (
     git.commit !== context.git.commit ||
@@ -115,12 +120,17 @@ async function recordLocalGate(mode, steps, context) {
     await assertSiteKeyEmbedded(context.siteKey);
   }
   const evidence = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     mode,
     completedAt: new Date().toISOString(),
     sourceFingerprint,
     toolVersions,
     artifacts,
+    publication: {
+      fingerprint: sealedPublication.fingerprint,
+      files: sealedPublication.files,
+      totalBytes: sealedPublication.totalBytes,
+    },
     git: {
       commit: git.commit,
       tree: git.tree,
@@ -155,6 +165,7 @@ export async function runReleaseGate(argv = process.argv.slice(2)) {
   const git = requireCleanGitReleaseState(
     await inspectGitReleaseState(),
   );
+  await assertTrackedReleaseInputs();
   const siteKey = bootstrap
     ? ''
     : await resolveTurnstileSiteKey(process.env);

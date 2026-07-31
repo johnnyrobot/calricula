@@ -34,6 +34,12 @@ export default defineConfig({
             },
           },
         },
+        durableObjects: {
+          DAILY_AI_QUOTA: {
+            className: "DailyAiQuota",
+            useSQLite: true,
+          },
+        },
         serviceBindings: {
           ASSETS: () =>
             new Response("Static asset not available in Worker unit tests.", {

@@ -1,6 +1,8 @@
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
+import { readJsonWithinLimit } from './read-json-with-limit.mjs';
+
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
 const OPENROUTER_COMPLETIONS_URL = `${OPENROUTER_API_BASE}/chat/completions`;
 const REQUEST_TIMEOUT_MS = 60_000;
@@ -184,14 +186,6 @@ function parseModelList(value, label) {
   return value.data.filter(isRecord);
 }
 
-async function readBoundedJson(response) {
-  const body = await response.text();
-  if (Buffer.byteLength(body, 'utf8') > MAX_RESPONSE_BYTES) {
-    throw new Error('OpenRouter response exceeded the evaluation limit.');
-  }
-  return JSON.parse(body);
-}
-
 async function fetchJson(fetchFn, url, apiKey, options = {}) {
   const response = await fetchFn(url, {
     ...options,
@@ -205,7 +199,11 @@ async function fetchJson(fetchFn, url, apiKey, options = {}) {
     redirect: 'error',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
-  const payload = await readBoundedJson(response);
+  const payload = await readJsonWithinLimit(
+    response,
+    'OpenRouter response',
+    MAX_RESPONSE_BYTES,
+  );
   if (!response.ok) {
     throw new Error(`OpenRouter returned HTTP ${response.status}.`);
   }

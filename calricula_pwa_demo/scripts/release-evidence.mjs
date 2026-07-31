@@ -4,7 +4,6 @@ import {
   chmod,
   mkdir,
   readFile,
-  readdir,
   rename,
   writeFile,
 } from 'node:fs/promises';
@@ -14,6 +13,7 @@ import process from 'node:process';
 
 import { normalizeProductionOrigin } from './verify-production.mjs';
 import { parseWranglerJsonc } from './wrangler-config.mjs';
+import { collectReleaseInputFiles } from './release-inputs.mjs';
 
 const EVIDENCE_SCHEMA_VERSION = 2;
 const EVIDENCE_DIRECTORY = path.resolve(
@@ -76,31 +76,6 @@ const TOOL_DEPENDENCIES = {
   playwright: '@playwright/test',
   wrangler: 'wrangler',
 };
-
-const FINGERPRINT_ROOT_FILES = [
-  '.assetsignore',
-  '.env.example',
-  'README.md',
-  'eslint.config.mjs',
-  'lighthouse.thresholds.json',
-  'next.config.ts',
-  'package-lock.json',
-  'package.json',
-  'playwright.config.ts',
-  'postcss.config.mjs',
-  'tailwind.config.ts',
-  'tsconfig.json',
-  'vitest.config.ts',
-  'vitest.worker.config.ts',
-  'wrangler.jsonc',
-];
-const FINGERPRINT_DIRECTORIES = [
-  'e2e',
-  'public',
-  'scripts',
-  'src',
-  'worker',
-];
 
 export class ReleaseEvidenceError extends Error {}
 
@@ -276,45 +251,9 @@ export async function currentToolVersions() {
   return actual;
 }
 
-async function collectFiles(directory, prefix) {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    if (entry.name === '.DS_Store') continue;
-    const absolutePath = path.join(directory, entry.name);
-    const relativePath = path.posix.join(prefix, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await collectFiles(absolutePath, relativePath)));
-    } else if (entry.isFile()) {
-      files.push({ absolutePath, relativePath });
-    }
-  }
-  return files;
-}
-
-export async function computeReleaseFingerprint() {
-  const files = [];
-  for (const relativePath of FINGERPRINT_ROOT_FILES) {
-    try {
-      await readFile(path.resolve(process.cwd(), relativePath));
-      files.push({
-        absolutePath: path.resolve(process.cwd(), relativePath),
-        relativePath,
-      });
-    } catch {
-      // Optional config files are omitted consistently when absent.
-    }
-  }
-  for (const directory of FINGERPRINT_DIRECTORIES) {
-    files.push(
-      ...(await collectFiles(
-        path.resolve(process.cwd(), directory),
-        directory,
-      )),
-    );
-  }
-  files.sort((left, right) =>
-    left.relativePath.localeCompare(right.relativePath),
+export async function computeReleaseFingerprint(options = {}) {
+  const files = await collectReleaseInputFiles(
+    options.cwd ?? process.cwd(),
   );
 
   const hash = createHash('sha256');

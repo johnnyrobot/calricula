@@ -115,6 +115,10 @@ export function AIConsentGate({
               <ul className="mt-3 grid gap-2 text-sm text-[var(--ink-soft)] md:grid-cols-2">
                 <li>Suggestions are drafting aids, not compliance decisions.</li>
                 <li>The browser never receives the OpenRouter API key.</li>
+                <li>
+                  Cloudflare keeps only pseudonymous daily-quota metadata for
+                  abuse prevention, never curriculum or conversation content.
+                </li>
                 <li>Free-model availability and response quality can vary.</li>
                 <li>Nothing is changed until you choose Apply.</li>
               </ul>

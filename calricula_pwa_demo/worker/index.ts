@@ -20,6 +20,15 @@ export interface RateLimitBinding {
   limit(options: { key: string }): Promise<{ success: boolean }>;
 }
 
+export interface DailyQuotaStub {
+  fetch(request: Request): Promise<Response>;
+}
+
+export interface DailyQuotaNamespace {
+  idFromName(name: string): unknown;
+  get(id: unknown): DailyQuotaStub;
+}
+
 export interface Env {
   ASSETS: FetcherLike;
   OPENROUTER_API_KEY?: string;
@@ -30,6 +39,7 @@ export interface Env {
   OPENROUTER_FREE_MODELS?: string;
   GLOBAL_RATE_LIMIT?: RateLimitBinding;
   SESSION_RATE_LIMIT?: RateLimitBinding;
+  DAILY_AI_QUOTA?: DailyQuotaNamespace;
 }
 
 export interface WorkerDependencies {
@@ -61,13 +71,21 @@ type TaskName =
 type JsonRecord = Record<string, unknown>;
 
 type SessionPayload = {
-  v: 1;
+  v: 2;
   sid: string;
   installationHash: string;
   iat: number;
   exp: number;
-  day: string;
-  attempts: number;
+};
+
+export type QuotaReservation = {
+  allowed: boolean;
+  remaining: number;
+  retryAfterSeconds: number;
+};
+
+type InternalQuotaReservation = QuotaReservation & {
+  duplicate?: boolean;
 };
 
 type ApiEnvelope<T = unknown> = {
@@ -1315,8 +1333,8 @@ async function verifyTurnstile(
 }
 
 async function enforceRateLimits(env: Env, sessionKey: string): Promise<void> {
-  await enforceRateLimit(env.GLOBAL_RATE_LIMIT, "calricula-ai-global");
   await enforceRateLimit(env.SESSION_RATE_LIMIT, sessionKey);
+  await enforceRateLimit(env.GLOBAL_RATE_LIMIT, "calricula-ai-global");
 }
 
 async function enforceRateLimit(
@@ -1533,8 +1551,6 @@ function isValidSessionPayload(value: unknown): value is SessionPayload {
     "installationHash",
     "iat",
     "exp",
-    "day",
-    "attempts",
   ];
   if (
     Object.keys(value).length !== expectedKeys.length ||
@@ -1545,18 +1561,13 @@ function isValidSessionPayload(value: unknown): value is SessionPayload {
     return false;
   }
   return (
-    value.v === 1 &&
+    value.v === 2 &&
     typeof value.sid === "string" &&
     /^[A-Za-z0-9_-]{32}$/.test(value.sid) &&
     typeof value.installationHash === "string" &&
     /^[A-Za-z0-9_-]{43}$/.test(value.installationHash) &&
     Number.isSafeInteger(value.iat) &&
-    Number.isSafeInteger(value.exp) &&
-    typeof value.day === "string" &&
-    /^\d{4}-\d{2}-\d{2}$/.test(value.day) &&
-    Number.isSafeInteger(value.attempts) &&
-    Number(value.attempts) >= 0 &&
-    Number(value.attempts) <= MAX_DAILY_ATTEMPTS
+    Number.isSafeInteger(value.exp)
   );
 }
 
@@ -1587,22 +1598,134 @@ async function deriveInstallationIdentity(
   return { installationHash, sid };
 }
 
-async function existingSessionForInstallation(
-  request: Request,
-  secret: string,
+function quotaObject(
+  env: Env,
+  sessionId: string,
   now: number,
-  installationHash: string,
-): Promise<SessionPayload | undefined> {
-  try {
-    const existing = await verifySession(request, secret, now);
-    if (existing.installationHash === installationHash) {
-      return existing;
-    }
-  } catch {
-    // A fresh, successfully verified Turnstile challenge may replace an absent,
-    // expired, or damaged anonymous session.
+): DailyQuotaStub {
+  if (!env.DAILY_AI_QUOTA) {
+    throw new ApiError(
+      503,
+      "QUOTA_UNAVAILABLE",
+      "AI usage accounting is temporarily unavailable.",
+    );
   }
-  return undefined;
+  const day = utcDay(now);
+  try {
+    return env.DAILY_AI_QUOTA.get(
+      env.DAILY_AI_QUOTA.idFromName(`v1:${day}:${sessionId}`),
+    );
+  } catch {
+    throw new ApiError(
+      503,
+      "QUOTA_UNAVAILABLE",
+      "AI usage accounting is temporarily unavailable.",
+    );
+  }
+}
+
+function quotaExpiryMs(now: number): number {
+  const current = new Date(now * 1000);
+  return (
+    Date.UTC(
+      current.getUTCFullYear(),
+      current.getUTCMonth(),
+      current.getUTCDate() + 2,
+    )
+  );
+}
+
+function isQuotaResult(
+  value: unknown,
+): value is InternalQuotaReservation {
+  return (
+    isRecord(value) &&
+    typeof value.allowed === "boolean" &&
+    (value.duplicate === undefined ||
+      typeof value.duplicate === "boolean") &&
+    typeof value.remaining === "number" &&
+    Number.isSafeInteger(value.remaining) &&
+    value.remaining >= 0 &&
+    value.remaining <= MAX_DAILY_ATTEMPTS &&
+    typeof value.retryAfterSeconds === "number" &&
+    Number.isSafeInteger(value.retryAfterSeconds) &&
+    value.retryAfterSeconds > 0 &&
+    value.retryAfterSeconds <= 24 * 60 * 60
+  );
+}
+
+async function callQuota(
+  env: Env,
+  sessionId: string,
+  now: number,
+  path: "/status" | "/reserve",
+  requestId?: string,
+): Promise<InternalQuotaReservation> {
+  try {
+    const response = await quotaObject(env, sessionId, now).fetch(
+      new Request(`https://quota.internal${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          limit: MAX_DAILY_ATTEMPTS,
+          expiresAtMs: quotaExpiryMs(now),
+          retryAfterSeconds: secondsUntilNextUtcDay(now),
+          ...(requestId ? { requestId } : {}),
+        }),
+      }),
+    );
+    const result = await readJsonResponse(response, 4 * 1024);
+    if (!response.ok || !isQuotaResult(result)) {
+      throw new Error("invalid quota response");
+    }
+    return result;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    throw new ApiError(
+      503,
+      "QUOTA_UNAVAILABLE",
+      "AI usage accounting is temporarily unavailable.",
+    );
+  }
+}
+
+async function quotaStatus(
+  env: Env,
+  sessionId: string,
+  now: number,
+): Promise<number> {
+  return (await callQuota(env, sessionId, now, "/status")).remaining;
+}
+
+async function reserveDailyAttempt(
+  env: Env,
+  session: SessionPayload,
+  now: number,
+  requestId: string,
+): Promise<number> {
+  const result = await callQuota(
+    env,
+    session.sid,
+    now,
+    "/reserve",
+    requestId,
+  );
+  if (!result.allowed) {
+    throw new ApiError(
+      429,
+      "DAILY_LIMIT_EXCEEDED",
+      "This AI demo session has reached its daily request limit.",
+      result.retryAfterSeconds,
+    );
+  }
+  if (result.duplicate) {
+    throw new ApiError(
+      409,
+      "DUPLICATE_REQUEST",
+      "This AI request was already reserved and will not be sent twice.",
+    );
+  }
+  return result.remaining;
 }
 
 async function handleSessionRequest(
@@ -1645,31 +1768,23 @@ async function handleSessionRequest(
     dependencies.fetch ?? globalThis.fetch.bind(globalThis),
     dependencies.upstreamTimeoutMs ?? DEFAULT_UPSTREAM_TIMEOUT_MS,
   );
-  await enforceRateLimit(env.GLOBAL_RATE_LIMIT, "calricula-ai-global");
-
-  const existing = await existingSessionForInstallation(
-    request,
-    secret,
-    now,
-    identity.installationHash,
+  await enforceRateLimit(
+    env.GLOBAL_RATE_LIMIT,
+    "calricula-ai-session-challenge",
   );
-  const day = utcDay(now);
-  const attempts =
-    existing && existing.day === day ? existing.attempts : 0;
+  const remaining = await quotaStatus(env, identity.sid, now);
   const payload: SessionPayload = {
-    v: 1,
+    v: 2,
     sid: identity.sid,
     installationHash: identity.installationHash,
     iat: now,
     exp: now + SESSION_TTL_SECONDS,
-    day,
-    attempts,
   };
   const signedValue = await signSession(payload, secret);
   const response = successResponse(
     {
       expiresAt: new Date(payload.exp * 1000).toISOString(),
-      remainingDailyAttempts: MAX_DAILY_ATTEMPTS - attempts,
+      remainingDailyAttempts: remaining,
     },
     id,
   );
@@ -1679,30 +1794,6 @@ async function handleSessionRequest(
     SESSION_TTL_SECONDS,
     payload.exp,
   );
-}
-
-function incrementSessionAttempt(
-  payload: SessionPayload,
-  now: number,
-): SessionPayload {
-  // This signed-cookie counter is a user-facing convenience guard, not a
-  // monotonic server-side quota: an old or cleared cookie can reset it. The
-  // Cloudflare rate-limit bindings remain the hard abuse-control boundary.
-  const day = utcDay(now);
-  const attempts = payload.day === day ? payload.attempts : 0;
-  if (attempts >= MAX_DAILY_ATTEMPTS) {
-    throw new ApiError(
-      429,
-      "DAILY_LIMIT_EXCEEDED",
-      "This AI demo session has reached its five-request convenience limit for today.",
-      secondsUntilNextUtcDay(now),
-    );
-  }
-  return {
-    ...payload,
-    day,
-    attempts: attempts + 1,
-  };
 }
 
 async function handleAiRequest(
@@ -1728,8 +1819,8 @@ async function handleAiRequest(
   requireOpenRouterKey(env);
   parseFreeModels(env);
   await enforceRateLimits(env, `session:${session.sid}`);
-  const updatedSession = incrementSessionAttempt(session, now);
-  const signedValue = await signSession(updatedSession, secret);
+  await reserveDailyAttempt(env, session, now, id);
+  const signedValue = await signSession(session, secret);
 
   let response: Response;
   try {
@@ -1758,8 +1849,8 @@ async function handleAiRequest(
   return appendSessionCookie(
     response,
     signedValue,
-    Math.max(0, updatedSession.exp - now),
-    updatedSession.exp,
+    Math.max(0, session.exp - now),
+    session.exp,
   );
 }
 
@@ -2448,6 +2539,126 @@ export async function handleRequest(
       ),
       id,
     );
+  }
+}
+
+interface QuotaTransaction {
+  get<T>(key: string): Promise<T | undefined>;
+  put(key: string, value: unknown): Promise<void>;
+}
+
+interface QuotaStorage {
+  get<T>(key: string): Promise<T | undefined>;
+  setAlarm(time: number | Date): Promise<void>;
+  deleteAll(): Promise<void>;
+  transaction<T>(
+    closure: (transaction: QuotaTransaction) => Promise<T>,
+  ): Promise<T>;
+}
+
+interface QuotaState {
+  storage: QuotaStorage;
+}
+
+export class DailyAiQuota {
+  private readonly storage: QuotaStorage;
+
+  constructor(state: QuotaState) {
+    this.storage = state.storage;
+  }
+
+  async fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    if (
+      request.method !== "POST" ||
+      (url.pathname !== "/status" && url.pathname !== "/reserve")
+    ) {
+      return Response.json(
+        { error: "not found" },
+        { status: 404, headers: { "cache-control": "no-store" } },
+      );
+    }
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json(
+        { error: "invalid request" },
+        { status: 400, headers: { "cache-control": "no-store" } },
+      );
+    }
+    if (
+      !isRecord(body) ||
+      body.limit !== MAX_DAILY_ATTEMPTS ||
+      typeof body.retryAfterSeconds !== "number" ||
+      !Number.isSafeInteger(body.retryAfterSeconds) ||
+      body.retryAfterSeconds <= 0 ||
+      body.retryAfterSeconds > 24 * 60 * 60 ||
+      typeof body.expiresAtMs !== "number" ||
+      !Number.isSafeInteger(body.expiresAtMs) ||
+      body.expiresAtMs <= Date.now()
+    ) {
+      return Response.json(
+        { error: "invalid request" },
+        { status: 400, headers: { "cache-control": "no-store" } },
+      );
+    }
+    await this.storage.setAlarm(body.expiresAtMs);
+    if (url.pathname === "/status") {
+      const attempts = (await this.storage.get<number>("attempts")) ?? 0;
+      return Response.json(
+        {
+          allowed: attempts < MAX_DAILY_ATTEMPTS,
+          remaining: Math.max(0, MAX_DAILY_ATTEMPTS - attempts),
+          retryAfterSeconds: body.retryAfterSeconds,
+        },
+        { headers: { "cache-control": "no-store" } },
+      );
+    }
+    if (
+      typeof body.requestId !== "string" ||
+      !/^[A-Za-z0-9._:-]{1,128}$/.test(body.requestId)
+    ) {
+      return Response.json(
+        { error: "invalid request" },
+        { status: 400, headers: { "cache-control": "no-store" } },
+      );
+    }
+    const result = await this.storage.transaction(async (transaction) => {
+      const reservationKey = `request:${body.requestId}`;
+      const existing = await transaction.get<boolean>(reservationKey);
+      const attempts = (await transaction.get<number>("attempts")) ?? 0;
+      if (existing) {
+        return {
+          allowed: true,
+          duplicate: true,
+          remaining: Math.max(0, MAX_DAILY_ATTEMPTS - attempts),
+          retryAfterSeconds: body.retryAfterSeconds,
+        };
+      }
+      if (attempts >= MAX_DAILY_ATTEMPTS) {
+        return {
+          allowed: false,
+          remaining: 0,
+          retryAfterSeconds: body.retryAfterSeconds,
+        };
+      }
+      await transaction.put(reservationKey, true);
+      await transaction.put("attempts", attempts + 1);
+      return {
+        allowed: true,
+        duplicate: false,
+        remaining: MAX_DAILY_ATTEMPTS - attempts - 1,
+        retryAfterSeconds: body.retryAfterSeconds,
+      };
+    });
+    return Response.json(result, {
+      headers: { "cache-control": "no-store" },
+    });
+  }
+
+  async alarm(): Promise<void> {
+    await this.storage.deleteAll();
   }
 }
 

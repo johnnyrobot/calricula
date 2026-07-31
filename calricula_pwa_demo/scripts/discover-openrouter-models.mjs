@@ -1,6 +1,12 @@
 import { pathToFileURL } from "node:url";
 import process from "node:process";
 
+import {
+  ResponseDecodeError,
+  ResponseLimitError,
+  readJsonWithinLimit,
+} from "./read-json-with-limit.mjs";
+
 const OPENROUTER_API_BASE = "https://openrouter.ai/api/v1";
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_CATALOG_RESPONSE_BYTES = 4 * 1024 * 1024;
@@ -46,34 +52,19 @@ function parseModelList(value, label) {
 }
 
 async function readBoundedJson(response, label, maximumBytes) {
-  const contentLength = Number(response.headers.get("content-length"));
-  if (
-    Number.isFinite(contentLength) &&
-    contentLength > maximumBytes
-  ) {
-    throw new OpenRouterDiscoveryError(
-      `${label} exceeded the response-size limit.`,
-    );
-  }
-
-  let body;
   try {
-    body = await response.text();
-  } catch {
+    return await readJsonWithinLimit(response, label, maximumBytes);
+  } catch (error) {
+    if (error instanceof ResponseLimitError) {
+      throw new OpenRouterDiscoveryError(
+        `${label} exceeded the response-size limit.`,
+      );
+    }
+    if (error instanceof ResponseDecodeError) {
+      throw new OpenRouterDiscoveryError(error.message);
+    }
     throw new OpenRouterDiscoveryError(
       `${label} response could not be read.`,
-    );
-  }
-  if (Buffer.byteLength(body, "utf8") > maximumBytes) {
-    throw new OpenRouterDiscoveryError(
-      `${label} exceeded the response-size limit.`,
-    );
-  }
-  try {
-    return JSON.parse(body);
-  } catch {
-    throw new OpenRouterDiscoveryError(
-      `${label} did not return JSON.`,
     );
   }
 }

@@ -6,6 +6,7 @@ import {
   type RateLimitBinding,
   type WorkerDependencies,
 } from "./index";
+import { createMemoryDailyQuotaNamespace } from "../tests/worker/quota-harness";
 
 const APP_ORIGIN = "https://calricula.example.test";
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -129,6 +130,7 @@ function baseEnv(overrides: Partial<Env> = {}): Env {
     SESSION_RATE_LIMIT: {
       limit: vi.fn(async () => ({ success: true })),
     },
+    DAILY_AI_QUOTA: createMemoryDailyQuotaNamespace(),
     ...overrides,
   };
 }
@@ -247,6 +249,10 @@ function callsTo(
   url: string,
 ) {
   return harness.mock.mock.calls.filter(([input]) => inputUrl(input) === url);
+}
+
+function quotaRequestId(index: number): string {
+  return `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`;
 }
 
 async function sha256Hex(value: string): Promise<string> {
@@ -661,6 +667,11 @@ describe("Turnstile and signed anonymous sessions", () => {
         cookie,
         env,
         harness,
+        {
+          dependencies: {
+            randomUUID: () => quotaRequestId(index + 1),
+          },
+        },
       );
       expect(response.status).toBe(200);
       cookie = cookiePair(response);
@@ -672,6 +683,11 @@ describe("Turnstile and signed anonymous sessions", () => {
       cookie,
       env,
       harness,
+      {
+        dependencies: {
+          randomUUID: () => quotaRequestId(6),
+        },
+      },
     );
     const body = await responseBody(sixth);
 
@@ -680,9 +696,279 @@ describe("Turnstile and signed anonymous sessions", () => {
     expect(body.retryAfterSeconds).toBe(43_200);
     expect(callsTo(harness, OPENROUTER_URL)).toHaveLength(5);
   });
+
+  it("denies replay of the original valid cookie after five reservations", async () => {
+    const harness = createFetchHarness();
+    const env = baseEnv();
+    const { cookie: originalCookie } = await startSession(env, harness);
+
+    for (let index = 0; index < 5; index += 1) {
+      const response = await requestAi(
+        "/api/ai/chat",
+        `message ${index}`,
+        originalCookie,
+        env,
+        harness,
+        {
+          dependencies: {
+            randomUUID: () => quotaRequestId(index + 10),
+          },
+        },
+      );
+      expect(response.status).toBe(200);
+    }
+
+    const replay = await requestAi(
+      "/api/ai/chat",
+      "replayed cookie",
+      originalCookie,
+      env,
+      harness,
+      {
+        dependencies: {
+          randomUUID: () => quotaRequestId(20),
+        },
+      },
+    );
+    expect(replay.status).toBe(429);
+    expect((await responseBody(replay)).error).toMatchObject({
+      code: "DAILY_LIMIT_EXCEEDED",
+    });
+    expect(callsTo(harness, OPENROUTER_URL)).toHaveLength(5);
+  });
+
+  it("atomically permits exactly five of six concurrent reservations", async () => {
+    const harness = createFetchHarness();
+    const env = baseEnv();
+    const { cookie } = await startSession(env, harness);
+    const responses = await Promise.all(
+      Array.from({ length: 6 }, (_, index) =>
+        requestAi(
+          "/api/ai/chat",
+          `concurrent ${index}`,
+          cookie,
+          env,
+          harness,
+          {
+            dependencies: {
+              randomUUID: () => quotaRequestId(index + 30),
+            },
+          },
+        ),
+      ),
+    );
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      200,
+      200,
+      200,
+      200,
+      200,
+      429,
+    ]);
+    expect(callsTo(harness, OPENROUTER_URL)).toHaveLength(5);
+  });
+
+  it("preserves the server count across a fresh Turnstile session", async () => {
+    const harness = createFetchHarness();
+    const env = baseEnv();
+    const first = await startSession(env, harness);
+    for (let index = 0; index < 5; index += 1) {
+      expect(
+        (
+          await requestAi(
+            "/api/ai/chat",
+            `message ${index}`,
+            first.cookie,
+            env,
+            harness,
+            {
+              dependencies: {
+                randomUUID: () => quotaRequestId(index + 40),
+              },
+            },
+          )
+        ).status,
+      ).toBe(200);
+    }
+    const renewed = await startSession(env, harness);
+    expect(await responseBody(renewed.response)).toMatchObject({
+      data: { remainingDailyAttempts: 0 },
+    });
+    const denied = await requestAi(
+      "/api/ai/chat",
+      "renewed session",
+      renewed.cookie,
+      env,
+      harness,
+      {
+        dependencies: {
+          randomUUID: () => quotaRequestId(50),
+        },
+      },
+    );
+    expect(denied.status).toBe(429);
+  });
+
+  it("opens a new quota object on the next UTC day", async () => {
+    const harness = createFetchHarness();
+    const env = baseEnv();
+    const session = await startSession(env, harness);
+    for (let index = 0; index < 5; index += 1) {
+      await requestAi(
+        "/api/ai/chat",
+        `message ${index}`,
+        session.cookie,
+        env,
+        harness,
+        {
+          dependencies: {
+            randomUUID: () => quotaRequestId(index + 60),
+          },
+        },
+      );
+    }
+    const nextDay = FIXED_NOW + 24 * 60 * 60 * 1000;
+    const renewed = await startSession(env, harness, { now: nextDay });
+    const response = await requestAi(
+      "/api/ai/chat",
+      "next day",
+      renewed.cookie,
+      env,
+      harness,
+      {
+        now: nextDay,
+        dependencies: {
+          randomUUID: () => quotaRequestId(70),
+        },
+      },
+    );
+    expect(response.status).toBe(200);
+  });
+
+  it("fails closed when the daily quota store is unavailable", async () => {
+    const harness = createFetchHarness();
+    const initialEnv = baseEnv();
+    const session = await startSession(initialEnv, harness);
+    const response = await requestAi(
+      "/api/ai/chat",
+      "hello",
+      session.cookie,
+      baseEnv({
+        DAILY_AI_QUOTA: createMemoryDailyQuotaNamespace({
+          unavailable: true,
+        }),
+      }),
+      harness,
+      {
+        dependencies: {
+          randomUUID: () => quotaRequestId(80),
+        },
+      },
+    );
+    expect(response.status).toBe(503);
+    expect((await responseBody(response)).error).toMatchObject({
+      code: "QUOTA_UNAVAILABLE",
+    });
+    expect(callsTo(harness, OPENROUTER_URL)).toHaveLength(0);
+  });
+
+  it("does not double-count or resend a duplicate reservation ID", async () => {
+    const harness = createFetchHarness();
+    const env = baseEnv();
+    const session = await startSession(env, harness);
+    const dependenciesOverride = {
+      randomUUID: () => quotaRequestId(90),
+    };
+    const first = await requestAi(
+      "/api/ai/chat",
+      "hello",
+      session.cookie,
+      env,
+      harness,
+      { dependencies: dependenciesOverride },
+    );
+    const duplicate = await requestAi(
+      "/api/ai/chat",
+      "hello",
+      session.cookie,
+      env,
+      harness,
+      { dependencies: dependenciesOverride },
+    );
+    expect(first.status).toBe(200);
+    expect(duplicate.status).toBe(409);
+    expect((await responseBody(duplicate)).error).toMatchObject({
+      code: "DUPLICATE_REQUEST",
+    });
+    expect(callsTo(harness, OPENROUTER_URL)).toHaveLength(1);
+  });
 });
 
 describe("Cloudflare rate-limit bindings", () => {
+  it("never spends the global limiter when the session limiter rejects", async () => {
+    const harness = createFetchHarness();
+    const session = await startSession(baseEnv(), harness);
+    const sessionLimit = vi.fn(async () => ({ success: false }));
+    const globalLimit = vi.fn(async () => ({ success: true }));
+    const response = await requestAi(
+      "/api/ai/chat",
+      "hello",
+      session.cookie,
+      baseEnv({
+        SESSION_RATE_LIMIT: { limit: sessionLimit },
+        GLOBAL_RATE_LIMIT: { limit: globalLimit },
+      }),
+      harness,
+    );
+    expect(response.status).toBe(429);
+    expect(sessionLimit).toHaveBeenCalledOnce();
+    expect(globalLimit).not.toHaveBeenCalled();
+    expect(callsTo(harness, OPENROUTER_URL)).toHaveLength(0);
+  });
+
+  it("preserves shared capacity for a different accepted session", async () => {
+    const harness = createFetchHarness();
+    const first = await startSession(baseEnv(), harness, {
+      installationId: "installation-test-rejected",
+    });
+    const second = await startSession(baseEnv(), harness, {
+      installationId: "installation-test-accepted",
+    });
+    const sessionLimit = vi
+      .fn()
+      .mockResolvedValueOnce({ success: false })
+      .mockResolvedValueOnce({ success: true });
+    const globalLimit = vi.fn(async () => ({ success: true }));
+    const requestEnv = baseEnv({
+      SESSION_RATE_LIMIT: { limit: sessionLimit },
+      GLOBAL_RATE_LIMIT: { limit: globalLimit },
+    });
+    expect(
+      (
+        await requestAi(
+          "/api/ai/chat",
+          "rejected",
+          first.cookie,
+          requestEnv,
+          harness,
+        )
+      ).status,
+    ).toBe(429);
+    expect(
+      (
+        await requestAi(
+          "/api/ai/chat",
+          "accepted",
+          second.cookie,
+          requestEnv,
+          harness,
+        )
+      ).status,
+    ).toBe(200);
+    expect(globalLimit).toHaveBeenCalledOnce();
+    expect(callsTo(harness, OPENROUTER_URL)).toHaveLength(1);
+  });
+
   it("enforces a configured global limiter", async () => {
     const harness = createFetchHarness();
     const initialEnv = baseEnv();

@@ -6,6 +6,11 @@ import {
   AI_SESSION_COOKIE_NAME,
   resolveAiCanaryCredential,
 } from "./ai-canary-credential.mjs";
+import {
+  ResponseDecodeError,
+  ResponseLimitError,
+  readJsonWithinLimit,
+} from "./read-json-with-limit.mjs";
 
 const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_RESPONSE_BYTES = 512 * 1024;
@@ -70,17 +75,32 @@ function isRecord(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-async function readBoundedJson(response) {
-  const body = await response.text();
-  if (Buffer.byteLength(body, "utf8") > MAX_RESPONSE_BYTES) {
-    fail(`Response from ${new URL(response.url).pathname} exceeded 512 KiB.`);
-  }
+function responsePath(response) {
   try {
-    return JSON.parse(body);
+    return new URL(response.url).pathname;
   } catch {
-    fail(
-      `Response from ${new URL(response.url).pathname} was not valid JSON (HTTP ${response.status}).`,
+    return "the requested endpoint";
+  }
+}
+
+async function readBoundedJson(response) {
+  const path = responsePath(response);
+  try {
+    return await readJsonWithinLimit(
+      response,
+      `Response from ${path}`,
+      MAX_RESPONSE_BYTES,
     );
+  } catch (error) {
+    if (error instanceof ResponseLimitError) {
+      fail(`Response from ${path} exceeded 512 KiB.`);
+    }
+    if (error instanceof ResponseDecodeError) {
+      fail(
+        `Response from ${path} was not valid JSON (HTTP ${response.status}).`,
+      );
+    }
+    fail(`Response from ${path} could not be read.`);
   }
 }
 

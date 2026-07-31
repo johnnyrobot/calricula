@@ -1,6 +1,12 @@
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
+
+import {
+  collectDeployableFiles,
+  isClassifiedDeployableAsset,
+  scanFilesForSecretPatterns,
+} from './static-asset-validation.mjs';
 
 const CLOUDFLARE_FILE_LIMIT = 20_000;
 const CLOUDFLARE_ASSET_SIZE_LIMIT = 25 * 1024 * 1024;
@@ -22,17 +28,6 @@ const requiredFiles = [
   'icons/icon-maskable-512.png',
 ];
 
-const textExtensions = new Set([
-  '.css',
-  '.html',
-  '.js',
-  '.json',
-  '.mjs',
-  '.txt',
-  '.webmanifest',
-  '.xml',
-]);
-
 const secretPatterns = [
   {
     name: 'OpenRouter API key',
@@ -49,31 +44,9 @@ const secretPatterns = [
   },
 ];
 
-async function collectFiles(directory, prefix = '') {
-  const entries = await readdir(directory, { withFileTypes: true });
-  const files = [];
-
-  for (const entry of entries) {
-    const relativePath = path.posix.join(prefix, entry.name);
-    const absolutePath = path.join(directory, entry.name);
-
-    if (entry.isDirectory()) {
-      files.push(...(await collectFiles(absolutePath, relativePath)));
-    } else if (entry.isFile()) {
-      files.push({
-        relativePath,
-        absolutePath,
-        size: (await stat(absolutePath)).size,
-      });
-    }
-  }
-
-  return files;
-}
-
 let files;
 try {
-  files = await collectFiles(outputDirectory);
+  files = await collectDeployableFiles(outputDirectory);
 } catch (error) {
   console.error(
     `[build-validator] Cannot inspect ${outputDirectory}: ${
@@ -110,6 +83,12 @@ for (const file of files) {
     failures.push(`Source map must not be deployed: ${file.relativePath}`);
   }
 
+  if (!isClassifiedDeployableAsset(file.relativePath)) {
+    failures.push(
+      `Unclassified artifact must not be deployed: ${file.relativePath}`,
+    );
+  }
+
   if (
     file.relativePath === 'openrouter-llms-full.txt' ||
     file.relativePath.startsWith('docs/')
@@ -117,18 +96,11 @@ for (const file of files) {
     failures.push(`Excluded documentation was copied into out: ${file.relativePath}`);
   }
 
-  if (
-    textExtensions.has(path.extname(file.relativePath))
-  ) {
-    const content = await readFile(file.absolutePath, 'utf8');
-    for (const { name, pattern } of secretPatterns) {
-      pattern.lastIndex = 0;
-      if (pattern.test(content)) {
-        failures.push(`${name} pattern found in ${file.relativePath}`);
-      }
-    }
-  }
 }
+
+failures.push(
+  ...(await scanFilesForSecretPatterns(files, secretPatterns)),
+);
 
 if (filePaths.has('sw.js')) {
   const serviceWorker = await readFile(

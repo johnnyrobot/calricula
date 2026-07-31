@@ -4,6 +4,7 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-07-29",
   "workers_dev": true,
+  "preview_urls": true,
   "vars": {
     // Fail closed on an accidental first deployment. Before enabling AI,
     // replace APP_ORIGIN with the exact deployed origin and configure the
@@ -39,6 +40,22 @@
         "limit": 2,
         "period": 60
       }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DAILY_AI_QUOTA",
+        "class_name": "DailyAiQuota"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": [
+        "DailyAiQuota"
+      ]
     }
   ],
   "observability": {

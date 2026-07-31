@@ -2,6 +2,8 @@ import {
   chmod,
   mkdir,
   mkdtemp,
+  readFile,
+  readdir,
   rm,
   writeFile,
 } from 'node:fs/promises';
@@ -16,9 +18,11 @@ import {
   gitReleaseEnvironment,
   requireCleanGitReleaseState,
   resolveReleaseSecretsFile,
+  sealPublicationPackage,
   sealReleaseSecretsFile,
   siteKeyDigest,
   validateReleaseSecrets,
+  verifySealedPublicationPackage,
 } from './release-state.mjs';
 
 const temporaryDirectories = [];
@@ -50,11 +54,30 @@ async function fixture() {
   return cwd;
 }
 
+async function unlockTree(directory) {
+  let entries;
+  try {
+    await chmod(directory, 0o700);
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const absolutePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await unlockTree(absolutePath);
+    } else {
+      await chmod(absolutePath, 0o600);
+    }
+  }
+}
+
 afterEach(async () => {
   await Promise.all(
-    temporaryDirectories.splice(0).map((directory) =>
-      rm(directory, { force: true, recursive: true }),
-    ),
+    temporaryDirectories.splice(0).map(async (directory) => {
+      await unlockTree(directory);
+      await rm(directory, { force: true, recursive: true });
+    }),
   );
 });
 
@@ -81,6 +104,48 @@ describe('release artifact state', () => {
     const after = await computeArtifactFingerprint({ cwd });
     expect(after.fingerprint).not.toBe(before.fingerprint);
     expect(after.files).toBe(before.files);
+  });
+
+  it('seals exact Worker, asset, and effective configuration bytes', async () => {
+    const cwd = await fixture();
+    const sealed = await sealPublicationPackage({ cwd });
+    const workerBefore = await readFile(sealed.workerPath, 'utf8');
+    await writeFile(
+      path.join(cwd, '.wrangler', 'dry-run', 'index.js'),
+      'export default { changed: true };',
+    );
+    await writeFile(path.join(cwd, 'out', 'app.js'), 'changed');
+    await writeFile(
+      path.join(cwd, 'wrangler.jsonc'),
+      '{"name":"changed"}',
+    );
+    await expect(
+      verifySealedPublicationPackage(sealed, { cwd }),
+    ).resolves.toMatchObject({
+      fingerprint: sealed.fingerprint,
+      files: sealed.files,
+      totalBytes: sealed.totalBytes,
+    });
+    await expect(readFile(sealed.workerPath, 'utf8')).resolves.toBe(
+      workerBefore,
+    );
+    const changed = await sealPublicationPackage({ cwd });
+    expect(changed.fingerprint).not.toBe(sealed.fingerprint);
+  });
+
+  it.each([
+    ['Worker', 'worker.js'],
+    ['asset', path.join('out', 'app.js')],
+    ['configuration', 'wrangler.jsonc'],
+  ])('rejects changed sealed %s bytes', async (_kind, relativePath) => {
+    const cwd = await fixture();
+    const sealed = await sealPublicationPackage({ cwd });
+    const target = path.join(sealed.directory, relativePath);
+    await chmod(target, 0o600);
+    await writeFile(target, 'tampered');
+    await expect(
+      verifySealedPublicationPackage(sealed, { cwd }),
+    ).rejects.toThrow('no longer match');
   });
 
   it('proves the exact expected site key is compiled without exposing it', async () => {

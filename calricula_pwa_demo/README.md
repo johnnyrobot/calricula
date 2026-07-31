@@ -212,9 +212,12 @@ then a separately sealed AI-enabled release.
 
 Both release gates require the Calricula demo source to be committed and clean.
 The gate records the exact Git commit and subtree, source fingerprint,
-validated `out/` plus Worker dry-run fingerprint, executed tool versions, and
-the steps that passed. Any later source, output, config, site-key, or tool
-change invalidates the seal.
+validated `out/` plus Worker dry-run fingerprint, a separate digest for the
+sealed publication package (Worker bytes, assets, and effective Wrangler
+configuration), executed tool versions, and the steps that passed. It also
+rebuilds the recorded commit from a Git archive and requires identical source,
+artifact, and publication digests. Any later source, output, config, site-key,
+or tool change invalidates the seal.
 
 Use `CLOUDFLARE_ACCOUNT_ID` as the only account selector; do not add
 `account_id` to `wrangler.jsonc`. Guarded releases reject Wrangler staging/API
@@ -355,10 +358,11 @@ The stage command:
 2. verifies the immutable ownership record and exact current Cloudflare
    deployment/version;
 3. repeats that read-only target check immediately before the publish;
-4. deploys through the pinned local Wrangler with `--strict`, an exact release
-   message, and the external secrets file;
-5. records Wrangler's direct JSONL version ID before bounded Cloudflare
-   reconciliation;
+4. uploads the validated dry-run Worker, exact static assets, effective
+   configuration, and external secrets from the sealed package using
+   `wrangler versions upload --no-bundle --strict`;
+5. records Wrangler's direct JSONL version ID and attempt-unique version tag,
+   then promotes exactly that ID at 100% with `wrangler versions deploy`;
 6. saves exact active and rollback deployment/version IDs, writes the
    recoverable staged marker, and only then archives the pending attempt;
 7. runs the production verifier, mobile Lighthouse audits, and all five browser
@@ -433,8 +437,10 @@ after an AI-disabled bootstrap.
 There is an unavoidable narrow race between the final Cloudflare status read
 and the deployment API write because Wrangler does not expose a conditional
 "deploy only if version still equals X" option. The automation minimizes it
-with a second immediate read and proves that the resulting version is the
-version Wrangler just uploaded.
+with a second immediate read, uploads the sealed package only once, and proves
+that the active version is the exact captured version ID. If upload succeeds
+but promotion is interrupted, a rerun discovers the attempt-unique uploaded
+version and promotes that same ID instead of rebuilding or uploading again.
 
 ## Cloudflare and privacy boundaries
 
@@ -451,9 +457,13 @@ version Wrangler just uploaded.
   Cloudflare to OpenRouter and a third-party model.
 - Cloudflare rate-limit bindings provide the operational per-minute guardrails,
   but their counters are location-local and eventually consistent rather than
-  an accounting system. The five-attempt display is also a convenience counter
-  in the signed anonymous session cookie, not a durable account-level daily
-  quota; clearing or replaying browser session state can reset it.
+  an accounting system. A SQLite-backed Durable Object enforces the separate
+  five-attempt UTC-day quota atomically. It stores only an HMAC-derived
+  installation identifier, attempt count, one-time request IDs, and expiry
+  metadata—never prompts, responses, curriculum text, IP addresses, or
+  identities. The signed cookie authenticates the anonymous session only; its
+  displayed remaining count is informational, while the server-side quota is
+  authoritative.
 - Do not enter student records, credentials, or other private data in the demo
   or its AI assistant.
 

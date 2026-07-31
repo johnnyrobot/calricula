@@ -26,7 +26,8 @@ import {
   validateDeploymentEnvironment,
   validateLocalGateEvidence,
   validateStageVerificationMarkers,
-  wranglerDeployArguments,
+  wranglerVersionDeployArguments,
+  wranglerVersionUploadArguments,
 } from './release-deploy.mjs';
 import {
   BOOTSTRAP_RELEASE_GATE_STEPS,
@@ -62,6 +63,11 @@ const ARTIFACTS = {
   fingerprint: 'sha256:artifact',
   files: 100,
   totalBytes: 1_000_000,
+};
+const PUBLICATION = {
+  fingerprint: 'sha256:publication',
+  files: 99,
+  totalBytes: 900_000,
 };
 const GIT = {
   commit: 'a'.repeat(40),
@@ -242,12 +248,14 @@ describe('release command topology', () => {
         '22222222-2222-4222-8222-222222222222',
       sourceFingerprint: 'sha256:source',
       artifactFingerprint: 'sha256:artifact',
+      publicationFingerprint: 'sha256:publication',
       gitCommit: GIT.commit,
       releaseMessage: releaseMessage({
         mode: 'full',
         attemptId: ATTEMPT_ID,
         sourceFingerprint: 'sha256:source',
         artifactFingerprint: 'sha256:artifact',
+        publicationFingerprint: 'sha256:publication',
         gitCommit: GIT.commit,
       }),
     };
@@ -357,12 +365,14 @@ describe('release command topology', () => {
           '22222222-2222-4222-8222-222222222222',
         sourceFingerprint: 'sha256:source',
         artifactFingerprint: 'sha256:artifact',
+        publicationFingerprint: 'sha256:publication',
         gitCommit: GIT.commit,
         releaseMessage: releaseMessage({
           mode: 'full',
           attemptId: ATTEMPT_ID,
           sourceFingerprint: 'sha256:source',
           artifactFingerprint: 'sha256:artifact',
+          publicationFingerprint: 'sha256:publication',
           gitCommit: GIT.commit,
         }),
       }),
@@ -395,6 +405,7 @@ describe('release command topology', () => {
       releaseMessage: 'calricula-full-proof',
       sourceFingerprint: 'sha256:source',
       artifactFingerprint: 'sha256:artifact',
+      publicationFingerprint: 'sha256:publication',
       gitCommit: 'a'.repeat(40),
       openRouterCredentialFingerprint: `sha256:${'b'.repeat(64)}`,
     };
@@ -554,23 +565,51 @@ describe('release command topology', () => {
     }
   });
 
-  it('pins the only Wrangler mutation to the exact config and Worker name', () => {
+  it('uploads and promotes only the sealed package and exact version ID', () => {
+    const sealedPublication = {
+      configPath: '/private/sealed/wrangler.jsonc',
+    };
     expect(
-      wranglerDeployArguments(
-        'calricula-full-proof',
-        '/private/sealed.env',
-      ),
+      wranglerVersionUploadArguments({
+        attemptId: ATTEMPT_ID,
+        message: 'calricula-full-proof',
+        sealedPublication,
+        secretsFile: '/private/sealed.env',
+      }),
     ).toEqual([
-      'deploy',
+      'versions',
+      'upload',
       '--config',
-      expect.stringMatching(/\/wrangler\.jsonc$/),
+      '/private/sealed/wrangler.jsonc',
       '--name',
       'calricula-demo',
+      '--no-bundle',
       '--strict',
+      '--tag',
+      `release-${ATTEMPT_ID}`,
       '--message',
       'calricula-full-proof',
       '--secrets-file',
       '/private/sealed.env',
+    ]);
+    expect(
+      wranglerVersionDeployArguments({
+        message: 'calricula-full-proof',
+        sealedPublication,
+        versionId:
+          '44444444-4444-4444-8444-444444444444',
+      }),
+    ).toEqual([
+      'versions',
+      'deploy',
+      '44444444-4444-4444-8444-444444444444@100',
+      '--config',
+      '/private/sealed/wrangler.jsonc',
+      '--name',
+      'calricula-demo',
+      '--message',
+      'calricula-full-proof',
+      '--yes',
     ]);
   });
 
@@ -579,6 +618,7 @@ describe('release command topology', () => {
       mode: 'full',
       sourceFingerprint: 'sha256:source',
       artifactFingerprint: 'sha256:artifact',
+      publicationFingerprint: 'sha256:publication',
       gitCommit: GIT.commit,
     };
     expect(
@@ -600,17 +640,20 @@ describe('release deployment preflight', () => {
     const localGate = {
       sourceFingerprint: 'sha256:source',
       artifacts: ARTIFACTS,
+      publication: PUBLICATION,
       git: GIT,
     };
     const current = {
       attemptId: ATTEMPT_ID,
       artifactFingerprint: localGate.artifacts.fingerprint,
+      publicationFingerprint: localGate.publication.fingerprint,
       gitCommit: localGate.git.commit,
       releaseMessage: releaseMessage({
         mode: 'full',
         attemptId: ATTEMPT_ID,
         sourceFingerprint: localGate.sourceFingerprint,
         artifactFingerprint: localGate.artifacts.fingerprint,
+        publicationFingerprint: localGate.publication.fingerprint,
         gitCommit: localGate.git.commit,
       }),
       sourceFingerprint: localGate.sourceFingerprint,
@@ -735,12 +778,13 @@ describe('release deployment preflight', () => {
 
   it('rejects mutated artifacts and site-key mismatches after a gate seal', () => {
     const evidence = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       mode: 'full',
       completedAt: '2026-07-30T06:00:00.000Z',
       sourceFingerprint: 'sha256:source',
       toolVersions: TOOL_VERSIONS,
       artifacts: ARTIFACTS,
+      publication: PUBLICATION,
       git: GIT,
       turnstileSiteKeyDigest: 'sha256:site-key',
       steps: RELEASE_GATE_STEPS,
@@ -751,6 +795,7 @@ describe('release deployment preflight', () => {
       sourceFingerprint: 'sha256:source',
       toolVersions: TOOL_VERSIONS,
       artifacts: ARTIFACTS,
+      publication: PUBLICATION,
       git: GIT,
       turnstileSiteKeyDigest: 'sha256:site-key',
       now: Date.parse('2026-07-30T06:30:00.000Z'),
@@ -762,6 +807,15 @@ describe('release deployment preflight', () => {
         artifacts: {
           ...ARTIFACTS,
           fingerprint: 'sha256:mutated',
+        },
+      }),
+    ).toThrow(ReleaseDeploymentError);
+    expect(() =>
+      validateLocalGateEvidence({
+        ...options,
+        publication: {
+          ...PUBLICATION,
+          fingerprint: 'sha256:mutated-publication',
         },
       }),
     ).toThrow(ReleaseDeploymentError);

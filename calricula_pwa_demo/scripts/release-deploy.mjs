@@ -18,14 +18,17 @@ import {
   assertReleaseLifecycleLease,
   assertOfficialCloudflareEnvironment,
   confirmReleaseVersionAbsent,
+  confirmReleaseVersion,
   createWranglerOutputPath,
   inspectCloudflareIdentity,
   inspectCloudflareTarget,
-  parseDeployOutput,
+  parseVersionDeployOutput,
+  parseVersionUploadOutput,
   readPendingDeployment,
   readTargetRecords,
   reconcilePublishedVersion,
   releaseMessage,
+  resolveReleaseVersionByMessage,
   updatePendingDeployment,
   writePendingDeployment,
   writeCurrentDeployment,
@@ -53,10 +56,12 @@ import {
   resolveTurnstileSiteKey,
   sealReleaseSecretsFile,
   siteKeyDigest,
+  verifySealedPublicationPackage,
 } from './release-state.mjs';
 import { normalizeProductionOrigin } from './verify-production.mjs';
 import { resolveAiCanaryCredential } from './ai-canary-credential.mjs';
 import { parseWranglerJsonc } from './wrangler-config.mjs';
+import { assertTrackedReleaseInputs } from './release-inputs.mjs';
 
 const LOCAL_GATE_MAX_AGE_MS = 2 * 60 * 60 * 1_000;
 export const PUBLISH_RECONCILIATION_WINDOW_MS = 45_000;
@@ -177,6 +182,7 @@ export function validateLocalGateEvidence({
   sourceFingerprint,
   toolVersions,
   artifacts,
+  publication,
   git,
   turnstileSiteKeyDigest,
   now = Date.now(),
@@ -188,12 +194,14 @@ export function validateLocalGateEvidence({
   const completedAt = Date.parse(evidence?.completedAt ?? '');
   if (
     !evidence ||
-    evidence.schemaVersion !== 2 ||
+    evidence.schemaVersion !== 3 ||
     evidence.mode !== mode ||
     evidence.sourceFingerprint !== sourceFingerprint ||
     JSON.stringify(evidence.toolVersions) !==
       JSON.stringify(toolVersions) ||
     JSON.stringify(evidence.artifacts) !== JSON.stringify(artifacts) ||
+    JSON.stringify(evidence.publication) !==
+      JSON.stringify(publication) ||
     evidence.git?.commit !== git.commit ||
     evidence.git?.tree !== git.tree ||
     evidence.turnstileSiteKeyDigest !== turnstileSiteKeyDigest ||
@@ -219,6 +227,7 @@ export function validateCurrentReleaseBinding({
     attemptId: current?.attemptId,
     sourceFingerprint: localGate.sourceFingerprint,
     artifactFingerprint: localGate.artifacts.fingerprint,
+    publicationFingerprint: localGate.publication.fingerprint,
     gitCommit: localGate.git.commit,
   });
   if (current?.releaseMessage !== expectedReleaseMessage) {
@@ -229,6 +238,7 @@ export function validateCurrentReleaseBinding({
   if (
     current.sourceFingerprint !== localGate.sourceFingerprint ||
     current.artifactFingerprint !== localGate.artifacts.fingerprint ||
+    current.publicationFingerprint !== localGate.publication.fingerprint ||
     current.gitCommit !== localGate.git.commit
   ) {
     throw new ReleaseDeploymentError(
@@ -283,17 +293,38 @@ async function validateRecordedLocalGate(mode, siteKey) {
     currentToolVersions(),
     computeArtifactFingerprint(),
     inspectGitReleaseState().then(requireCleanGitReleaseState),
+    assertTrackedReleaseInputs(),
   ]);
-  return validateLocalGateEvidence({
+  const sealedPublication = await verifySealedPublicationPackage({
+    ...evidence?.publication,
+    directory: path.join(
+      process.cwd(),
+      '.release-artifacts',
+      'sealed',
+      String(evidence?.publication?.fingerprint ?? '').replace(
+        /^sha256:/,
+        '',
+      ),
+    ),
+  });
+  return {
+    ...validateLocalGateEvidence({
     evidence,
     mode,
     sourceFingerprint,
     toolVersions,
     artifacts,
+    publication: {
+      fingerprint: sealedPublication.fingerprint,
+      files: sealedPublication.files,
+      totalBytes: sealedPublication.totalBytes,
+    },
     git,
     turnstileSiteKeyDigest:
       mode === 'full' ? siteKeyDigest(siteKey) : null,
-  });
+    }),
+    sealedPublication,
+  };
 }
 
 function wranglerExecutable() {
@@ -306,13 +337,93 @@ function wranglerExecutable() {
 }
 
 async function publishWorker(
+  {
+    attemptId,
+    lifecycleLease,
+    message,
+    onUploaded,
+    outputPath,
+    sealedPublication,
+    secretsFile = '',
+  },
+) {
+  await assertTrackedReleaseInputs();
+  assertOfficialCloudflareEnvironment(process.env);
+  const environment = { ...process.env };
+  for (const name of [
+    'AI_SESSION_HMAC_SECRET',
+    'CALRICULA_AI_SESSION_COOKIE',
+    'CALRICULA_SECRETS_FILE',
+    'CALRICULA_TURNSTILE_TOKEN',
+    'CF_ACCOUNT_ID',
+    'CF_API_KEY',
+    'CF_API_BASE_URL',
+    'CF_API_TOKEN',
+    'CF_EMAIL',
+    'CLOUDFLARE_API_BASE_URL',
+    'CLOUDFLARE_COMPLIANCE_REGION',
+    'CLOUDFLARE_ENV',
+    'OPENROUTER_API_KEY',
+    'TURNSTILE_SECRET_KEY',
+    'WRANGLER_API_ENVIRONMENT',
+    'WRANGLER_CI_OVERRIDE_NAME',
+  ]) {
+    delete environment[name];
+  }
+  environment.WRANGLER_OUTPUT_FILE_PATH = outputPath;
+  const uploadExitCode = await runPausedPublisher({
+    args: wranglerVersionUploadArguments({
+      attemptId,
+      message,
+      sealedPublication,
+      secretsFile,
+    }),
+    environment,
+    executable: wranglerExecutable(),
+    lifecycleLease,
+  });
+  if (uploadExitCode !== 0) {
+    throw new ReleaseDeploymentError(
+      `Wrangler versions upload exited with code ${uploadExitCode}.`,
+    );
+  }
+  const uploaded = parseVersionUploadOutput(
+    await readFile(outputPath, 'utf8'),
+    'calricula-demo',
+  );
+  await onUploaded(uploaded);
+  const deployExitCode = await runPausedPublisher({
+    args: wranglerVersionDeployArguments({
+      message,
+      sealedPublication,
+      versionId: uploaded.versionId,
+    }),
+    environment,
+    executable: wranglerExecutable(),
+    lifecycleLease,
+  });
+  if (deployExitCode !== 0) {
+    throw new ReleaseDeploymentError(
+      `Wrangler versions deploy exited with code ${deployExitCode}.`,
+    );
+  }
+  const deployed = parseVersionDeployOutput(
+    await readFile(outputPath, 'utf8'),
+    'calricula-demo',
+    uploaded.versionId,
+  );
+  return { ...uploaded, ...deployed };
+}
+
+async function promoteUploadedVersion({
+  lifecycleLease,
   message,
   outputPath,
-  secretsFile = '',
-  lifecycleLease,
-) {
+  sealedPublication,
+  versionId,
+}) {
+  await assertTrackedReleaseInputs();
   assertOfficialCloudflareEnvironment(process.env);
-  const args = wranglerDeployArguments(message, secretsFile);
   const environment = { ...process.env };
   for (const name of [
     'AI_SESSION_HMAC_SECRET',
@@ -336,17 +447,25 @@ async function publishWorker(
   }
   environment.WRANGLER_OUTPUT_FILE_PATH = outputPath;
   const exitCode = await runPausedPublisher({
-    args,
+    args: wranglerVersionDeployArguments({
+      message,
+      sealedPublication,
+      versionId,
+    }),
     environment,
     executable: wranglerExecutable(),
     lifecycleLease,
   });
   if (exitCode !== 0) {
     throw new ReleaseDeploymentError(
-      `Wrangler deploy exited with code ${exitCode}.`,
+      `Wrangler versions deploy exited with code ${exitCode}.`,
     );
   }
-  return outputPath;
+  return parseVersionDeployOutput(
+    await readFile(outputPath, 'utf8'),
+    'calricula-demo',
+    versionId,
+  );
 }
 
 export async function runPausedPublisher({
@@ -421,14 +540,31 @@ export async function runPausedPublisher({
   return exitCode;
 }
 
-export function wranglerDeployArguments(message, secretsFile = '') {
+export function wranglerVersionUploadArguments({
+  attemptId,
+  message,
+  sealedPublication,
+  secretsFile = '',
+}) {
+  if (
+    !RELEASE_ATTEMPT_ID_PATTERN.test(attemptId ?? '') ||
+    !sealedPublication?.configPath
+  ) {
+    throw new ReleaseDeploymentError(
+      'A sealed publication and release attempt ID are required.',
+    );
+  }
   const args = [
-    'deploy',
+    'versions',
+    'upload',
     '--config',
-    path.resolve(process.cwd(), 'wrangler.jsonc'),
+    sealedPublication.configPath,
     '--name',
     'calricula-demo',
+    '--no-bundle',
     '--strict',
+    '--tag',
+    `release-${attemptId}`,
     '--message',
     message,
   ];
@@ -436,6 +572,33 @@ export function wranglerDeployArguments(message, secretsFile = '') {
     args.push('--secrets-file', secretsFile);
   }
   return args;
+}
+
+export function wranglerVersionDeployArguments({
+  message,
+  sealedPublication,
+  versionId,
+}) {
+  if (
+    !RELEASE_ATTEMPT_ID_PATTERN.test(versionId ?? '') ||
+    !sealedPublication?.configPath
+  ) {
+    throw new ReleaseDeploymentError(
+      'An uploaded version ID and sealed publication are required.',
+    );
+  }
+  return [
+    'versions',
+    'deploy',
+    `${versionId}@100`,
+    '--config',
+    sealedPublication.configPath,
+    '--name',
+    'calricula-demo',
+    '--message',
+    message,
+    '--yes',
+  ];
 }
 
 const POSTDEPLOY_SECRET_ENVIRONMENT_KEYS = [
@@ -549,9 +712,12 @@ async function writeReleaseResultEvidence({
       attemptId: deployment.attemptId,
       deploymentId: deployment.deploymentId,
       versionId: deployment.versionId,
+      versionTag: deployment.versionTag ?? null,
       rollbackDeploymentId:
         deployment.rollbackDeploymentId ?? null,
       rollbackVersionId: deployment.rollbackVersionId ?? null,
+      publicationFingerprint:
+        deployment.publicationFingerprint,
       openRouterCredentialFingerprint:
         deployment.openRouterCredentialFingerprint ?? null,
     },
@@ -684,6 +850,7 @@ export async function finalizePendingDeployment(
         ...expectedOwnership,
         sourceFingerprint: pending.sourceFingerprint,
         artifactFingerprint: pending.artifactFingerprint,
+        publicationFingerprint: pending.publicationFingerprint,
         gitCommit: pending.gitCommit,
         releaseMessage: pending.releaseMessage,
       });
@@ -708,12 +875,14 @@ export async function finalizePendingDeployment(
     origin: pending.origin,
     deploymentId: deployment.deploymentId,
     versionId: deployment.versionId,
+    versionTag: pending.versionTag ?? null,
     rollbackDeploymentId:
       pending.previousDeploymentId ?? null,
     rollbackVersionId: pending.previousVersionId ?? null,
     releaseMessage: pending.releaseMessage,
     sourceFingerprint: pending.sourceFingerprint,
     artifactFingerprint: pending.artifactFingerprint,
+    publicationFingerprint: pending.publicationFingerprint,
     gitCommit: pending.gitCommit,
     openRouterCredentialFingerprint:
       pending.openRouterCredentialFingerprint ?? null,
@@ -728,11 +897,13 @@ export async function finalizePendingDeployment(
     origin: pending.origin,
     deploymentId: current.deploymentId,
     versionId: current.versionId,
+    versionTag: current.versionTag,
     rollbackDeploymentId: current.rollbackDeploymentId,
     rollbackVersionId: current.rollbackVersionId,
     releaseMessage: current.releaseMessage,
     sourceFingerprint: pending.sourceFingerprint,
     artifactFingerprint: pending.artifactFingerprint,
+    publicationFingerprint: pending.publicationFingerprint,
     gitCommit: pending.gitCommit,
     openRouterCredentialFingerprint:
       pending.openRouterCredentialFingerprint ?? null,
@@ -754,6 +925,7 @@ async function recoverPendingDeployment({
   localGate,
   lifecycleLease,
   wranglerConfig,
+  allowPromotion = false,
 }) {
   const mode = bootstrap ? 'bootstrap' : 'full';
   const expectedReleaseMessage = releaseMessage({
@@ -761,6 +933,7 @@ async function recoverPendingDeployment({
     attemptId: pending.attemptId,
     sourceFingerprint: localGate.sourceFingerprint,
     artifactFingerprint: localGate.artifacts.fingerprint,
+    publicationFingerprint: localGate.publication.fingerprint,
     gitCommit: localGate.git.commit,
   });
   if (
@@ -769,6 +942,7 @@ async function recoverPendingDeployment({
     !RELEASE_ATTEMPT_ID_PATTERN.test(pending.attemptId ?? '') ||
     pending.sourceFingerprint !== localGate.sourceFingerprint ||
     pending.artifactFingerprint !== localGate.artifacts.fingerprint ||
+    pending.publicationFingerprint !== localGate.publication.fingerprint ||
     pending.gitCommit !== localGate.git.commit ||
     pending.releaseMessage !== expectedReleaseMessage ||
     (bootstrap
@@ -793,6 +967,44 @@ async function recoverPendingDeployment({
       'Pending deployment belongs to a different Cloudflare target.',
     );
   }
+  if (
+    typeof pending.wranglerOutputPath !== 'string' ||
+    !path
+      .resolve(pending.wranglerOutputPath)
+      .startsWith(
+        `${path.resolve(
+          process.cwd(),
+          '.release-artifacts',
+          'wrangler',
+        )}${path.sep}`,
+      )
+  ) {
+    throw new ReleaseDeploymentError(
+      'Pending deployment is missing its private Wrangler receipt path.',
+    );
+  }
+  try {
+    const upload = parseVersionUploadOutput(
+      await readFile(pending.wranglerOutputPath, 'utf8'),
+      workerName,
+    );
+    if (
+      pending.versionId &&
+      pending.versionId !== upload.versionId
+    ) {
+      throw new ReleaseDeploymentError(
+        'Pending deployment version conflicts with its Wrangler receipt.',
+      );
+    }
+    pending.versionId = upload.versionId;
+    pending.versionTag = `release-${pending.attemptId}`;
+    if (!pending.origin) pending.origin = upload.origin;
+    await updatePendingDeployment(pending);
+  } catch (error) {
+    if (error instanceof ReleaseDeploymentError) throw error;
+    // A process may have stopped before Wrangler wrote its receipt. The exact
+    // release-message lookup below is the authoritative recovery fallback.
+  }
   const origin = configuration.baseOrigin || pending.origin;
   if (!origin || (pending.origin && pending.origin !== origin)) {
     throw new ReleaseDeploymentError(
@@ -800,17 +1012,56 @@ async function recoverPendingDeployment({
     );
   }
   pending.origin = origin;
-  const deployment = await reconcilePublishedVersion({
-    workerName,
-    versionId: pending.versionId,
-    releaseMessage: pending.releaseMessage,
-    previous: pending.previousVersionId
-      ? {
-          deploymentId: pending.previousDeploymentId,
-          versionId: pending.previousVersionId,
-        }
-      : undefined,
-  });
+  if (!pending.versionId) {
+    pending.versionId = (
+      await resolveReleaseVersionByMessage({
+        workerName,
+        releaseMessage: pending.releaseMessage,
+      })
+    ).versionId;
+    pending.versionTag = `release-${pending.attemptId}`;
+    await updatePendingDeployment(pending);
+  }
+  const previous = pending.previousVersionId
+    ? {
+        deploymentId: pending.previousDeploymentId,
+        versionId: pending.previousVersionId,
+      }
+    : undefined;
+  let deployment;
+  try {
+    deployment = await reconcilePublishedVersion({
+      workerName,
+      versionId: pending.versionId,
+      releaseMessage: pending.releaseMessage,
+      previous,
+      attempts: 1,
+    });
+  } catch {
+    await confirmReleaseVersion({
+      workerName,
+      versionId: pending.versionId,
+      releaseMessage: pending.releaseMessage,
+    });
+    if (!allowPromotion) {
+      throw new ReleaseDeploymentError(
+        'The sealed Worker version was uploaded but is not active. Rerun the matching deploy command to promote that exact version.',
+      );
+    }
+    await promoteUploadedVersion({
+      lifecycleLease,
+      message: pending.releaseMessage,
+      outputPath: await createWranglerOutputPath(),
+      sealedPublication: localGate.sealedPublication,
+      versionId: pending.versionId,
+    });
+    deployment = await reconcilePublishedVersion({
+      workerName,
+      versionId: pending.versionId,
+      releaseMessage: pending.releaseMessage,
+      previous,
+    });
+  }
   pending.versionId = deployment.versionId;
   await updatePendingDeployment(pending);
   return {
@@ -873,6 +1124,7 @@ export async function cancelPendingNoChange(options = {}) {
     attemptId: pending.attemptId,
     sourceFingerprint: pending.sourceFingerprint,
     artifactFingerprint: pending.artifactFingerprint,
+    publicationFingerprint: pending.publicationFingerprint,
     gitCommit: pending.gitCommit,
   });
   if (pending.releaseMessage !== expectedReleaseMessage) {
@@ -1001,8 +1253,9 @@ async function runReleaseDeploymentWithLease(
     requireBaseOrigin: verifyOnly || !bootstrap,
     requireCanaryCredential: !bootstrap && !stage,
   });
+  const pendingAtStart = await readPendingDeployment();
   const releaseSecrets =
-    !bootstrap && !verifyOnly
+    !bootstrap && !verifyOnly && !pendingAtStart
       ? await resolveReleaseSecretsFile(process.env)
       : undefined;
   await runNpmScript('verify:artifacts');
@@ -1010,7 +1263,6 @@ async function runReleaseDeploymentWithLease(
     bootstrap ? 'bootstrap' : 'full',
     siteKey,
   );
-  const pendingAtStart = await readPendingDeployment();
   if (stage && verifyOnly) {
     const [hasComplete, hasStaged] = await Promise.all([
       releaseResultExists(COMPLETE_EVIDENCE_PATH),
@@ -1022,19 +1274,16 @@ async function runReleaseDeploymentWithLease(
       hasStaged,
     });
   }
-  if (pendingAtStart && !verifyOnly) {
-    throw new ReleaseDeploymentError(
-      'A prior publish is pending reconciliation. Run the matching release verification command before publishing again.',
-    );
-  }
-  if (pendingAtStart && verifyOnly) {
-    await recoverPendingDeployment({
+  let recoveredAtStart;
+  if (pendingAtStart) {
+    recoveredAtStart = await recoverPendingDeployment({
       pending: pendingAtStart,
       bootstrap,
       configuration,
       localGate,
       lifecycleLease,
       wranglerConfig,
+      allowPromotion: !verifyOnly,
     });
   }
 
@@ -1042,7 +1291,7 @@ async function runReleaseDeploymentWithLease(
     wranglerConfig,
     environment: process.env,
     bootstrap,
-    verifyOnly,
+    verifyOnly: verifyOnly || Boolean(recoveredAtStart),
     origin: configuration.baseOrigin,
   });
   if (verifyOnly) {
@@ -1076,13 +1325,20 @@ async function runReleaseDeploymentWithLease(
   let published = false;
   let reconciled = false;
   let publishedAt =
+    recoveredAtStart?.current?.publishedAt ??
     targetBefore.current?.publishedAt ??
     targetBefore.current?.recordedAt ??
     new Date().toISOString();
-  let releaseOrigin = configuration.baseOrigin;
-  let activeDeployment = targetBefore.current;
+  let releaseOrigin =
+    recoveredAtStart?.origin || configuration.baseOrigin;
+  let activeDeployment =
+    recoveredAtStart?.current ?? targetBefore.current;
+  if (recoveredAtStart) {
+    published = true;
+    reconciled = true;
+  }
   try {
-    if (!verifyOnly) {
+    if (!verifyOnly && !recoveredAtStart) {
       // Revalidate the exact sealed artifact after the read-only remote target
       // check and immediately before the only mutating command.
       await runNpmScript('verify:artifacts');
@@ -1115,6 +1371,7 @@ async function runReleaseDeploymentWithLease(
         attemptId,
         sourceFingerprint: localGate.sourceFingerprint,
         artifactFingerprint: localGate.artifacts.fingerprint,
+        publicationFingerprint: localGate.publication.fingerprint,
         gitCommit: localGate.git.commit,
       });
       const outputPath = await createWranglerOutputPath();
@@ -1143,7 +1400,9 @@ async function runReleaseDeploymentWithLease(
         accountId: targetBefore.identity.accountId,
         workerName: targetBefore.workerName,
         origin: configuration.baseOrigin,
+        wranglerOutputPath: outputPath,
         versionId: null,
+        versionTag: null,
         previousDeploymentId:
           targetBefore.deployment?.deploymentId ?? null,
         previousVersionId:
@@ -1151,29 +1410,45 @@ async function runReleaseDeploymentWithLease(
         releaseMessage: message,
         sourceFingerprint: localGate.sourceFingerprint,
         artifactFingerprint: localGate.artifacts.fingerprint,
+        publicationFingerprint: localGate.publication.fingerprint,
         gitCommit: localGate.git.commit,
         openRouterCredentialFingerprint:
           releaseSecrets?.openRouterCredentialFingerprint ?? null,
       };
       await writePendingDeployment(pending);
+      let publicationReceipt;
       try {
         publishAttempted = true;
-        await publishWorker(
-          message,
-          outputPath,
-          sealedSecrets?.path,
+        publicationReceipt = await publishWorker({
+          attemptId,
           lifecycleLease,
-        );
+          message,
+          onUploaded: async (uploaded) => {
+            const uploadedOrigin =
+              configuration.baseOrigin || uploaded.origin;
+            if (
+              configuration.baseOrigin &&
+              configuration.baseOrigin !== uploaded.origin
+            ) {
+              throw new ReleaseDeploymentError(
+                'Wrangler uploaded to a different origin than CALRICULA_RELEASE_BASE_URL.',
+              );
+            }
+            pending.origin = uploadedOrigin;
+            pending.versionId = uploaded.versionId;
+            pending.versionTag = `release-${attemptId}`;
+            await updatePendingDeployment(pending);
+          },
+          outputPath,
+          sealedPublication: localGate.sealedPublication,
+          secretsFile: sealedSecrets?.path,
+        });
       } finally {
         await sealedSecrets?.cleanup();
       }
       published = true;
-      const deployOutput = parseDeployOutput(
-        await readFile(outputPath, 'utf8'),
-        targetBefore.workerName,
-      );
       releaseOrigin =
-        configuration.baseOrigin || deployOutput.origin;
+        configuration.baseOrigin || publicationReceipt.origin;
       if (!releaseOrigin) {
         throw new ReleaseDeploymentError(
           'Wrangler did not report one exact workers.dev origin.',
@@ -1181,19 +1456,19 @@ async function runReleaseDeploymentWithLease(
       }
       if (
         configuration.baseOrigin &&
-        deployOutput.origin &&
-        configuration.baseOrigin !== deployOutput.origin
+        publicationReceipt.origin &&
+        configuration.baseOrigin !== publicationReceipt.origin
       ) {
         throw new ReleaseDeploymentError(
           'Wrangler deployed a different origin than CALRICULA_RELEASE_BASE_URL.',
         );
       }
       pending.origin = releaseOrigin;
-      pending.versionId = deployOutput.versionId;
+      pending.versionId = publicationReceipt.versionId;
       await updatePendingDeployment(pending);
       const deployment = await reconcilePublishedVersion({
         workerName: targetBefore.workerName,
-        versionId: deployOutput.versionId,
+        versionId: publicationReceipt.versionId,
         releaseMessage: message,
         previous: targetBefore.deployment,
       });
