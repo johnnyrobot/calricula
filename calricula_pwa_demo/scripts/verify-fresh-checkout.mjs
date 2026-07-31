@@ -1,6 +1,8 @@
 import { spawn } from 'node:child_process';
 import {
   chmod,
+  cp,
+  mkdir,
   mkdtemp,
   readdir,
   rm,
@@ -15,7 +17,10 @@ import {
   computeArtifactFingerprint,
   sealPublicationPackage,
 } from './release-state.mjs';
-import { assertTrackedReleaseInputs } from './release-inputs.mjs';
+import {
+  assertTrackedReleaseInputs,
+  collectReleaseInputFiles,
+} from './release-inputs.mjs';
 
 function run(command, args, options = {}) {
   const child = spawn(command, args, {
@@ -120,39 +125,96 @@ async function unlockTree(directory) {
 export async function verifyFreshCheckout() {
   const cwd = process.cwd();
   await assertTrackedReleaseInputs({ cwd });
-  const [repositoryRoot, prefix, source, artifacts] = await Promise.all([
+  const [repositoryRoot, prefix, source] = await Promise.all([
     captureGit(['rev-parse', '--show-toplevel']),
     captureGit(['rev-parse', '--show-prefix']),
     computeReleaseFingerprint({ cwd }),
-    computeArtifactFingerprint({ cwd }),
   ]);
-  const publication = await sealPublicationPackage({ cwd });
   const temporary = await mkdtemp(
     path.join(os.tmpdir(), 'calricula-fresh-release-'),
   );
+  const canonicalCheckout = path.join(temporary, 'checkout');
   try {
-    await extractRecordedTree(temporary, repositoryRoot, prefix);
-    await run('npm', ['ci'], { cwd: temporary });
-    await run('npm', ['run', 'build'], { cwd: temporary });
-    await run('npm', ['run', 'deploy:dry-run'], { cwd: temporary });
+    await mkdir(canonicalCheckout, { mode: 0o700 });
+    for (const file of await collectReleaseInputFiles(cwd)) {
+      const destination = path.join(
+        canonicalCheckout,
+        file.relativePath,
+      );
+      await mkdir(path.dirname(destination), { recursive: true });
+      await cp(file.absolutePath, destination, {
+        errorOnExist: true,
+        force: false,
+      });
+    }
+    await run('npm', ['ci'], { cwd: canonicalCheckout });
+    await run('npm', ['run', 'build'], { cwd: canonicalCheckout });
+    await run('npm', ['run', 'deploy:dry-run'], {
+      cwd: canonicalCheckout,
+    });
+    const [filesystemSource, filesystemArtifacts] = await Promise.all([
+      computeReleaseFingerprint({ cwd: canonicalCheckout }),
+      computeArtifactFingerprint({ cwd: canonicalCheckout }),
+    ]);
+    const filesystemPublication = await sealPublicationPackage({
+      cwd: canonicalCheckout,
+    });
+    await unlockTree(canonicalCheckout);
+    await rm(canonicalCheckout, { force: true, recursive: true });
+    await mkdir(canonicalCheckout, { mode: 0o700 });
+
+    await extractRecordedTree(
+      canonicalCheckout,
+      repositoryRoot,
+      prefix,
+    );
+    await run('npm', ['ci'], { cwd: canonicalCheckout });
+    await run('npm', ['run', 'build'], { cwd: canonicalCheckout });
+    await run('npm', ['run', 'deploy:dry-run'], {
+      cwd: canonicalCheckout,
+    });
     const [freshSource, freshArtifacts] = await Promise.all([
-      computeReleaseFingerprint({ cwd: temporary }),
-      computeArtifactFingerprint({ cwd: temporary }),
+      computeReleaseFingerprint({ cwd: canonicalCheckout }),
+      computeArtifactFingerprint({ cwd: canonicalCheckout }),
     ]);
     const freshPublication = await sealPublicationPackage({
-      cwd: temporary,
+      cwd: canonicalCheckout,
     });
     if (
       freshSource !== source ||
-      freshArtifacts.fingerprint !== artifacts.fingerprint ||
-      freshPublication.fingerprint !== publication.fingerprint
+      filesystemSource !== source ||
+      freshArtifacts.fingerprint !== filesystemArtifacts.fingerprint ||
+      freshPublication.fingerprint !== filesystemPublication.fingerprint
     ) {
       throw new Error(
         'The exact recorded commit did not reproduce the validated source, build, and publication fingerprints.',
       );
     }
+    for (const relativePath of [
+      'out',
+      path.join('.wrangler', 'dry-run'),
+    ]) {
+      const destination = path.join(cwd, relativePath);
+      await rm(destination, { force: true, recursive: true });
+      await mkdir(path.dirname(destination), { recursive: true });
+      await cp(path.join(canonicalCheckout, relativePath), destination, {
+        errorOnExist: true,
+        force: false,
+        recursive: true,
+      });
+    }
+    const copiedArtifacts = await computeArtifactFingerprint({ cwd });
+    const copiedPublication = await sealPublicationPackage({ cwd });
+    if (
+      copiedArtifacts.fingerprint !== freshArtifacts.fingerprint ||
+      copiedPublication.fingerprint !== freshPublication.fingerprint
+    ) {
+      throw new Error(
+        'The verified exact-commit build changed while it was copied into the release workspace.',
+      );
+    }
     console.log(
-      '[fresh-checkout] Exact recorded commit reproduced the source, build, and sealed publication package.',
+      '[fresh-checkout] Filesystem source and exact Git commit reproduced at one canonical path; the verified build and sealed publication package were copied into the release workspace unchanged.',
     );
   } finally {
     await unlockTree(temporary);
