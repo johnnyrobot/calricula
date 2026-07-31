@@ -10,6 +10,8 @@ const eslintConfig = [
       'node_modules/**',
       'coverage/**',
       'playwright-report/**',
+      '.release-artifacts/**',
+      '.release-evidence/**',
       'test-results/**',
       'openrouter-llms-full.txt',
       'next-env.d.ts',

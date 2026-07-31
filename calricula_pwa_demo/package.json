@@ -30,6 +30,7 @@
     "verify:production:local": "node scripts/validate-build.mjs && node scripts/verify-production.mjs --local",
     "verify:artifacts": "node scripts/validate-build.mjs && node scripts/validate-worker-bundle.mjs",
     "release:clean-generated": "node scripts/prepare-release-build.mjs",
+    "release:install": "npm ci",
     "release:fresh-checkout": "node scripts/verify-fresh-checkout.mjs",
     "deploy:dry-run": "wrangler deploy --dry-run --outdir .wrangler/dry-run && node scripts/validate-worker-bundle.mjs",
     "release:gate": "node scripts/release-gate.mjs",

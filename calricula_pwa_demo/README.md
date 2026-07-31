@@ -211,7 +211,8 @@ uses an AI-disabled first deployment to establish the exact Workers hostname,
 then a separately sealed AI-enabled release.
 
 Both release gates require the Calricula demo source to be committed and clean.
-The gate records the exact Git commit and subtree, source fingerprint,
+The gate first reinstalls the exact lockfile with `npm ci`, then records the
+exact Git commit and subtree, source fingerprint,
 validated `out/` plus Worker dry-run fingerprint, a separate digest for the
 sealed publication package (Worker bytes, assets, and effective Wrangler
 configuration), executed tool versions, and the steps that passed. It also

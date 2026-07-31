@@ -21,6 +21,7 @@ import {
 import { assertTrackedReleaseInputs } from './release-inputs.mjs';
 
 export const RELEASE_GATE_STEPS = [
+  'release:install',
   'audit:production',
   'lint',
   'typecheck',
