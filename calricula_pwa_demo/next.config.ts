@@ -14,6 +14,17 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  webpack(config, { webpack }) {
+    config.plugins.push(
+      new webpack.ids.HashedModuleIdsPlugin({
+        context: process.cwd(),
+        hashFunction: 'sha256',
+        hashDigest: 'hex',
+        hashDigestLength: 12,
+      }),
+    );
+    return config;
+  },
 };
 
 export default nextConfig;
