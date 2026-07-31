@@ -1,0 +1,42 @@
+# Dependencies and Next.js build output
+node_modules/
+.next/
+out/
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+.release-artifacts/
+.release-evidence/
+
+# Local Cloudflare and environment state
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.local
+.env.*.local
+
+# This nested demo contains real runtime TypeScript under src/lib. Override
+# the parent repository's generic Python packaging lib/ ignore rule.
+!src/lib/
+!src/lib/**
+
+# Local design reference only. It must never enter Git, the static export,
+# the service-worker precache, or the Cloudflare asset upload.
+openrouter-llms-full.txt
+
+# Editors and operating systems
+.DS_Store
+*.swp
+*.swo
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# Logs
+*.log
+npm-debug.log*

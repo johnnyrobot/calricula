@@ -1,0 +1,51 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "calricula-demo",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-07-29",
+  "workers_dev": true,
+  "vars": {
+    // Fail closed on an accidental first deployment. Before enabling AI,
+    // replace APP_ORIGIN with the exact deployed origin and configure the
+    // evaluation-approved exact `:free` model chain.
+    "AI_ENABLED": "false",
+    "APP_ORIGIN": "https://replace-before-deploy.invalid",
+    "OPENROUTER_FREE_MODELS": ""
+  },
+  "assets": {
+    "directory": "./out",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": [
+      "/api/*"
+    ]
+  },
+  "ratelimits": [
+    {
+      "name": "GLOBAL_RATE_LIMIT",
+      // Stable app-owned FNV-1a IDs avoid reusing Cloudflare's 1001/1002
+      // documentation examples across Workers on the same account.
+      "namespace_id": "1739447413",
+      "simple": {
+        "limit": 18,
+        "period": 60
+      }
+    },
+    {
+      "name": "SESSION_RATE_LIMIT",
+      "namespace_id": "802829484",
+      "simple": {
+        "limit": 2,
+        "period": 60
+      }
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "invocation_logs": true
+    }
+  }
+}
