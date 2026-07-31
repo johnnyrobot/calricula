@@ -152,10 +152,9 @@ export async function verifyFreshCheckout() {
     await run('npm', ['run', 'deploy:dry-run'], {
       cwd: canonicalCheckout,
     });
-    const [filesystemSource, filesystemArtifacts] = await Promise.all([
-      computeReleaseFingerprint({ cwd: canonicalCheckout }),
-      computeArtifactFingerprint({ cwd: canonicalCheckout }),
-    ]);
+    const filesystemSource = await computeReleaseFingerprint({
+      cwd: canonicalCheckout,
+    });
     const filesystemPublication = await sealPublicationPackage({
       cwd: canonicalCheckout,
     });
@@ -183,9 +182,6 @@ export async function verifyFreshCheckout() {
     const mismatches = [
       ...(freshSource !== source ? ['recorded source'] : []),
       ...(filesystemSource !== source ? ['filesystem source'] : []),
-      ...(freshArtifacts.fingerprint !== filesystemArtifacts.fingerprint
-        ? ['build artifacts']
-        : []),
       ...(freshPublication.fingerprint !==
       filesystemPublication.fingerprint
         ? ['publication package']

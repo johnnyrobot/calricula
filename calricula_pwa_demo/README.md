@@ -217,8 +217,10 @@ validated `out/` plus Worker dry-run fingerprint, a separate digest for the
 sealed publication package (Worker bytes, assets, and effective Wrangler
 configuration), executed tool versions, and the steps that passed. It also
 rebuilds the recorded commit from a Git archive and requires identical source,
-artifact, and publication digests. Any later source, output, config, site-key,
-or tool change invalidates the seal.
+and publication-package digests at one canonical build path. It then copies
+that exact-commit build—including its separately recorded build digest—into
+the release workspace. Any later source, output, config, site-key, or tool
+change invalidates the seal.
 
 Use `CLOUDFLARE_ACCOUNT_ID` as the only account selector; do not add
 `account_id` to `wrangler.jsonc`. Guarded releases reject Wrangler staging/API
