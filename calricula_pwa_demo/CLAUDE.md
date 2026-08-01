@@ -94,9 +94,12 @@ file exporting `handleRequest` (directly unit-tested) that verifies Turnstile, i
 verifies an HMAC-signed `__Host-calricula_ai_session` cookie, applies the
 `GLOBAL_RATE_LIMIT` / `SESSION_RATE_LIMIT` bindings, reserves the authoritative
 five-per-UTC-day quota in the `DailyAiQuota` SQLite Durable Object, then calls OpenRouter
-with free-only routing (ZDR, `data_collection: deny`, zero price caps, no provider
-fallback). The DO stores only an HMAC-derived install ID, day, attempt count, request IDs,
-and expiry — never prompts, responses, or curriculum text.
+with free-only routing (ZDR, `data_collection: deny`, zero price caps). Provider fallback
+is *permitted* (`allow_fallbacks: true`) — what's enforced is that any provider reached
+must still be free and ZDR, via the `:free` model list plus zero `max_price`; the
+`ai:evaluate` script is the one that sets `allow_fallbacks: false`. The DO stores only an
+HMAC-derived install ID, day, attempt count, request IDs, and expiry — never prompts,
+responses, or curriculum text.
 
 **Service worker.** `scripts/build-pwa.mjs` runs Workbox `generateSW` in `postbuild`. It
 rewrites precache URLs to Cloudflare's canonical trailing-slash form, sets
