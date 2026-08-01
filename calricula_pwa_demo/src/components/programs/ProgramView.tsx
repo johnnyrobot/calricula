@@ -9,7 +9,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-import { useProgram, useReferences } from "../../lib/data";
+import type { Department } from "../../lib/domain";
+import type { ProgramAggregate } from "../../lib/data";
 
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
@@ -21,19 +22,25 @@ function programStatusClass(status: "Draft" | "Review" | "Approved") {
   return "status-seal status-seal--review";
 }
 
-export function ProgramView({ programId }: { programId: string }) {
-  const aggregate = useProgram(programId);
-  const references = useReferences();
-  const department =
-    references.data?.departments.find(
-      (item) => item.id === aggregate.data?.program.departmentId,
-    ) ?? null;
+export interface ProgramViewProps {
+  /** Read by the route screen, which owns every repository read. */
+  aggregate: ProgramAggregate | null;
+  department: Department | null;
+  loading?: boolean;
+  error?: Error | null;
+}
 
-  if (aggregate.loading || references.loading) {
+export function ProgramView({
+  aggregate,
+  department,
+  loading = false,
+  error = null,
+}: ProgramViewProps) {
+  if (loading) {
     return <p role="status">Opening program record…</p>;
   }
 
-  if (aggregate.error || references.error) {
+  if (error) {
     return (
       <div className="luminous-card" role="alert">
         <CircleAlert
@@ -42,12 +49,12 @@ export function ProgramView({ programId }: { programId: string }) {
           size={24}
         />
         <h1>The program record could not be opened</h1>
-        <p>{aggregate.error?.message ?? references.error?.message}</p>
+        <p>{error.message}</p>
       </div>
     );
   }
 
-  if (!aggregate.data) {
+  if (!aggregate) {
     return (
       <div className="luminous-card" role="alert">
         <h1>Program not found</h1>
@@ -59,7 +66,7 @@ export function ProgramView({ programId }: { programId: string }) {
     );
   }
 
-  const { program, courses, comments } = aggregate.data;
+  const { program, courses, comments } = aggregate;
   const groupedCourses = new Map<string, typeof courses>();
   for (const row of courses) {
     const group = groupedCourses.get(row.requirementType) ?? [];

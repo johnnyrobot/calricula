@@ -9,13 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Course, ProgramAggregate } from "../../lib/domain";
 
-const reorderProgramCourses = vi.hoisted(() => vi.fn());
-const useCourses = vi.hoisted(() => vi.fn());
-
-vi.mock("../../lib/data", () => ({
-  curriculumRepository: { reorderProgramCourses },
-  useCourses,
-}));
+const reorderProgramCourses = vi.fn();
 
 import { ProgramCourseBuilder } from "./ProgramCourseBuilder";
 import { flushPendingWork } from "../../lib/pwa/pending-work";
@@ -124,19 +118,6 @@ describe("ProgramCourseBuilder", () => {
   beforeEach(() => {
     reorderProgramCourses.mockReset();
     reorderProgramCourses.mockResolvedValue(aggregate());
-    useCourses.mockReset();
-    useCourses.mockReturnValue({
-      data: {
-        items: [first, second, third],
-        total: 3,
-        page: 1,
-        pageSize: 100,
-        pageCount: 1,
-      },
-      error: null,
-      loading: false,
-      refresh: vi.fn(),
-    });
   });
 
   afterEach(() => {
@@ -144,7 +125,10 @@ describe("ProgramCourseBuilder", () => {
   });
 
   it("reorders, edits, and persists the exact requirement list", async () => {
-    render(<ProgramCourseBuilder aggregate={aggregate()} />);
+    render(<ProgramCourseBuilder
+        aggregate={aggregate()}
+        availableCourses={[first, second, third]}
+        onSaveRequirements={reorderProgramCourses} />);
 
     fireEvent.click(
       screen.getByRole("button", {
@@ -182,7 +166,10 @@ describe("ProgramCourseBuilder", () => {
   });
 
   it("adds an unselected course with its requirement type and removes rows", async () => {
-    render(<ProgramCourseBuilder aggregate={aggregate()} />);
+    render(<ProgramCourseBuilder
+        aggregate={aggregate()}
+        availableCourses={[first, second, third]}
+        onSaveRequirements={reorderProgramCourses} />);
 
     const courseSelect = screen.getByLabelText("Add a course");
     expect(
@@ -235,7 +222,10 @@ describe("ProgramCourseBuilder", () => {
     const click = vi
       .spyOn(HTMLAnchorElement.prototype, "click")
       .mockImplementation(() => undefined);
-    render(<ProgramCourseBuilder aggregate={aggregate()} />);
+    render(<ProgramCourseBuilder
+        aggregate={aggregate()}
+        availableCourses={[first, second, third]}
+        onSaveRequirements={reorderProgramCourses} />);
 
     fireEvent.change(screen.getAllByLabelText("Applied units")[0]!, {
       target: { value: "4.75" },
@@ -287,7 +277,10 @@ describe("ProgramCourseBuilder", () => {
           }),
       )
       .mockResolvedValue(aggregate());
-    render(<ProgramCourseBuilder aggregate={aggregate()} />);
+    render(<ProgramCourseBuilder
+        aggregate={aggregate()}
+        availableCourses={[first, second, third]}
+        onSaveRequirements={reorderProgramCourses} />);
 
     fireEvent.change(screen.getAllByLabelText("Applied units")[0]!, {
       target: { value: "3.5" },
@@ -320,7 +313,10 @@ describe("ProgramCourseBuilder", () => {
   });
 
   it("prevents any requirement mutation for approved programs", () => {
-    render(<ProgramCourseBuilder aggregate={aggregate()} disabled />);
+    render(<ProgramCourseBuilder
+        aggregate={aggregate()}
+        availableCourses={[first, second, third]}
+        onSaveRequirements={reorderProgramCourses} disabled />);
 
     expect(screen.getByRole("button", { name: "Save requirements" })).toBeDisabled();
     expect(screen.queryByLabelText("Add a course")).not.toBeInTheDocument();
@@ -334,7 +330,10 @@ describe("ProgramCourseBuilder", () => {
 
   it("renders empty and unavailable-course states", () => {
     const empty = { ...aggregate(), courses: [] };
-    const { rerender } = render(<ProgramCourseBuilder aggregate={empty} />);
+    const { rerender } = render(<ProgramCourseBuilder
+        aggregate={empty}
+        availableCourses={[first, second, third]}
+        onSaveRequirements={reorderProgramCourses} />);
     expect(
       screen.getByText("No courses are assigned to this program yet."),
     ).toBeVisible();
@@ -348,7 +347,10 @@ describe("ProgramCourseBuilder", () => {
         },
       ],
     } as unknown as ProgramAggregate;
-    rerender(<ProgramCourseBuilder aggregate={unavailable} key="missing" />);
+    rerender(<ProgramCourseBuilder
+        aggregate={unavailable}
+        availableCourses={[first, second, third]}
+        onSaveRequirements={reorderProgramCourses} key="missing" />);
     expect(screen.getByText("Course record unavailable")).toBeVisible();
   });
 });

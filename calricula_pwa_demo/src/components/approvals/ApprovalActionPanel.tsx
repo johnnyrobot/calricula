@@ -14,7 +14,6 @@ import type {
   CourseAggregate,
   CourseStatus,
 } from "../../lib/domain";
-import { curriculumRepository } from "../../lib/data";
 import { CourseAIControls } from "../ai";
 
 import {
@@ -22,15 +21,27 @@ import {
   getApprovalDecision,
 } from "./workflow";
 
+export interface ApprovalTransition {
+  targetStatus: CourseStatus;
+  comment: string | null;
+  actorId: string;
+}
+
 export interface ApprovalActionPanelProps {
   aggregate: CourseAggregate;
   actor: Actor;
+  /** Supplied by the route screen, which owns every repository write. */
+  onTransition: (
+    courseId: string,
+    transition: ApprovalTransition,
+  ) => Promise<unknown>;
   onComplete?: (status: CourseStatus) => void;
 }
 
 export function ApprovalActionPanel({
   aggregate,
   actor,
+  onTransition,
   onComplete,
 }: ApprovalActionPanelProps) {
   const decision = getApprovalDecision(aggregate.course.status, actor.role);
@@ -73,7 +84,7 @@ export function ApprovalActionPanel({
     setWorking(true);
     setError(null);
     try {
-      await curriculumRepository.transitionCourse(aggregate.course.id, {
+      await onTransition(aggregate.course.id, {
         targetStatus,
         comment: comment.trim() || null,
         actorId: actor.id,

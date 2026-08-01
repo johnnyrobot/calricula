@@ -4,6 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const getSearchParam = vi.hoisted(() => vi.fn());
 const programEditor = vi.hoisted(() => vi.fn());
 const programView = vi.hoisted(() => vi.fn());
+const useProgram = vi.hoisted(() => vi.fn());
+const useReferences = vi.hoisted(() => vi.fn());
+
+vi.mock("../../lib/data", () => ({ useProgram, useReferences }));
 
 vi.mock("next/navigation", () => ({
   useSearchParams: () => ({ get: getSearchParam }),
@@ -17,9 +21,9 @@ vi.mock("./ProgramEditor", () => ({
 }));
 
 vi.mock("./ProgramView", () => ({
-  ProgramView: (props: { programId: string }) => {
+  ProgramView: (props: Record<string, unknown>) => {
     programView(props);
-    return <p>View for {props.programId}</p>;
+    return <p>View rendered</p>;
   },
 }));
 
@@ -31,6 +35,22 @@ describe("program query-parameter routes", () => {
     getSearchParam.mockReset();
     programEditor.mockReset();
     programView.mockReset();
+    useProgram.mockReturnValue({
+      data: {
+        program: { departmentId: "department-1" },
+      },
+      error: null,
+      loading: false,
+      refresh: vi.fn(),
+    });
+    useReferences.mockReturnValue({
+      data: {
+        departments: [{ id: "department-1", code: "CIS", name: "Computing" }],
+      },
+      error: null,
+      loading: false,
+      refresh: vi.fn(),
+    });
   });
 
   it("renders an in-app missing-id state instead of failing", () => {
@@ -58,8 +78,48 @@ describe("program query-parameter routes", () => {
     });
 
     rerender(<ProgramViewRoute />);
-    expect(programView).toHaveBeenCalledWith({
-      programId: "local-program-id",
+    expect(programView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aggregate: { program: { departmentId: "department-1" } },
+        department: { id: "department-1", code: "CIS", name: "Computing" },
+        error: null,
+        loading: false,
+      }),
+    );
+  });
+
+  it("resolves the department and forwards read failures to the view", () => {
+    getSearchParam.mockReturnValue("local-program-id");
+    useProgram.mockReturnValue({
+      data: { program: { departmentId: "department-missing" } },
+      error: new Error("Program read failed."),
+      loading: false,
+      refresh: vi.fn(),
     });
+
+    render(<ProgramViewRoute />);
+
+    expect(programView).toHaveBeenCalledWith(
+      expect.objectContaining({
+        department: null,
+        error: new Error("Program read failed."),
+      }),
+    );
+  });
+
+  it("reports a read as loading while either source is still opening", () => {
+    getSearchParam.mockReturnValue("local-program-id");
+    useReferences.mockReturnValue({
+      data: null,
+      error: null,
+      loading: true,
+      refresh: vi.fn(),
+    });
+
+    render(<ProgramViewRoute />);
+
+    expect(programView).toHaveBeenCalledWith(
+      expect.objectContaining({ loading: true }),
+    );
   });
 });

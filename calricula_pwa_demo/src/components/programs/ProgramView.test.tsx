@@ -1,13 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-const useProgram = vi.hoisted(() => vi.fn());
-const useReferences = vi.hoisted(() => vi.fn());
-
-vi.mock("../../lib/data", () => ({
-  useProgram,
-  useReferences,
-}));
+import { describe, expect, it, vi } from "vitest";
 
 import { ProgramView } from "./ProgramView";
 
@@ -110,47 +102,45 @@ const referenceState = {
   refresh: vi.fn(),
 };
 
+type ViewState = {
+  data?: unknown;
+  error?: Error | null;
+  loading?: boolean;
+};
+
+function viewProps(state: ViewState = { data: aggregate }) {
+  const data = (state.data ?? null) as {
+    program: { departmentId: string };
+  } | null;
+  return {
+    aggregate: data as never,
+    department:
+      referenceState.data.departments.find(
+        (item) => item.id === data?.program.departmentId,
+      ) ?? null,
+    error: state.error ?? null,
+    loading: state.loading ?? false,
+  };
+}
+
 describe("ProgramView", () => {
-  beforeEach(() => {
-    useProgram.mockReset();
-    useReferences.mockReset();
-    useProgram.mockReturnValue({
-      data: aggregate,
-      error: null,
-      loading: false,
-      refresh: vi.fn(),
-    });
-    useReferences.mockReturnValue(referenceState);
-  });
 
   it("renders loading, failure, and not-found states", () => {
-    useProgram.mockReturnValueOnce({
-      data: null,
-      error: null,
-      loading: true,
-      refresh: vi.fn(),
-    });
-    const { rerender } = render(<ProgramView programId={programId} />);
+    const { rerender } = render(
+      <ProgramView {...viewProps({ data: null, loading: true })} />,
+    );
     expect(screen.getByRole("status")).toHaveTextContent(
       "Opening program record",
     );
 
-    useProgram.mockReturnValue({
-      data: null,
-      error: new Error("Program read failed."),
-      loading: false,
-      refresh: vi.fn(),
-    });
-    rerender(<ProgramView programId={`${programId}-error`} />);
+    rerender(
+      <ProgramView
+        {...viewProps({ data: null, error: new Error("Program read failed.") })}
+      />,
+    );
     expect(screen.getByRole("alert")).toHaveTextContent("Program read failed.");
 
-    useProgram.mockReturnValue({
-      data: null,
-      error: null,
-      loading: false,
-      refresh: vi.fn(),
-    });
-    rerender(<ProgramView programId={`${programId}-missing`} />);
+    rerender(<ProgramView {...viewProps({ data: null })} />);
     expect(screen.getByRole("alert")).toHaveTextContent("Program not found");
     expect(screen.getByRole("link", { name: "View programs" })).toHaveAttribute(
       "href",
@@ -159,7 +149,7 @@ describe("ProgramView", () => {
   });
 
   it("renders the catalog, comments, and sorted ordered requirements", () => {
-    render(<ProgramView programId={programId} />);
+    render(<ProgramView {...viewProps()} />);
 
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Computer Science",
@@ -189,20 +179,14 @@ describe("ProgramView", () => {
   });
 
   it("hides editing for approved programs and marks high-unit records", () => {
-    useProgram.mockReturnValue({
-      data: {
+    render(<ProgramView {...viewProps({ data: {
         ...aggregate,
         program: {
           ...aggregate.program,
           status: "Approved",
           isHighUnitMajor: true,
         },
-      },
-      error: null,
-      loading: false,
-      refresh: vi.fn(),
-    });
-    render(<ProgramView programId={programId} />);
+      } })} />);
 
     expect(screen.queryByTestId("edit-program")).not.toBeInTheDocument();
     expect(screen.getByText("Approved")).toHaveAttribute(
@@ -213,8 +197,7 @@ describe("ProgramView", () => {
   });
 
   it("provides explicit fallbacks for incomplete authoring records", () => {
-    useProgram.mockReturnValue({
-      data: {
+    render(<ProgramView {...viewProps({ data: {
         ...aggregate,
         program: {
           ...aggregate.program,
@@ -226,12 +209,7 @@ describe("ProgramView", () => {
         },
         courses: [],
         comments: [],
-      },
-      error: null,
-      loading: false,
-      refresh: vi.fn(),
-    });
-    render(<ProgramView programId={programId} />);
+      } })} />);
 
     expect(screen.getByText("Department unavailable")).toBeVisible();
     expect(

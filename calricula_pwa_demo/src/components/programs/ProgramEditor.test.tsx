@@ -3,6 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const updateProgram = vi.hoisted(() => vi.fn());
 const useProgram = vi.hoisted(() => vi.fn());
+const useCourses = vi.hoisted(() =>
+  vi.fn(() => ({
+    data: { items: [], total: 0, page: 1, pageSize: 100, pageCount: 0 },
+    error: null,
+    loading: false,
+    refresh: () => undefined,
+  })),
+);
+const reorderProgramCourses = vi.hoisted(() => vi.fn());
 const useReferences = vi.hoisted(() => vi.fn());
 const programFormProps = vi.hoisted(() => vi.fn());
 const builderProps = vi.hoisted(() => vi.fn());
@@ -37,7 +46,8 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("../../lib/data", () => ({
-  curriculumRepository: { updateProgram },
+  curriculumRepository: { updateProgram, reorderProgramCourses },
+  useCourses,
   useProgram,
   useReferences,
 }));

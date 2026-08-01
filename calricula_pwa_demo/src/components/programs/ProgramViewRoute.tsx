@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 
+import { useProgram, useReferences } from "../../lib/data";
+
 import { ProgramView } from "./ProgramView";
 
 export function ProgramViewRoute() {
@@ -21,5 +23,26 @@ export function ProgramViewRoute() {
     );
   }
 
-  return <ProgramView programId={id} />;
+  return <ProgramViewScreen programId={id} />;
+}
+
+/**
+ * The route screen owns the reads. ProgramView renders what it is handed.
+ */
+function ProgramViewScreen({ programId }: { programId: string }) {
+  const aggregate = useProgram(programId);
+  const references = useReferences();
+  const department =
+    references.data?.departments.find(
+      (item) => item.id === aggregate.data?.program.departmentId,
+    ) ?? null;
+
+  return (
+    <ProgramView
+      aggregate={aggregate.data ?? null}
+      department={department}
+      error={aggregate.error ?? references.error ?? null}
+      loading={aggregate.loading || references.loading}
+    />
+  );
 }

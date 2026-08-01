@@ -24,16 +24,30 @@ import type {
   RequirementType,
 } from "../../lib/domain";
 import type { ProgramAggregate } from "../../lib/data";
-import { curriculumRepository, useCourses } from "../../lib/data";
 import { registerPendingWorkFlusher } from "../../lib/pwa/pending-work";
 
 interface CourseRow extends ProgramCourse {
   course: Course | null;
 }
 
+export interface ProgramRequirementRow {
+  courseId: string;
+  requirementType: RequirementType;
+  sequence: number;
+  unitsApplied: string;
+}
+
 export interface ProgramCourseBuilderProps {
   aggregate: ProgramAggregate;
   disabled?: boolean;
+  /** Supplied by the screen that owns the reads. */
+  availableCourses: readonly Course[];
+  availableCoursesLoading?: boolean;
+  /** Supplied by the screen that owns the writes. */
+  onSaveRequirements: (
+    programId: string,
+    requirements: ProgramRequirementRow[],
+  ) => Promise<unknown>;
 }
 
 const REQUIREMENT_TYPES: readonly RequirementType[] = [
@@ -62,12 +76,10 @@ function requirementSaveFailure(caught: unknown): string {
 export function ProgramCourseBuilder({
   aggregate,
   disabled = false,
+  availableCourses,
+  availableCoursesLoading = false,
+  onSaveRequirements,
 }: ProgramCourseBuilderProps) {
-  const available = useCourses({
-    pageSize: 100,
-    sortBy: "courseCode",
-    sortDirection: "asc",
-  });
   const [rows, setRows] = useState<CourseRow[]>(aggregate.courses);
   const [courseId, setCourseId] = useState("");
   const [requirementType, setRequirementType] =
@@ -84,7 +96,7 @@ export function ProgramCourseBuilder({
     () => new Set(rows.map((row) => row.courseId)),
     [rows],
   );
-  const choices = available.data.items.filter(
+  const choices = availableCourses.filter(
     (course) => !selectedIds.has(course.id),
   );
 
@@ -103,7 +115,7 @@ export function ProgramCourseBuilder({
         setSaveState("saving");
         setSaveError("");
         try {
-          await curriculumRepository.reorderProgramCourses(
+          await onSaveRequirements(
             aggregate.program.id,
             snapshot.map((row, index) => ({
               courseId: row.courseId,
@@ -129,7 +141,7 @@ export function ProgramCourseBuilder({
     } finally {
       if (savePromiseRef.current === promise) savePromiseRef.current = null;
     }
-  }, [aggregate.program.id]);
+  }, [aggregate.program.id, onSaveRequirements]);
 
   const scheduleSave = useCallback(() => {
     if (timerRef.current) clearTimeout(timerRef.current);
@@ -152,7 +164,7 @@ export function ProgramCourseBuilder({
   );
 
   const add = () => {
-    const course = available.data.items.find((item) => item.id === courseId);
+    const course = availableCourses.find((item) => item.id === courseId);
     if (!course) return;
     changeRows((current) => [
       ...current,
@@ -287,7 +299,7 @@ export function ProgramCourseBuilder({
             </label>
             <select
               className="luminous-select"
-              disabled={available.loading}
+              disabled={availableCoursesLoading}
               id="program-add-course"
               onChange={(event) => setCourseId(event.target.value)}
               value={courseId}

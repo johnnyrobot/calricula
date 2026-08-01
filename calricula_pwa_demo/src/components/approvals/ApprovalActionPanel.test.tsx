@@ -6,11 +6,7 @@ import type {
   CourseAggregate,
 } from "../../lib/domain";
 
-const transitionCourse = vi.hoisted(() => vi.fn());
-
-vi.mock("../../lib/data", () => ({
-  curriculumRepository: { transitionCourse },
-}));
+const transitionCourse = vi.fn();
 
 vi.mock("../ai", () => ({
   CourseAIControls: ({
@@ -64,6 +60,7 @@ describe("ApprovalActionPanel", () => {
         actor={actor}
         aggregate={aggregate}
         onComplete={onComplete}
+        onTransition={transitionCourse}
       />,
     );
 
@@ -91,7 +88,11 @@ describe("ApprovalActionPanel", () => {
   });
 
   it("requires a revision note before confirming a return", () => {
-    render(<ApprovalActionPanel actor={actor} aggregate={aggregate} />);
+    render(<ApprovalActionPanel
+        actor={actor}
+        aggregate={aggregate}
+        onTransition={transitionCourse}
+      />);
 
     fireEvent.click(
       screen.getByRole("button", { name: "Return to faculty draft" }),
@@ -108,7 +109,11 @@ describe("ApprovalActionPanel", () => {
   });
 
   it("records a trimmed return reason and returns the record to Draft", async () => {
-    render(<ApprovalActionPanel actor={actor} aggregate={aggregate} />);
+    render(<ApprovalActionPanel
+        actor={actor}
+        aggregate={aggregate}
+        onTransition={transitionCourse}
+      />);
     fireEvent.click(
       screen.getByRole("button", { name: "Return to faculty draft" }),
     );
@@ -136,7 +141,11 @@ describe("ApprovalActionPanel", () => {
       fullName: "Demo Administrator",
       role: "admin",
     } satisfies Actor;
-    render(<ApprovalActionPanel actor={admin} aggregate={aggregate} />);
+    render(<ApprovalActionPanel
+        actor={admin}
+        aggregate={aggregate}
+        onTransition={transitionCourse}
+      />);
     fireEvent.click(
       screen.getByRole("button", {
         name: "Advance to curriculum committee",
@@ -165,7 +174,11 @@ describe("ApprovalActionPanel", () => {
       email: "faculty@example.invalid",
       role: "faculty",
     } satisfies Actor;
-    render(<ApprovalActionPanel actor={faculty} aggregate={aggregate} />);
+    render(<ApprovalActionPanel
+        actor={faculty}
+        aggregate={aggregate}
+        onTransition={transitionCourse}
+      />);
     expect(screen.getByTestId("approval-action")).toHaveTextContent(
       "Review action unavailable",
     );
@@ -177,7 +190,11 @@ describe("ApprovalActionPanel", () => {
   });
 
   it("cancels an unconfirmed decision without a repository mutation", () => {
-    render(<ApprovalActionPanel actor={actor} aggregate={aggregate} />);
+    render(<ApprovalActionPanel
+        actor={actor}
+        aggregate={aggregate}
+        onTransition={transitionCourse}
+      />);
     fireEvent.click(
       screen.getByRole("button", {
         name: "Advance to curriculum committee",
@@ -203,6 +220,7 @@ describe("ApprovalActionPanel", () => {
         actor={actor}
         aggregate={aggregate}
         onComplete={onComplete}
+        onTransition={transitionCourse}
       />,
     );
     fireEvent.click(
@@ -220,7 +238,11 @@ describe("ApprovalActionPanel", () => {
   });
 
   it("allows explicitly applied AI text to populate but not submit a note", () => {
-    render(<ApprovalActionPanel actor={actor} aggregate={aggregate} />);
+    render(<ApprovalActionPanel
+        actor={actor}
+        aggregate={aggregate}
+        onTransition={transitionCourse}
+      />);
     fireEvent.click(
       screen.getByRole("button", { name: "Apply text explanation" }),
     );

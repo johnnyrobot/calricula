@@ -17,6 +17,7 @@ import {
 import type { UpdateProgramInput } from "../../lib/domain";
 import {
   curriculumRepository,
+  useCourses,
   useProgram,
   useReferences,
 } from "../../lib/data";
@@ -60,6 +61,21 @@ function saveFailureMessage(caught: unknown): string {
 
 export function ProgramEditor({ programId }: { programId: string }) {
   const aggregate = useProgram(programId);
+  // The screen owns every read reaching the requirements builder below it.
+  const saveRequirements = useCallback(
+    (
+      programId: string,
+      requirements: Parameters<
+        typeof curriculumRepository.reorderProgramCourses
+      >[1],
+    ) => curriculumRepository.reorderProgramCourses(programId, requirements),
+    [],
+  );
+  const availableCourses = useCourses({
+    pageSize: 100,
+    sortBy: "courseCode",
+    sortDirection: "asc",
+  });
   const references = useReferences();
   const router = useRouter();
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -328,8 +344,11 @@ export function ProgramEditor({ programId }: { programId: string }) {
       />
       <ProgramCourseBuilder
         aggregate={aggregate.data}
+        availableCourses={availableCourses.data.items}
+        availableCoursesLoading={availableCourses.loading}
         disabled={aggregate.data.program.status === "Approved"}
         key={`program-courses-${aggregate.data.program.id}`}
+        onSaveRequirements={saveRequirements}
       />
     </div>
   );

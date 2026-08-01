@@ -11,6 +11,7 @@ import {
 import { useMemo, useState } from "react";
 
 import {
+  curriculumRepository,
   useActivePersona,
   useCourse,
   useCourses,
@@ -271,6 +272,12 @@ export function ApprovalQueue() {
                   actor={actor}
                   aggregate={selected.data}
                   onComplete={() => setSelectedId(null)}
+                  onTransition={(courseId, transition) =>
+                    curriculumRepository.transitionCourse(
+                      courseId,
+                      transition,
+                    )
+                  }
                 />
               </div>
             )}
