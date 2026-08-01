@@ -1,3 +1,11 @@
+import { ApiError } from "./api-error";
+import {
+  assertFreeRoutingHonoured,
+  buildFreeRouting,
+  type FreeRouting,
+} from "./free-routing";
+import { isRecord, type JsonRecord } from "./json";
+
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const TURNSTILE_SITEVERIFY_URL =
   "https://challenges.cloudflare.com/turnstile/v0/siteverify";
@@ -68,8 +76,6 @@ type TaskName =
   | "program-narrative"
   | "compliance-explanation";
 
-type JsonRecord = Record<string, unknown>;
-
 type SessionPayload = {
   v: 2;
   sid: string;
@@ -110,25 +116,6 @@ type TaskDefinition = {
   structured?: SchemaDefinition;
   validate(content: string, input: unknown): unknown;
 };
-
-class ApiError extends Error {
-  readonly status: number;
-  readonly code: string;
-  readonly retryAfterSeconds?: number;
-
-  constructor(
-    status: number,
-    code: string,
-    message: string,
-    retryAfterSeconds?: number,
-  ) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-    this.code = code;
-    this.retryAfterSeconds = retryAfterSeconds;
-  }
-}
 
 class OutputValidationError extends Error {
   constructor(message: string) {
@@ -1229,36 +1216,6 @@ function requireOpenRouterKey(env: Env): string {
   return key;
 }
 
-function parseFreeModels(env: Env): string[] {
-  const raw = env.OPENROUTER_FREE_MODELS?.trim() ?? "";
-  const configured = raw
-    ? raw
-        .split(/[\s,]+/)
-        .map((model) => model.trim())
-        .filter(Boolean)
-    : [];
-  if (configured.length !== 2 || new Set(configured).size !== 2) {
-    throw new ApiError(
-      503,
-      "AI_CONFIGURATION_ERROR",
-      "AI service configuration is unavailable.",
-    );
-  }
-  for (const model of configured) {
-    if (
-      !model.endsWith(":free") ||
-      !/^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+:free$/.test(model)
-    ) {
-      throw new ApiError(
-        503,
-        "AI_CONFIGURATION_ERROR",
-        "AI service configuration is unavailable.",
-      );
-    }
-  }
-  return [...configured, "openrouter/free"];
-}
-
 async function verifyTurnstile(
   request: Request,
   env: Env,
@@ -1817,7 +1774,11 @@ async function handleAiRequest(
   const now = nowSeconds(dependencies);
   const session = await verifySession(request, secret, now);
   requireOpenRouterKey(env);
-  parseFreeModels(env);
+  // Built before the quota is reserved so a misconfigured model list fails
+  // closed without spending one of the caller's five daily attempts.
+  const routing = buildFreeRouting(env, {
+    structured: TASKS[task].structured !== undefined,
+  });
   await enforceRateLimits(env, `session:${session.sid}`);
   await reserveDailyAttempt(env, session, now, id);
   const signedValue = await signSession(session, secret);
@@ -1830,6 +1791,7 @@ async function handleAiRequest(
       task,
       body,
       origin,
+      routing,
     );
     response = successResponse(result.data, id, result.model);
   } catch (error) {
@@ -1860,23 +1822,10 @@ async function callOpenRouter(
   taskName: TaskName,
   request: AiRequest,
   origin: string,
+  routing: FreeRouting,
 ): Promise<{ data: unknown; model: string }> {
   const task = TASKS[taskName];
-  const models = parseFreeModels(env);
   const apiKey = requireOpenRouterKey(env);
-  const provider: JsonRecord = {
-    allow_fallbacks: true,
-    data_collection: "deny",
-    zdr: true,
-    max_price: {
-      prompt: 0,
-      completion: 0,
-      request: 0,
-    },
-  };
-  if (task.structured) {
-    provider.require_parameters = true;
-  }
 
   const messages: JsonRecord[] = [
     {
@@ -1898,9 +1847,9 @@ async function callOpenRouter(
     },
   ];
   const outboundBody: JsonRecord = {
-    models,
+    models: routing.models,
     messages,
-    provider,
+    provider: routing.provider,
     stream: false,
     temperature: taskName === "chat" ? 0.35 : 0.2,
     max_tokens: taskName === "chat" ? 1800 : 2200,
@@ -1997,8 +1946,7 @@ async function callOpenRouter(
     throw mapOpenRouterError(embeddedStatus, payload, null);
   }
 
-  const model = validateFreeResponseModel(payload);
-  validateZeroCost(payload);
+  const model = assertFreeRoutingHonoured(payload);
   const content = extractMessageContent(payload);
   let data: unknown;
   try {
@@ -2202,55 +2150,6 @@ function parseRetryAfter(value: string | null): number | undefined {
   return undefined;
 }
 
-function validateFreeResponseModel(payload: JsonRecord): string {
-  const model = payload.model;
-  if (
-    typeof model !== "string" ||
-    model.length > 200 ||
-    (model !== "openrouter/free" && !model.endsWith(":free"))
-  ) {
-    throw new ApiError(
-      502,
-      "UPSTREAM_POLICY_VIOLATION",
-      "The AI provider did not confirm a free model.",
-    );
-  }
-  return model;
-}
-
-function validateZeroCost(payload: JsonRecord): void {
-  if (!isRecord(payload.usage)) {
-    return;
-  }
-  if (
-    Object.prototype.hasOwnProperty.call(payload.usage, "cost") &&
-    payload.usage.cost !== null &&
-    (typeof payload.usage.cost !== "number" || payload.usage.cost !== 0)
-  ) {
-    throw new ApiError(
-      502,
-      "UPSTREAM_POLICY_VIOLATION",
-      "The AI provider reported a non-free request.",
-    );
-  }
-  if (isRecord(payload.usage.cost_details)) {
-    for (const value of Object.values(payload.usage.cost_details)) {
-      if (
-        value !== null &&
-        (typeof value !== "number" ||
-          !Number.isFinite(value) ||
-          value !== 0)
-      ) {
-        throw new ApiError(
-          502,
-          "UPSTREAM_POLICY_VIOLATION",
-          "The AI provider reported a non-free request.",
-        );
-      }
-    }
-  }
-}
-
 function extractMessageContent(payload: JsonRecord): string {
   if (!Array.isArray(payload.choices) || payload.choices.length < 1) {
     throw new ApiError(
@@ -2301,10 +2200,6 @@ function parseStructuredContent(content: string): JsonRecord {
     throw new OutputValidationError("Structured content is not valid JSON.");
   }
   return requireRecord(parsed, "structured output");
-}
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function requireRecord(value: unknown, name: string): JsonRecord {
