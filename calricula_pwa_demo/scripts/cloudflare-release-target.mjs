@@ -23,36 +23,26 @@ const UUID_PATTERN =
 const ACCOUNT_ID_PATTERN = /^[0-9a-f]{32}$/i;
 const WORKER_NOT_FOUND_PATTERN = /\[code:\s*10007\]/;
 
-export const OWNERSHIP_RECORD_PATH = path.resolve(
-  process.cwd(),
-  '.release-evidence',
-  'worker-ownership.json',
-);
-export const CURRENT_DEPLOYMENT_PATH = path.resolve(
-  process.cwd(),
-  '.release-evidence',
-  'current-deployment.json',
-);
-export const PENDING_DEPLOYMENT_PATH = path.resolve(
-  process.cwd(),
-  '.release-evidence',
-  'pending-deployment.json',
-);
-export const DEPLOYMENT_HISTORY_PATH = path.resolve(
-  process.cwd(),
-  '.release-evidence',
-  'deployment-history.jsonl',
-);
-const PENDING_DEPLOYMENT_LOCK_PATH = path.resolve(
-  process.cwd(),
-  '.release-evidence',
-  'pending-deployment.lock',
-);
-export const RELEASE_LIFECYCLE_LOCK_PATH = path.resolve(
-  process.cwd(),
-  '.release-evidence',
-  'release-lifecycle.lock',
-);
+/**
+ * Every path a release attempt reads or writes, resolved against one working
+ * directory. Taking the directory as an argument is what lets the record
+ * functions below be exercised in a temporary tree instead of only against a
+ * real checkout.
+ */
+export function releaseRecordPaths(cwd = process.cwd()) {
+  const evidence = path.resolve(cwd, '.release-evidence');
+  const artifacts = path.resolve(cwd, '.release-artifacts', 'wrangler');
+  return {
+    artifacts,
+    evidence,
+    ownership: path.join(evidence, 'worker-ownership.json'),
+    current: path.join(evidence, 'current-deployment.json'),
+    pending: path.join(evidence, 'pending-deployment.json'),
+    pendingLock: path.join(evidence, 'pending-deployment.lock'),
+    history: path.join(evidence, 'deployment-history.jsonl'),
+    lifecycleLock: path.join(evidence, 'release-lifecycle.lock'),
+  };
+}
 const RELEASE_LIFECYCLE_OWNER_FILE = 'owner.json';
 
 export class CloudflareTargetError extends Error {}
@@ -153,7 +143,7 @@ export async function assertReleaseLifecycleLease(lease) {
 }
 
 export async function acquireReleaseLifecycleLock({
-  lockPath = RELEASE_LIFECYCLE_LOCK_PATH,
+  lockPath = releaseRecordPaths().lifecycleLock,
   pid = process.pid,
   host = hostname(),
   now = () => new Date(),
@@ -301,10 +291,10 @@ export async function withReleaseLifecycleLock(
   }
 }
 
-async function withPendingDeploymentLock(action) {
+async function withPendingDeploymentLock(action, cwd) {
   return withReleaseLifecycleLock(
     () => action(),
-    { lockPath: PENDING_DEPLOYMENT_LOCK_PATH },
+    { lockPath: releaseRecordPaths(cwd).pendingLock },
   );
 }
 
@@ -827,11 +817,12 @@ async function readOptionalJson(filePath) {
   }
 }
 
-export async function readTargetRecords() {
+export async function readTargetRecords({ cwd } = {}) {
+  const paths = releaseRecordPaths(cwd);
   const [ownership, current, pending] = await Promise.all([
-    readOptionalJson(OWNERSHIP_RECORD_PATH),
-    readOptionalJson(CURRENT_DEPLOYMENT_PATH),
-    readOptionalJson(PENDING_DEPLOYMENT_PATH),
+    readOptionalJson(paths.ownership),
+    readOptionalJson(paths.current),
+    readOptionalJson(paths.pending),
   ]);
   return { current, ownership, pending };
 }
@@ -877,7 +868,9 @@ export async function inspectCloudflareTarget({
   bootstrap,
   verifyOnly,
   origin,
+  cwd,
 }) {
+  const paths = releaseRecordPaths(cwd);
   const { identity, workerName } = await inspectCloudflareIdentity({
     wranglerConfig,
     environment,
@@ -891,8 +884,8 @@ export async function inspectCloudflareTarget({
   ]);
   if (bootstrap && !verifyOnly) {
     const [ownership, current] = await Promise.all([
-      readOptionalJson(OWNERSHIP_RECORD_PATH),
-      readOptionalJson(CURRENT_DEPLOYMENT_PATH),
+      readOptionalJson(paths.ownership),
+      readOptionalJson(paths.current),
     ]);
     if (ownership || current) {
       throw new CloudflareTargetError(
@@ -905,8 +898,8 @@ export async function inspectCloudflareTarget({
 
   const deployment = parseDeploymentStatus(statusResult);
   const [ownership, current] = await Promise.all([
-    readOptionalJson(OWNERSHIP_RECORD_PATH),
-    readOptionalJson(CURRENT_DEPLOYMENT_PATH),
+    readOptionalJson(paths.ownership),
+    readOptionalJson(paths.current),
   ]);
   validateOwnershipRecord({
     ownership,
@@ -943,17 +936,16 @@ export async function inspectCloudflareIdentity({
   return { identity, workerName };
 }
 
-export async function readPendingDeployment() {
-  return readOptionalJson(PENDING_DEPLOYMENT_PATH);
+export async function readPendingDeployment({ cwd } = {}) {
+  return readOptionalJson(releaseRecordPaths(cwd).pending);
 }
 
-export async function writePendingDeployment(record) {
-  await mkdir(path.dirname(PENDING_DEPLOYMENT_PATH), {
-    recursive: true,
-  });
+export async function writePendingDeployment(record, { cwd } = {}) {
+  const paths = releaseRecordPaths(cwd);
+  await mkdir(paths.evidence, { recursive: true });
   try {
     await writeFile(
-      PENDING_DEPLOYMENT_PATH,
+      paths.pending,
       `${JSON.stringify(record, null, 2)}\n`,
       { encoding: 'utf8', flag: 'wx', mode: 0o600 },
     );
@@ -964,9 +956,10 @@ export async function writePendingDeployment(record) {
   }
 }
 
-export async function updatePendingDeployment(record) {
+export async function updatePendingDeployment(record, { cwd } = {}) {
+  const paths = releaseRecordPaths(cwd);
   return withPendingDeploymentLock(async () => {
-    const existing = await readOptionalJson(PENDING_DEPLOYMENT_PATH);
+    const existing = await readOptionalJson(paths.pending);
     if (
       !samePendingAttempt(existing, record) ||
       (existing.origin &&
@@ -978,29 +971,26 @@ export async function updatePendingDeployment(record) {
         'Pending deployment changed unexpectedly before reconciliation.',
       );
     }
-    const temporary = `${PENDING_DEPLOYMENT_PATH}.tmp`;
+    const temporary = `${paths.pending}.tmp`;
     await writeFile(temporary, `${JSON.stringify(record, null, 2)}\n`, {
       encoding: 'utf8',
       mode: 0o600,
     });
-    await rename(temporary, PENDING_DEPLOYMENT_PATH);
-    await chmod(PENDING_DEPLOYMENT_PATH, 0o600);
-  });
+    await rename(temporary, paths.pending);
+    await chmod(paths.pending, 0o600);
+  }, cwd);
 }
 
-export async function archivePendingDeployment(record) {
-  const directory = path.resolve(
-    process.cwd(),
-    '.release-artifacts',
-    'wrangler',
-  );
+export async function archivePendingDeployment(record, { cwd } = {}) {
+  const paths = releaseRecordPaths(cwd);
+  const directory = paths.artifacts;
   await mkdir(directory, { recursive: true });
   const destination = path.join(
     directory,
     `reconciled-${record.versionId}.json`,
   );
   await withPendingDeploymentLock(async () => {
-    const existing = await readOptionalJson(PENDING_DEPLOYMENT_PATH);
+    const existing = await readOptionalJson(paths.pending);
     if (
       !samePendingAttempt(existing, record) ||
       existing.origin !== record.origin ||
@@ -1011,30 +1001,27 @@ export async function archivePendingDeployment(record) {
       );
     }
     try {
-      await rename(PENDING_DEPLOYMENT_PATH, destination);
+      await rename(paths.pending, destination);
       await chmod(destination, 0o400);
     } catch {
       throw new CloudflareTargetError(
         'The reconciled pending deployment could not be archived.',
       );
     }
-  });
+  }, cwd);
   return destination;
 }
 
-export async function archiveUnpublishedAttempt(record) {
-  const directory = path.resolve(
-    process.cwd(),
-    '.release-artifacts',
-    'wrangler',
-  );
+export async function archiveUnpublishedAttempt(record, { cwd } = {}) {
+  const paths = releaseRecordPaths(cwd);
+  const directory = paths.artifacts;
   await mkdir(directory, { recursive: true });
   const destination = path.join(
     directory,
     `not-published-${randomUUID()}.json`,
   );
   await withPendingDeploymentLock(async () => {
-    const existing = await readOptionalJson(PENDING_DEPLOYMENT_PATH);
+    const existing = await readOptionalJson(paths.pending);
     if (
       !samePendingAttempt(existing, record) ||
       existing.origin !== record.origin ||
@@ -1050,22 +1037,22 @@ export async function archiveUnpublishedAttempt(record) {
       outcome: 'confirmed-not-published',
       resolvedAt: new Date().toISOString(),
     };
-    const temporary = `${PENDING_DEPLOYMENT_PATH}.tmp`;
+    const temporary = `${paths.pending}.tmp`;
     await writeFile(
       temporary,
       `${JSON.stringify(cancelled, null, 2)}\n`,
       { encoding: 'utf8', mode: 0o600 },
     );
-    await rename(temporary, PENDING_DEPLOYMENT_PATH);
+    await rename(temporary, paths.pending);
     try {
-      await rename(PENDING_DEPLOYMENT_PATH, destination);
+      await rename(paths.pending, destination);
       await chmod(destination, 0o400);
     } catch {
       throw new CloudflareTargetError(
         'The confirmed unpublished attempt could not be archived.',
       );
     }
-  });
+  }, cwd);
   return destination;
 }
 
@@ -1194,13 +1181,12 @@ export async function inspectPublishedDeployment({
   return { deployOutput, deployment };
 }
 
-export async function writeOwnershipRecord(record) {
-  await mkdir(path.dirname(OWNERSHIP_RECORD_PATH), {
-    recursive: true,
-  });
+export async function writeOwnershipRecord(record, { cwd } = {}) {
+  const paths = releaseRecordPaths(cwd);
+  await mkdir(paths.evidence, { recursive: true });
   try {
     await writeFile(
-      OWNERSHIP_RECORD_PATH,
+      paths.ownership,
       `${JSON.stringify(record, null, 2)}\n`,
       { encoding: 'utf8', flag: 'wx', mode: 0o600 },
     );
@@ -1209,29 +1195,27 @@ export async function writeOwnershipRecord(record) {
       'Immutable Worker ownership evidence already exists or could not be created.',
     );
   }
-  await chmod(OWNERSHIP_RECORD_PATH, 0o400);
+  await chmod(paths.ownership, 0o400);
 }
 
-export async function writeCurrentDeployment(record) {
-  await mkdir(path.dirname(CURRENT_DEPLOYMENT_PATH), {
-    recursive: true,
-  });
-  const temporary = `${CURRENT_DEPLOYMENT_PATH}.tmp`;
+export async function writeCurrentDeployment(record, { cwd } = {}) {
+  const paths = releaseRecordPaths(cwd);
+  await mkdir(paths.evidence, { recursive: true });
+  const temporary = `${paths.current}.tmp`;
   await writeFile(temporary, `${JSON.stringify(record, null, 2)}\n`, {
     encoding: 'utf8',
     mode: 0o600,
   });
-  await rename(temporary, CURRENT_DEPLOYMENT_PATH);
-  await chmod(CURRENT_DEPLOYMENT_PATH, 0o600);
+  await rename(temporary, paths.current);
+  await chmod(paths.current, 0o600);
 }
 
-export async function appendDeploymentHistory(record) {
-  await mkdir(path.dirname(DEPLOYMENT_HISTORY_PATH), {
-    recursive: true,
-  });
+export async function appendDeploymentHistory(record, { cwd } = {}) {
+  const paths = releaseRecordPaths(cwd);
+  await mkdir(paths.evidence, { recursive: true });
   let existing = '';
   try {
-    existing = await readFile(DEPLOYMENT_HISTORY_PATH, 'utf8');
+    existing = await readFile(paths.history, 'utf8');
   } catch {
     // The first deployment creates the append-only history.
   }
@@ -1249,10 +1233,10 @@ export async function appendDeploymentHistory(record) {
     });
   if (!duplicate) {
     await appendFile(
-      DEPLOYMENT_HISTORY_PATH,
+      paths.history,
       `${JSON.stringify(record)}\n`,
       { encoding: 'utf8', mode: 0o600 },
     );
   }
-  await chmod(DEPLOYMENT_HISTORY_PATH, 0o600);
+  await chmod(paths.history, 0o600);
 }
