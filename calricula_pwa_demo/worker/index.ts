@@ -5,6 +5,14 @@ import {
   type FreeRouting,
 } from "./free-routing";
 import { isRecord, type JsonRecord } from "./json";
+import {
+  buildQuotaRequest,
+  decideReservation,
+  decideStatus,
+  isQuotaReservation,
+  parseQuotaRequest,
+  type InternalQuotaReservation,
+} from "./quota-protocol";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const TURNSTILE_SITEVERIFY_URL =
@@ -14,7 +22,6 @@ const TURNSTILE_ACTION = "ai-session";
 const BODY_LIMIT_BYTES = 64 * 1024;
 const UPSTREAM_BODY_LIMIT_BYTES = 256 * 1024;
 const SESSION_TTL_SECONDS = 24 * 60 * 60;
-const MAX_DAILY_ATTEMPTS = 5;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 45_000;
 
 const encoder = new TextEncoder();
@@ -84,15 +91,7 @@ type SessionPayload = {
   exp: number;
 };
 
-export type QuotaReservation = {
-  allowed: boolean;
-  remaining: number;
-  retryAfterSeconds: number;
-};
-
-type InternalQuotaReservation = QuotaReservation & {
-  duplicate?: boolean;
-};
+export type { QuotaReservation } from "./quota-protocol";
 
 type ApiEnvelope<T = unknown> = {
   success: boolean;
@@ -1592,25 +1591,6 @@ function quotaExpiryMs(now: number): number {
   );
 }
 
-function isQuotaResult(
-  value: unknown,
-): value is InternalQuotaReservation {
-  return (
-    isRecord(value) &&
-    typeof value.allowed === "boolean" &&
-    (value.duplicate === undefined ||
-      typeof value.duplicate === "boolean") &&
-    typeof value.remaining === "number" &&
-    Number.isSafeInteger(value.remaining) &&
-    value.remaining >= 0 &&
-    value.remaining <= MAX_DAILY_ATTEMPTS &&
-    typeof value.retryAfterSeconds === "number" &&
-    Number.isSafeInteger(value.retryAfterSeconds) &&
-    value.retryAfterSeconds > 0 &&
-    value.retryAfterSeconds <= 24 * 60 * 60
-  );
-}
-
 async function callQuota(
   env: Env,
   sessionId: string,
@@ -1623,16 +1603,17 @@ async function callQuota(
       new Request(`https://quota.internal${path}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          limit: MAX_DAILY_ATTEMPTS,
-          expiresAtMs: quotaExpiryMs(now),
-          retryAfterSeconds: secondsUntilNextUtcDay(now),
-          ...(requestId ? { requestId } : {}),
-        }),
+        body: JSON.stringify(
+          buildQuotaRequest({
+            expiresAtMs: quotaExpiryMs(now),
+            retryAfterSeconds: secondsUntilNextUtcDay(now),
+            requestId,
+          }),
+        ),
       }),
     );
     const result = await readJsonResponse(response, 4 * 1024);
-    if (!response.ok || !isQuotaResult(result)) {
+    if (!response.ok || !isQuotaReservation(result)) {
       throw new Error("invalid quota response");
     }
     return result;
@@ -2482,70 +2463,43 @@ export class DailyAiQuota {
         { status: 400, headers: { "cache-control": "no-store" } },
       );
     }
-    if (
-      !isRecord(body) ||
-      body.limit !== MAX_DAILY_ATTEMPTS ||
-      typeof body.retryAfterSeconds !== "number" ||
-      !Number.isSafeInteger(body.retryAfterSeconds) ||
-      body.retryAfterSeconds <= 0 ||
-      body.retryAfterSeconds > 24 * 60 * 60 ||
-      typeof body.expiresAtMs !== "number" ||
-      !Number.isSafeInteger(body.expiresAtMs) ||
-      body.expiresAtMs <= Date.now()
-    ) {
+    const operation = url.pathname;
+    const quotaRequest = parseQuotaRequest(body, {
+      operation,
+      nowMs: Date.now(),
+    });
+    if (!quotaRequest) {
       return Response.json(
         { error: "invalid request" },
         { status: 400, headers: { "cache-control": "no-store" } },
       );
     }
-    await this.storage.setAlarm(body.expiresAtMs);
-    if (url.pathname === "/status") {
+    await this.storage.setAlarm(quotaRequest.expiresAtMs);
+    if (operation === "/status") {
       const attempts = (await this.storage.get<number>("attempts")) ?? 0;
       return Response.json(
-        {
-          allowed: attempts < MAX_DAILY_ATTEMPTS,
-          remaining: Math.max(0, MAX_DAILY_ATTEMPTS - attempts),
-          retryAfterSeconds: body.retryAfterSeconds,
-        },
+        decideStatus({
+          attempts,
+          retryAfterSeconds: quotaRequest.retryAfterSeconds,
+        }),
         { headers: { "cache-control": "no-store" } },
       );
     }
-    if (
-      typeof body.requestId !== "string" ||
-      !/^[A-Za-z0-9._:-]{1,128}$/.test(body.requestId)
-    ) {
-      return Response.json(
-        { error: "invalid request" },
-        { status: 400, headers: { "cache-control": "no-store" } },
-      );
-    }
     const result = await this.storage.transaction(async (transaction) => {
-      const reservationKey = `request:${body.requestId}`;
-      const existing = await transaction.get<boolean>(reservationKey);
+      const reservationKey = `request:${quotaRequest.requestId}`;
+      const alreadyReserved =
+        (await transaction.get<boolean>(reservationKey)) === true;
       const attempts = (await transaction.get<number>("attempts")) ?? 0;
-      if (existing) {
-        return {
-          allowed: true,
-          duplicate: true,
-          remaining: Math.max(0, MAX_DAILY_ATTEMPTS - attempts),
-          retryAfterSeconds: body.retryAfterSeconds,
-        };
+      const decision = decideReservation({
+        attempts,
+        alreadyReserved,
+        retryAfterSeconds: quotaRequest.retryAfterSeconds,
+      });
+      if (decision.allowed && !decision.duplicate) {
+        await transaction.put(reservationKey, true);
+        await transaction.put("attempts", attempts + 1);
       }
-      if (attempts >= MAX_DAILY_ATTEMPTS) {
-        return {
-          allowed: false,
-          remaining: 0,
-          retryAfterSeconds: body.retryAfterSeconds,
-        };
-      }
-      await transaction.put(reservationKey, true);
-      await transaction.put("attempts", attempts + 1);
-      return {
-        allowed: true,
-        duplicate: false,
-        remaining: MAX_DAILY_ATTEMPTS - attempts - 1,
-        retryAfterSeconds: body.retryAfterSeconds,
-      };
+      return decision;
     });
     return Response.json(result, {
       headers: { "cache-control": "no-store" },

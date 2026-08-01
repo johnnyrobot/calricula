@@ -130,7 +130,7 @@ function baseEnv(overrides: Partial<Env> = {}): Env {
     SESSION_RATE_LIMIT: {
       limit: vi.fn(async () => ({ success: true })),
     },
-    DAILY_AI_QUOTA: createMemoryDailyQuotaNamespace(),
+    DAILY_AI_QUOTA: createMemoryDailyQuotaNamespace({ nowMs: FIXED_NOW }),
     ...overrides,
   };
 }
