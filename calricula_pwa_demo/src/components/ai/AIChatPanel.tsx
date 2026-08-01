@@ -14,16 +14,17 @@ import ReactMarkdown from "react-markdown";
 import {
   AI_HISTORY_CONTEXT_LIMIT,
   AIOutputValidationError,
-  AIRequestError,
-  clearAISessionMarker,
   indexedDBAIChatPersistence,
-  isAISessionMarkedReady,
   runAITask,
-  subscribeAISessionStatus,
   type AIChatPersistence,
   type AIChatScope,
   type AIHistoryMessage,
 } from "../../lib/ai";
+import {
+  readSessionReadiness,
+  resyncSessionReadiness,
+  subscribeSessionReadiness,
+} from "../../lib/ai/session-readiness";
 import type { EntityType } from "../../lib/domain";
 
 import { AIConsentGate } from "./AIConsentGate";
@@ -57,11 +58,12 @@ export function AIChatPanel({
   tokenProvider,
 }: AIChatPanelProps) {
   const titleId = `assistant-title-${useId().replaceAll(":", "")}`;
-  const sessionReady = useSyncExternalStore(
-    subscribeAISessionStatus,
-    isAISessionMarkedReady,
-    () => false,
-  );
+  const sessionReady =
+    useSyncExternalStore(
+      subscribeSessionReadiness,
+      readSessionReadiness,
+      () => "needs-disclosure" as const,
+    ) === "ready";
   const [history, setHistory] = useState<AIHistoryMessage[]>([
     ...initialHistory.slice(-AI_HISTORY_CONTEXT_LIMIT),
   ]);
@@ -197,12 +199,7 @@ export function AIChatPanel({
       );
     } catch (caught) {
       if (caught instanceof DOMException && caught.name === "AbortError") return;
-      if (
-        caught instanceof AIRequestError &&
-        (caught.status === 401 || caught.status === 403)
-      ) {
-        clearAISessionMarker();
-      }
+      resyncSessionReadiness(caught);
       setError(
         caught instanceof Error
           ? caught

@@ -36,6 +36,15 @@ vi.mock("../../lib/ai", () => {
   };
 });
 
+vi.mock("../../lib/ai/session-readiness", () => ({
+  readSessionReadiness: () =>
+    aiState.acknowledged ? "needs-challenge" : "needs-disclosure",
+  subscribeSessionReadiness: (listener: () => void) => {
+    aiState.listeners.add(listener);
+    return () => aiState.listeners.delete(listener);
+  },
+}));
+
 vi.mock("./useOnlineStatus", () => ({
   useOnlineStatus: () => connection.online,
 }));

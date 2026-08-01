@@ -22,16 +22,18 @@ import {
 import {
   AIOutputValidationError,
   AIRequestError,
-  clearAISessionMarker,
   extractAIText,
-  isAISessionMarkedReady,
   runAITask,
-  subscribeAISessionStatus,
   validateAITaskOutput,
   type AIOutputIssue,
   type AIResult,
   type AITask,
 } from "../../lib/ai";
+import {
+  readSessionReadiness,
+  resyncSessionReadiness,
+  subscribeSessionReadiness,
+} from "../../lib/ai/session-readiness";
 
 import { AIConsentGate } from "./AIConsentGate";
 import { useOnlineStatus } from "./useOnlineStatus";
@@ -117,11 +119,12 @@ export function AISuggestionPanel<TApplied = unknown>({
     runAITask(requestedTask, { input: requestedInput }, { signal }),
   tokenProvider,
 }: AISuggestionPanelProps<TApplied>) {
-  const sessionReady = useSyncExternalStore(
-    subscribeAISessionStatus,
-    isAISessionMarkedReady,
-    () => false,
-  );
+  const sessionReady =
+    useSyncExternalStore(
+      subscribeSessionReadiness,
+      readSessionReadiness,
+      () => "needs-disclosure" as const,
+    ) === "ready";
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [result, setResult] = useState<AIResult<unknown> | null>(null);
@@ -198,12 +201,7 @@ export function AISuggestionPanel<TApplied = unknown>({
           requestId: caught.requestId,
         });
       }
-      if (
-        caught instanceof AIRequestError &&
-        (caught.status === 401 || caught.status === 403)
-      ) {
-        clearAISessionMarker();
-      }
+      resyncSessionReadiness(caught);
     } finally {
       if (requestController.current === controller) {
         requestController.current = null;

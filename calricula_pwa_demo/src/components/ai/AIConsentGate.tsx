@@ -12,9 +12,11 @@ import {
   acknowledgeAIDisclosure,
   AIRequestError,
   establishAISession,
-  hasAcknowledgedAIDisclosure,
-  subscribeAIDisclosureStatus,
 } from "../../lib/ai";
+import {
+  readSessionReadiness,
+  subscribeSessionReadiness,
+} from "../../lib/ai/session-readiness";
 
 import { TurnstileWidget } from "./TurnstileWidget";
 import { useOnlineStatus } from "./useOnlineStatus";
@@ -29,12 +31,13 @@ export function AIConsentGate({
   tokenProvider,
 }: AIConsentGateProps) {
   const titleId = `ai-boundary-title-${useId().replaceAll(":", "")}`;
-  const disclosureAcknowledged = useSyncExternalStore(
-    subscribeAIDisclosureStatus,
-    hasAcknowledgedAIDisclosure,
-    () => false,
+  const readiness = useSyncExternalStore(
+    subscribeSessionReadiness,
+    readSessionReadiness,
+    () => "needs-disclosure" as const,
   );
-  const stage = disclosureAcknowledged ? "verification" : "disclosure";
+  const stage =
+    readiness === "needs-disclosure" ? "disclosure" : "verification";
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const online = useOnlineStatus();
