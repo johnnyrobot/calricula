@@ -10,6 +10,9 @@ test-results/
 .release-artifacts/
 .release-evidence/
 
+# Agent working notes: specs and issues stay local in this public repository.
+.scratch/
+
 # Local Cloudflare and environment state
 .wrangler/
 .dev.vars
