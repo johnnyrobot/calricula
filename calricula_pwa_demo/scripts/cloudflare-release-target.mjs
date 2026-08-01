@@ -14,6 +14,7 @@ import { hostname } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
+import { wranglerChildEnvironment } from './child-environment.mjs';
 import { parseWranglerJsonc } from './wrangler-config.mjs';
 
 const MAX_OUTPUT_BYTES = 5 * 1024 * 1024;
@@ -55,26 +56,6 @@ export const RELEASE_LIFECYCLE_LOCK_PATH = path.resolve(
 const RELEASE_LIFECYCLE_OWNER_FILE = 'owner.json';
 
 export class CloudflareTargetError extends Error {}
-
-const WRANGLER_READ_ONLY_SECRET_KEYS = [
-  'AI_SESSION_HMAC_SECRET',
-  'CALRICULA_AI_SESSION_COOKIE',
-  'CALRICULA_SECRETS_FILE',
-  'CALRICULA_TURNSTILE_TOKEN',
-  'CF_ACCOUNT_ID',
-  'CF_API_KEY',
-  'CF_API_BASE_URL',
-  'CF_API_TOKEN',
-  'CF_EMAIL',
-  'CLOUDFLARE_API_BASE_URL',
-  'CLOUDFLARE_COMPLIANCE_REGION',
-  'CLOUDFLARE_ENV',
-  'OPENROUTER_API_KEY',
-  'TURNSTILE_SECRET_KEY',
-  'WRANGLER_API_ENVIRONMENT',
-  'WRANGLER_CI_OVERRIDE_NAME',
-  'WRANGLER_OUTPUT_FILE_PATH',
-];
 
 function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -358,11 +339,11 @@ function wranglerExecutable() {
 }
 
 export function wranglerReadOnlyEnvironment(source = process.env) {
-  const environment = { ...source, CI: '1', NO_COLOR: '1' };
-  for (const name of WRANGLER_READ_ONLY_SECRET_KEYS) {
-    delete environment[name];
-  }
-  return environment;
+  return {
+    ...wranglerChildEnvironment(source),
+    CI: '1',
+    NO_COLOR: '1',
+  };
 }
 
 export function assertOfficialCloudflareEnvironment(

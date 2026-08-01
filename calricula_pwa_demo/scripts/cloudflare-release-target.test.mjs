@@ -76,35 +76,21 @@ describe('Cloudflare release target evidence', () => {
     }
   });
 
-  it('keeps Cloudflare auth but removes unrelated secrets from read-only Wrangler children', () => {
+  // The scrub, including which Cloudflare credentials survive for Wrangler, is
+  // owned by `wranglerChildEnvironment` and asserted in
+  // child-environment.test.mjs. This asserts only the read-only flags added here.
+  it('marks read-only Wrangler children as non-interactive', () => {
     expect(
       wranglerReadOnlyEnvironment({
-        AI_SESSION_HMAC_SECRET: 'hmac-secret',
-        CALRICULA_AI_SESSION_COOKIE: 'session-cookie',
-        CALRICULA_SECRETS_FILE: '/private/release.env',
-        CALRICULA_TURNSTILE_TOKEN: 'turnstile-token',
-        CLOUDFLARE_API_BASE_URL: 'https://redirect.invalid',
         CLOUDFLARE_API_TOKEN: 'cloudflare-token',
-        CLOUDFLARE_ENV: 'staging',
-        OPENROUTER_API_KEY: 'provider-secret',
-        TURNSTILE_SECRET_KEY: 'turnstile-secret',
+        SAFE_WRANGLER_CONTEXT: 'kept',
       }),
-    ).toMatchObject({
+    ).toEqual({
       CI: '1',
       NO_COLOR: '1',
       CLOUDFLARE_API_TOKEN: 'cloudflare-token',
+      SAFE_WRANGLER_CONTEXT: 'kept',
     });
-    const environment = wranglerReadOnlyEnvironment({
-      CALRICULA_AI_SESSION_COOKIE: 'session-cookie',
-      CALRICULA_TURNSTILE_TOKEN: 'turnstile-token',
-      CLOUDFLARE_API_TOKEN: 'cloudflare-token',
-      OPENROUTER_API_KEY: 'provider-secret',
-    });
-    expect(environment.CALRICULA_AI_SESSION_COOKIE).toBeUndefined();
-    expect(environment.CALRICULA_TURNSTILE_TOKEN).toBeUndefined();
-    expect(environment.OPENROUTER_API_KEY).toBeUndefined();
-    expect(environment.CLOUDFLARE_API_BASE_URL).toBeUndefined();
-    expect(environment.CLOUDFLARE_ENV).toBeUndefined();
   });
 
   it('rejects ambient Wrangler API and environment selectors', () => {

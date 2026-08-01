@@ -5,7 +5,6 @@ import {
   aiCheckEnvironment,
   deriveToolVersions,
   parseWranglerReleaseConfig,
-  releaseEvidenceToolEnvironment,
   verifyReleaseEvidence,
 } from './release-evidence.mjs';
 
@@ -104,9 +103,6 @@ describe('release AI evidence', () => {
       SAFE_CONTEXT: 'kept',
       TURNSTILE_SECRET_KEY: 'turnstile-secret',
     };
-    expect(releaseEvidenceToolEnvironment(source)).toEqual({
-      SAFE_CONTEXT: 'kept',
-    });
     expect(aiCheckEnvironment('discover', source)).toEqual({
       OPENROUTER_API_KEY: 'provider-secret',
       SAFE_CONTEXT: 'kept',

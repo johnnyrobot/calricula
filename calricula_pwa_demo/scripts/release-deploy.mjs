@@ -36,6 +36,10 @@ import {
   withReleaseLifecycleLock,
 } from './cloudflare-release-target.mjs';
 import {
+  childEnvironment,
+  wranglerChildEnvironment,
+} from './child-environment.mjs';
+import {
   BOOTSTRAP_RELEASE_GATE_STEPS,
   LOCAL_GATE_EVIDENCE_PATH,
   RELEASE_GATE_STEPS,
@@ -349,27 +353,7 @@ async function publishWorker(
 ) {
   await assertTrackedReleaseInputs();
   assertOfficialCloudflareEnvironment(process.env);
-  const environment = { ...process.env };
-  for (const name of [
-    'AI_SESSION_HMAC_SECRET',
-    'CALRICULA_AI_SESSION_COOKIE',
-    'CALRICULA_SECRETS_FILE',
-    'CALRICULA_TURNSTILE_TOKEN',
-    'CF_ACCOUNT_ID',
-    'CF_API_KEY',
-    'CF_API_BASE_URL',
-    'CF_API_TOKEN',
-    'CF_EMAIL',
-    'CLOUDFLARE_API_BASE_URL',
-    'CLOUDFLARE_COMPLIANCE_REGION',
-    'CLOUDFLARE_ENV',
-    'OPENROUTER_API_KEY',
-    'TURNSTILE_SECRET_KEY',
-    'WRANGLER_API_ENVIRONMENT',
-    'WRANGLER_CI_OVERRIDE_NAME',
-  ]) {
-    delete environment[name];
-  }
+  const environment = wranglerChildEnvironment(process.env);
   environment.WRANGLER_OUTPUT_FILE_PATH = outputPath;
   const uploadExitCode = await runPausedPublisher({
     args: wranglerVersionUploadArguments({
@@ -424,27 +408,7 @@ async function promoteUploadedVersion({
 }) {
   await assertTrackedReleaseInputs();
   assertOfficialCloudflareEnvironment(process.env);
-  const environment = { ...process.env };
-  for (const name of [
-    'AI_SESSION_HMAC_SECRET',
-    'CALRICULA_AI_SESSION_COOKIE',
-    'CALRICULA_SECRETS_FILE',
-    'CALRICULA_TURNSTILE_TOKEN',
-    'CF_ACCOUNT_ID',
-    'CF_API_KEY',
-    'CF_API_BASE_URL',
-    'CF_API_TOKEN',
-    'CF_EMAIL',
-    'CLOUDFLARE_API_BASE_URL',
-    'CLOUDFLARE_COMPLIANCE_REGION',
-    'CLOUDFLARE_ENV',
-    'OPENROUTER_API_KEY',
-    'TURNSTILE_SECRET_KEY',
-    'WRANGLER_API_ENVIRONMENT',
-    'WRANGLER_CI_OVERRIDE_NAME',
-  ]) {
-    delete environment[name];
-  }
+  const environment = wranglerChildEnvironment(process.env);
   environment.WRANGLER_OUTPUT_FILE_PATH = outputPath;
   const exitCode = await runPausedPublisher({
     args: wranglerVersionDeployArguments({
@@ -601,29 +565,6 @@ export function wranglerVersionDeployArguments({
   ];
 }
 
-const POSTDEPLOY_SECRET_ENVIRONMENT_KEYS = [
-  'AI_SESSION_HMAC_SECRET',
-  'CALRICULA_AI_SESSION_COOKIE',
-  'CALRICULA_SECRETS_FILE',
-  'CALRICULA_TURNSTILE_TOKEN',
-  'CF_ACCOUNT_ID',
-  'CF_API_KEY',
-  'CF_API_BASE_URL',
-  'CF_API_TOKEN',
-  'CF_EMAIL',
-  'CLOUDFLARE_API_BASE_URL',
-  'CLOUDFLARE_COMPLIANCE_REGION',
-  'CLOUDFLARE_API_KEY',
-  'CLOUDFLARE_API_TOKEN',
-  'CLOUDFLARE_EMAIL',
-  'CLOUDFLARE_ENV',
-  'OPENROUTER_API_KEY',
-  'TURNSTILE_SECRET_KEY',
-  'WRANGLER_API_ENVIRONMENT',
-  'WRANGLER_CI_OVERRIDE_NAME',
-  'WRANGLER_OUTPUT_FILE_PATH',
-];
-
 export function postdeployEnvironment(
   source,
   step,
@@ -631,10 +572,7 @@ export function postdeployEnvironment(
   publishedAt,
   aiEnabled,
 ) {
-  const environment = { ...source };
-  for (const name of POSTDEPLOY_SECRET_ENVIRONMENT_KEYS) {
-    delete environment[name];
-  }
+  const environment = childEnvironment(source);
   Object.assign(environment, {
     CALRICULA_CANARY_BASE_URL: baseOrigin,
     CALRICULA_EXPECT_AI_ENABLED: aiEnabled ? 'true' : 'false',

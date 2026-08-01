@@ -15,7 +15,6 @@ import {
   ReleaseStateError,
   assertSiteKeyEmbedded,
   computeArtifactFingerprint,
-  gitReleaseEnvironment,
   requireCleanGitReleaseState,
   resolveReleaseSecretsFile,
   sealPublicationPackage,
@@ -82,17 +81,8 @@ afterEach(async () => {
 });
 
 describe('release artifact state', () => {
-  it('keeps release credentials out of Git child processes', () => {
-    expect(
-      gitReleaseEnvironment({
-        CALRICULA_AI_SESSION_COOKIE: 'session-cookie',
-        CALRICULA_TURNSTILE_TOKEN: 'turnstile-token',
-        CLOUDFLARE_API_TOKEN: 'cloudflare-token',
-        OPENROUTER_API_KEY: 'provider-secret',
-        SAFE_GIT_CONTEXT: 'kept',
-      }),
-    ).toEqual({ SAFE_GIT_CONTEXT: 'kept' });
-  });
+  // Git child processes are scrubbed by `childEnvironment`, which owns that
+  // invariant and asserts it in child-environment.test.mjs.
 
   it('changes the sealed fingerprint when deployable output is mutated', async () => {
     const cwd = await fixture();

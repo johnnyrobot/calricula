@@ -11,6 +11,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
+import { childEnvironment } from './child-environment.mjs';
 import { normalizeProductionOrigin } from './verify-production.mjs';
 import { parseWranglerJsonc } from './wrangler-config.mjs';
 import { collectReleaseInputFiles } from './release-inputs.mjs';
@@ -34,29 +35,6 @@ const SAFE_KEY_STATUS_FIELDS = [
   'keySpendLimitReset',
   'keySpendLimitStatus',
 ].sort();
-const RELEASE_EVIDENCE_SECRET_KEYS = [
-  'AI_SESSION_HMAC_SECRET',
-  'CALRICULA_AI_SESSION_COOKIE',
-  'CALRICULA_SECRETS_FILE',
-  'CALRICULA_TURNSTILE_TOKEN',
-  'CF_ACCOUNT_ID',
-  'CF_API_KEY',
-  'CF_API_BASE_URL',
-  'CF_API_TOKEN',
-  'CF_EMAIL',
-  'CLOUDFLARE_API_BASE_URL',
-  'CLOUDFLARE_COMPLIANCE_REGION',
-  'CLOUDFLARE_API_KEY',
-  'CLOUDFLARE_API_TOKEN',
-  'CLOUDFLARE_EMAIL',
-  'CLOUDFLARE_ENV',
-  'OPENROUTER_API_KEY',
-  'TURNSTILE_SECRET_KEY',
-  'WRANGLER_API_ENVIRONMENT',
-  'WRANGLER_CI_OVERRIDE_NAME',
-  'WRANGLER_OUTPUT_FILE_PATH',
-];
-
 const CHECKS = {
   discover: {
     script: 'scripts/discover-openrouter-models.mjs',
@@ -79,18 +57,8 @@ const TOOL_DEPENDENCIES = {
 
 export class ReleaseEvidenceError extends Error {}
 
-export function releaseEvidenceToolEnvironment(
-  source = process.env,
-) {
-  const environment = { ...source };
-  for (const name of RELEASE_EVIDENCE_SECRET_KEYS) {
-    delete environment[name];
-  }
-  return environment;
-}
-
 export function aiCheckEnvironment(check, source = process.env) {
-  const environment = releaseEvidenceToolEnvironment(source);
+  const environment = childEnvironment(source);
   if (check === 'discover' || check === 'evaluate') {
     if (source.OPENROUTER_API_KEY !== undefined) {
       environment.OPENROUTER_API_KEY = source.OPENROUTER_API_KEY;
@@ -211,7 +179,7 @@ export async function currentToolVersions() {
     Object.entries(commands).map(async ([label, [command, args]]) => {
       const child = spawn(command, args, {
         cwd: process.cwd(),
-        env: releaseEvidenceToolEnvironment(),
+        env: childEnvironment(),
         stdio: ['ignore', 'pipe', 'pipe'],
       });
       let output = '';

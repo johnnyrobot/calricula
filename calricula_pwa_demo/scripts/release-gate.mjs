@@ -19,6 +19,7 @@ import {
   siteKeyDigest,
 } from './release-state.mjs';
 import { assertTrackedReleaseInputs } from './release-inputs.mjs';
+import { childEnvironment } from './child-environment.mjs';
 
 export const RELEASE_GATE_STEPS = [
   'release:install',
@@ -45,38 +46,12 @@ export const LOCAL_GATE_EVIDENCE_PATH = path.resolve(
   '.release-evidence',
   'local-gate.json',
 );
-const RELEASE_CHILD_SECRET_KEYS = [
-  'AI_SESSION_HMAC_SECRET',
-  'CALRICULA_AI_SESSION_COOKIE',
-  'CALRICULA_SECRETS_FILE',
-  'CALRICULA_TURNSTILE_TOKEN',
-  'CF_ACCOUNT_ID',
-  'CF_API_KEY',
-  'CF_API_BASE_URL',
-  'CF_API_TOKEN',
-  'CF_EMAIL',
-  'CLOUDFLARE_API_BASE_URL',
-  'CLOUDFLARE_COMPLIANCE_REGION',
-  'CLOUDFLARE_API_KEY',
-  'CLOUDFLARE_API_TOKEN',
-  'CLOUDFLARE_EMAIL',
-  'CLOUDFLARE_ENV',
-  'OPENROUTER_API_KEY',
-  'TURNSTILE_SECRET_KEY',
-  'WRANGLER_API_ENVIRONMENT',
-  'WRANGLER_CI_OVERRIDE_NAME',
-  'WRANGLER_OUTPUT_FILE_PATH',
-];
-
 function npmExecutable() {
   return process.platform === 'win32' ? 'npm.cmd' : 'npm';
 }
 
 export function releaseGateEnvironment(source = process.env) {
-  const environment = { ...source };
-  for (const name of RELEASE_CHILD_SECRET_KEYS) {
-    delete environment[name];
-  }
+  const environment = childEnvironment(source);
   delete environment.PLAYWRIGHT_BASE_URL;
   delete environment.PLAYWRIGHT_REUSE_SERVER;
   delete environment.CALRICULA_E2E_SERVER;

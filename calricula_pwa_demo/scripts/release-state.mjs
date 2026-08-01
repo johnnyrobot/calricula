@@ -18,40 +18,10 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 
+import { childEnvironment } from './child-environment.mjs';
 import { parseWranglerJsonc } from './wrangler-config.mjs';
 
 export class ReleaseStateError extends Error {}
-
-const GIT_RELEASE_SECRET_KEYS = [
-  'AI_SESSION_HMAC_SECRET',
-  'CALRICULA_AI_SESSION_COOKIE',
-  'CALRICULA_SECRETS_FILE',
-  'CALRICULA_TURNSTILE_TOKEN',
-  'CF_ACCOUNT_ID',
-  'CF_API_KEY',
-  'CF_API_BASE_URL',
-  'CF_API_TOKEN',
-  'CF_EMAIL',
-  'CLOUDFLARE_API_BASE_URL',
-  'CLOUDFLARE_COMPLIANCE_REGION',
-  'CLOUDFLARE_API_KEY',
-  'CLOUDFLARE_API_TOKEN',
-  'CLOUDFLARE_EMAIL',
-  'CLOUDFLARE_ENV',
-  'OPENROUTER_API_KEY',
-  'TURNSTILE_SECRET_KEY',
-  'WRANGLER_API_ENVIRONMENT',
-  'WRANGLER_CI_OVERRIDE_NAME',
-  'WRANGLER_OUTPUT_FILE_PATH',
-];
-
-export function gitReleaseEnvironment(source = process.env) {
-  const environment = { ...source };
-  for (const name of GIT_RELEASE_SECRET_KEYS) {
-    delete environment[name];
-  }
-  return environment;
-}
 
 function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -649,7 +619,7 @@ export async function sealReleaseSecretsFile(
 async function capture(command, args, options = {}) {
   const child = spawn(command, args, {
     cwd: options.cwd ?? process.cwd(),
-    env: options.env ?? gitReleaseEnvironment(),
+    env: options.env ?? childEnvironment(),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stdout = '';

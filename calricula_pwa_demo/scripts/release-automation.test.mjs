@@ -112,23 +112,19 @@ describe('release command topology', () => {
     );
   });
 
+  // Secret scrubbing is owned by `childEnvironment` and asserted in
+  // child-environment.test.mjs. This asserts only what the gate adds on top.
   it('removes stale deployed Playwright targeting from the local gate', () => {
     const environment = releaseGateEnvironment({
-      CALRICULA_AI_SESSION_COOKIE: SESSION_COOKIE,
-      CALRICULA_TURNSTILE_TOKEN: 'turnstile-token',
-      CLOUDFLARE_API_TOKEN: 'cloudflare-token',
-      OPENROUTER_API_KEY: 'provider-secret',
       PLAYWRIGHT_BASE_URL: 'https://stale.example',
       PLAYWRIGHT_REUSE_SERVER: 'true',
       CALRICULA_E2E_SERVER: 'static',
+      SAFE_GATE_CONTEXT: 'kept',
     });
     expect(environment.PLAYWRIGHT_BASE_URL).toBeUndefined();
     expect(environment.PLAYWRIGHT_REUSE_SERVER).toBeUndefined();
     expect(environment.CALRICULA_E2E_SERVER).toBeUndefined();
-    expect(environment.CALRICULA_AI_SESSION_COOKIE).toBeUndefined();
-    expect(environment.CALRICULA_TURNSTILE_TOKEN).toBeUndefined();
-    expect(environment.CLOUDFLARE_API_TOKEN).toBeUndefined();
-    expect(environment.OPENROUTER_API_KEY).toBeUndefined();
+    expect(environment.SAFE_GATE_CONTEXT).toBe('kept');
   });
 
   it('exposes exactly one canary credential only to the canary subprocess', () => {
@@ -144,13 +140,13 @@ describe('release command topology', () => {
       '2026-07-30T06:00:00.000Z',
       true,
     );
+    // Only the restore is asserted here; the scrub it builds on is owned by
+    // `childEnvironment` and asserted in child-environment.test.mjs.
     expect(canary.CALRICULA_AI_SESSION_COOKIE).toBe(
       SESSION_COOKIE,
     );
     expect(canary.CALRICULA_TURNSTILE_TOKEN).toBeUndefined();
     expect(canary.CALRICULA_EXPECT_AI_ENABLED).toBe('true');
-    expect(canary.OPENROUTER_API_KEY).toBeUndefined();
-    expect(canary.CLOUDFLARE_API_TOKEN).toBeUndefined();
     const lighthouse = postdeployEnvironment(
       source,
       'lighthouse:production',
