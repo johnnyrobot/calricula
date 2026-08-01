@@ -19,9 +19,7 @@ import {
 
 const directories = [];
 const execute = promisify(execFile);
-const markerPatterns = [
-  { name: 'test marker', pattern: /CALRICULA_TEST_PRIVATE_MARKER/g },
-];
+const LEAKED_SECRET = '-----BEGIN OPENSSH PRIVATE KEY-----';
 
 async function fixture() {
   const directory = await mkdtemp(
@@ -49,14 +47,11 @@ describe('static asset publication inventory', () => {
     'scans secret-like text in %s instead of trusting its extension',
     async (name) => {
       const directory = await fixture();
-      await writeFile(
-        path.join(directory, name),
-        'CALRICULA_TEST_PRIVATE_MARKER',
-      );
+      await writeFile(path.join(directory, name), LEAKED_SECRET);
       const files = await collectDeployableFiles(directory);
-      expect(
-        await scanFilesForSecretPatterns(files, markerPatterns),
-      ).toEqual([`test marker pattern found in ${name}`]);
+      expect(await scanFilesForSecretPatterns(files)).toEqual([
+        `private key block pattern found in ${name}`,
+      ]);
     },
   );
 
@@ -72,13 +67,11 @@ describe('static asset publication inventory', () => {
         path.join(directory, name),
         Buffer.concat([
           Buffer.from(header),
-          Buffer.from('CALRICULA_TEST_PRIVATE_MARKER', 'ascii'),
+          Buffer.from(LEAKED_SECRET, 'ascii'),
         ]),
       );
       const files = await collectDeployableFiles(directory);
-      expect(
-        await scanFilesForSecretPatterns(files, markerPatterns),
-      ).toHaveLength(1);
+      expect(await scanFilesForSecretPatterns(files)).toHaveLength(1);
     },
   );
 

@@ -1,6 +1,8 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 
+import { findSecrets } from './secret-scan.mjs';
+
 export class AssetInventoryError extends Error {
   constructor(message) {
     super(message);
@@ -62,17 +64,12 @@ export async function collectDeployableFiles(directory, prefix = '') {
   );
 }
 
-export async function scanFilesForSecretPatterns(files, patterns) {
+export async function scanFilesForSecretPatterns(files) {
   const failures = [];
   for (const file of files) {
     const searchable = (await readFile(file.absolutePath)).toString('latin1');
-    for (const { name, pattern } of patterns) {
-      pattern.lastIndex = 0;
-      if (pattern.test(searchable)) {
-        failures.push(
-          `${name} pattern found in ${file.relativePath}`,
-        );
-      }
+    for (const name of findSecrets(searchable)) {
+      failures.push(`${name} pattern found in ${file.relativePath}`);
     }
   }
   return failures;

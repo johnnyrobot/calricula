@@ -3,13 +3,10 @@ import path from "node:path";
 import process from "node:process";
 import { gzipSync } from "node:zlib";
 
+import { findSecrets } from "./secret-scan.mjs";
+
 const directory = path.resolve(process.cwd(), ".wrangler", "dry-run");
 const COMPRESSED_WORKER_LIMIT = 3 * 1024 * 1024;
-const secretPatterns = [
-  /\bsk-or-v1-[A-Za-z0-9_-]{16,}\b/,
-  /\b(?:OPENROUTER_API_KEY|TURNSTILE_SECRET_KEY|AI_SESSION_HMAC_SECRET)["']?\s*[:=]\s*["'][^"'\r\n]{8,}["']/,
-  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
-];
 
 async function collectFiles(currentDirectory) {
   const entries = await readdir(currentDirectory, { withFileTypes: true });
@@ -63,12 +60,13 @@ for (const file of moduleFiles) {
 for (const file of files) {
   const content = await readFile(file);
   const text = content.toString("latin1");
-  for (const pattern of secretPatterns) {
-    if (pattern.test(text)) {
-      failures.push(
-        `Secret-like value found in ${path.relative(directory, file)}.`,
-      );
-    }
+  for (const name of findSecrets(text)) {
+    failures.push(
+      `Secret-like value (${name}) found in ${path.relative(
+        directory,
+        file,
+      )}.`,
+    );
   }
 }
 

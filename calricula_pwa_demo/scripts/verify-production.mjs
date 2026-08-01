@@ -2,6 +2,7 @@ import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
 import { withLocalProduction } from './local-production.mjs';
+import { findSecrets } from './secret-scan.mjs';
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const MAX_TEXT_BYTES = 4 * 1024 * 1024;
@@ -24,22 +25,6 @@ export const HTML_ROUTES = [
   '/settings/',
   '/offline/',
   '/accessibility/',
-];
-
-const DEPLOYED_SECRET_PATTERNS = [
-  {
-    name: 'OpenRouter API key',
-    pattern: /\bsk-or-v1-[A-Za-z0-9_-]{16,}\b/,
-  },
-  {
-    name: 'private key block',
-    pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
-  },
-  {
-    name: 'assigned server-side AI secret',
-    pattern:
-      /\b(?:OPENROUTER_API_KEY|TURNSTILE_SECRET_KEY|AI_SESSION_HMAC_SECRET)["']?\s*[:=]\s*["'][^"'\r\n]{8,}["']/,
-  },
 ];
 
 export class ProductionVerificationError extends Error {}
@@ -115,12 +100,11 @@ async function readText(response, maximumBytes = MAX_TEXT_BYTES) {
 }
 
 function requireNoSecretMaterial(text, label) {
-  for (const { name, pattern } of DEPLOYED_SECRET_PATTERNS) {
-    if (pattern.test(text)) {
-      throw new ProductionVerificationError(
-        `${label} exposes a recognizable ${name}.`,
-      );
-    }
+  const [name] = findSecrets(text);
+  if (name) {
+    throw new ProductionVerificationError(
+      `${label} exposes a recognizable ${name}.`,
+    );
   }
 }
 

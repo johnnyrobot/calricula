@@ -28,22 +28,6 @@ const requiredFiles = [
   'icons/icon-maskable-512.png',
 ];
 
-const secretPatterns = [
-  {
-    name: 'OpenRouter API key',
-    pattern: /\bsk-or-v1-[A-Za-z0-9_-]{16,}\b/g,
-  },
-  {
-    name: 'assigned server-side AI secret',
-    pattern:
-      /\b(?:OPENROUTER_API_KEY|TURNSTILE_SECRET_KEY|AI_SESSION_HMAC_SECRET)["']?\s*[:=]\s*["'][^"'\r\n]{8,}["']/g,
-  },
-  {
-    name: 'private key block',
-    pattern: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/g,
-  },
-];
-
 let files;
 try {
   files = await collectDeployableFiles(outputDirectory);
@@ -98,9 +82,7 @@ for (const file of files) {
 
 }
 
-failures.push(
-  ...(await scanFilesForSecretPatterns(files, secretPatterns)),
-);
+failures.push(...(await scanFilesForSecretPatterns(files)));
 
 if (filePaths.has('sw.js')) {
   const serviceWorker = await readFile(
