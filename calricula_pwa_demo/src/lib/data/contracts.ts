@@ -186,54 +186,103 @@ export class RepositoryError extends Error {
   }
 }
 
-export interface CurriculumRepository {
-  initialize(): Promise<InitializationResult>;
-  reset(options?: ResetOptions): Promise<InitializationResult>;
-  exportBackup(): Promise<BackupEnvelope>;
-  importBackup(value: unknown): Promise<ImportResult>;
-  storageStatus(options?: { requestPersistence?: boolean }): Promise<StorageStatus>;
+/**
+ * The repository is one object, but no caller wants all of it. These six
+ * roles are the shapes callers actually depend on, so a module can ask for
+ * the verbs it uses instead of the whole surface — and a reader can find the
+ * deep verbs (saveCourseAggregate, transitionCourse, exportBackup) without
+ * reading past thirty names to reach them.
+ *
+ * Grouped by the caller that needs them, not by the table they touch.
+ */
 
+/** Every read a screen makes to render. No verb here changes anything. */
+export interface CurriculumReads {
   listCourses(query?: CourseQuery): Promise<PageResult<Course>>;
   getCourse(id: string): Promise<CourseAggregate | null>;
+  listPrograms(query?: ProgramQuery): Promise<PageResult<Program>>;
+  getProgram(id: string): Promise<ProgramAggregate | null>;
+  listNotifications(query?: NotificationQuery): Promise<PageResult<Notification>>;
+  getDashboard(actorId?: string): Promise<DashboardSummary>;
+  getReferences(): Promise<ReferenceData>;
+  listPersonas(): Promise<Actor[]>;
+  getActivePersona(): Promise<Actor>;
+}
+
+/**
+ * Authoring a course and moving it through approval. saveCourseAggregate is
+ * the single write for a course and all of its children; the comment verbs
+ * live here because this demo only comments on courses.
+ */
+export interface CourseAuthoring {
   createCourse(input: CreateCourseInput): Promise<CourseAggregate>;
-  deleteCourse(id: string): Promise<void>;
-  duplicateCourse(id: string): Promise<CourseAggregate>;
-  createNewCourseVersion(id: string): Promise<CourseAggregate>;
   saveCourseAggregate(
     courseId: string,
     input: SaveCourseAggregateInput,
   ): Promise<CourseAggregate>;
-
+  deleteCourse(id: string): Promise<void>;
+  duplicateCourse(id: string): Promise<CourseAggregate>;
+  createNewCourseVersion(id: string): Promise<CourseAggregate>;
+  transitionCourse(courseId: string, input: TransitionCourseInput): Promise<CourseAggregate>;
   addComment(input: AddCommentInput): Promise<Comment>;
   setCommentResolved(id: string, resolved: boolean): Promise<Comment>;
-  transitionCourse(courseId: string, input: TransitionCourseInput): Promise<CourseAggregate>;
+}
 
-  listPrograms(query?: ProgramQuery): Promise<PageResult<Program>>;
-  getProgram(id: string): Promise<ProgramAggregate | null>;
+export interface ProgramAuthoring {
   createProgram(input: CreateProgramInput): Promise<ProgramAggregate>;
   updateProgram(id: string, input: UpdateProgramInput): Promise<ProgramAggregate>;
   reorderProgramCourses(
     programId: string,
     order: readonly ProgramCourseOrderInput[],
   ): Promise<ProgramAggregate>;
+}
 
-  listNotifications(query?: NotificationQuery): Promise<PageResult<Notification>>;
+export interface NotificationInbox {
   markNotificationRead(id: string, read?: boolean): Promise<Notification>;
   markAllNotificationsRead(userId?: string): Promise<number>;
-  getDashboard(actorId?: string): Promise<DashboardSummary>;
-  getReferences(): Promise<ReferenceData>;
+}
 
-  listPersonas(): Promise<Actor[]>;
-  getActivePersona(): Promise<Actor>;
-  setActivePersona(actorId: string): Promise<Actor>;
-
+/**
+ * A chat thread and an accepted-suggestion audit copy are written by
+ * different modules for different reasons, so they are separate roles even
+ * though both are "AI persistence".
+ */
+export interface AIConversationPersistence {
   listAIConversations(query?: AIConversationQuery): Promise<AIConversation[]>;
   saveAIConversation(value: AIConversation): Promise<AIConversation>;
   appendAIMessage(conversationId: string, value: AIMessage): Promise<AIConversation>;
-  saveAIArtifact(value: AIArtifact): Promise<AIArtifact>;
+}
 
+export interface AIArtifactPersistence {
+  saveAIArtifact(value: AIArtifact): Promise<AIArtifact>;
+}
+
+export interface AIPersistence
+  extends AIConversationPersistence,
+    AIArtifactPersistence {}
+
+/**
+ * Controls that exist because this is a local-first demo: seeding, resetting,
+ * backup round-trips, storage pressure, and switching persona. There is no
+ * account here, so choosing who you are is a demo affordance, not auth.
+ */
+export interface DemoAdministration {
+  initialize(): Promise<InitializationResult>;
+  reset(options?: ResetOptions): Promise<InitializationResult>;
+  exportBackup(): Promise<BackupEnvelope>;
+  importBackup(value: unknown): Promise<ImportResult>;
+  storageStatus(options?: { requestPersistence?: boolean }): Promise<StorageStatus>;
+  setActivePersona(actorId: string): Promise<Actor>;
   close(): void;
 }
+
+export interface CurriculumRepository
+  extends CurriculumReads,
+    CourseAuthoring,
+    ProgramAuthoring,
+    NotificationInbox,
+    AIPersistence,
+    DemoAdministration {}
 
 export type {
   Actor,

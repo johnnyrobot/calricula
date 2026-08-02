@@ -2,7 +2,7 @@ import {
   curriculumRepository,
   type AIConversation,
   type AIMessage,
-  type CurriculumRepository,
+  type AIConversationPersistence,
 } from "../data";
 import type { EntityType } from "../domain";
 
@@ -30,10 +30,9 @@ export interface AIChatPersistence {
   ): Promise<PersistedAIChat>;
 }
 
-type AIChatRepository = Pick<
-  CurriculumRepository,
-  "listAIConversations" | "saveAIConversation" | "appendAIMessage"
->;
+// This module hand-rolled its own Pick before the repository named its
+// roles. AIConversationPersistence is that role.
+type AIChatRepository = AIConversationPersistence;
 
 function historyFromConversation(
   conversation: AIConversation,

@@ -1,5 +1,9 @@
 import type { EntityType } from "../domain";
-import { curriculumRepository } from "../data";
+import {
+  curriculumRepository,
+  type AIArtifactPersistence,
+  type CurriculumReads,
+} from "../data";
 
 import type { AIResult, AITask } from "./types";
 
@@ -28,6 +32,11 @@ function sourceIdsFromResult(value: unknown): string[] {
   ];
 }
 
+// Writing an audit copy needs to know who accepted the suggestion, and
+// nothing else the repository can do.
+const repository: Pick<CurriculumReads, "getActivePersona"> &
+  AIArtifactPersistence = curriculumRepository;
+
 /**
  * Keeps an audit copy of a suggestion only after a person explicitly accepts
  * it. Prompts and rejected suggestions are deliberately not persisted here.
@@ -39,8 +48,8 @@ export async function persistAcceptedAIArtifact({
   content,
   result,
 }: AcceptedAIArtifactInput): Promise<void> {
-  const actor = await curriculumRepository.getActivePersona();
-  await curriculumRepository.saveAIArtifact({
+  const actor = await repository.getActivePersona();
+  await repository.saveAIArtifact({
     id: crypto.randomUUID(),
     actorId: actor.id,
     conversationId: null,
