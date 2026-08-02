@@ -9,10 +9,9 @@ these skills.
 - **`CONTEXT.md`** at the demo root — the glossary and domain overview.
 - **`docs/adr/`** — read ADRs that touch the area you're about to work in.
 
-If any of these files don't exist, **proceed silently**. Don't flag their absence; don't
-suggest creating them upfront. The `/domain-modeling` skill (reached via
-`/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or
-decisions actually get resolved.
+Both exist. New ADRs are still added lazily — the `/domain-modeling` skill (reached via
+`/grill-with-docs` and `/improve-codebase-architecture`) writes one when a decision
+actually gets resolved, not upfront to fill a gap.
 
 ## File structure
 
@@ -23,8 +22,7 @@ calricula_pwa_demo/
 ├── CONTEXT.md
 ├── docs/
 │   ├── adr/
-│   │   ├── 0001-local-first-indexeddb-repository.md
-│   │   └── 0002-free-only-openrouter-routing.md
+│   │   └── 0001-client-side-ai-session-readiness.md
 │   └── agents/
 └── src/
 ```
