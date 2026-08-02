@@ -5,7 +5,7 @@ import process from 'node:process';
 import {
   collectDeployableFiles,
   isClassifiedDeployableAsset,
-  scanFilesForSecretPatterns,
+  scanFilesForSecrets,
 } from './static-asset-validation.mjs';
 
 const CLOUDFLARE_FILE_LIMIT = 20_000;
@@ -82,7 +82,7 @@ for (const file of files) {
 
 }
 
-failures.push(...(await scanFilesForSecretPatterns(files)));
+failures.push(...(await scanFilesForSecrets(files)));
 
 if (filePaths.has('sw.js')) {
   const serviceWorker = await readFile(

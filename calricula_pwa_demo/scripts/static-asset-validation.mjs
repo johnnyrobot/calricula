@@ -64,7 +64,7 @@ export async function collectDeployableFiles(directory, prefix = '') {
   );
 }
 
-export async function scanFilesForSecretPatterns(files) {
+export async function scanFilesForSecrets(files) {
   const failures = [];
   for (const file of files) {
     const searchable = (await readFile(file.absolutePath)).toString('latin1');

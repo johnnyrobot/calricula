@@ -14,7 +14,7 @@ import {
   AssetInventoryError,
   collectDeployableFiles,
   isClassifiedDeployableAsset,
-  scanFilesForSecretPatterns,
+  scanFilesForSecrets,
 } from './static-asset-validation.mjs';
 
 const directories = [];
@@ -49,7 +49,7 @@ describe('static asset publication inventory', () => {
       const directory = await fixture();
       await writeFile(path.join(directory, name), LEAKED_SECRET);
       const files = await collectDeployableFiles(directory);
-      expect(await scanFilesForSecretPatterns(files)).toEqual([
+      expect(await scanFilesForSecrets(files)).toEqual([
         `private key block pattern found in ${name}`,
       ]);
     },
@@ -71,7 +71,7 @@ describe('static asset publication inventory', () => {
         ]),
       );
       const files = await collectDeployableFiles(directory);
-      expect(await scanFilesForSecretPatterns(files)).toHaveLength(1);
+      expect(await scanFilesForSecrets(files)).toHaveLength(1);
     },
   );
 
