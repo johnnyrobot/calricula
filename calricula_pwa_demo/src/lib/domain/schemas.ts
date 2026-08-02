@@ -599,3 +599,25 @@ export interface ProgramAggregate {
   comments: Comment[];
   history: WorkflowHistory[];
 }
+
+// Writes are parsed on the way in, but rows outlive the code that wrote
+// them: a browser can hold records seeded by an older build, restored from a
+// backup, or left behind by a migration. These let the repository check an
+// assembled aggregate on the way out, so a stale row surfaces as a repository
+// error at the boundary instead of as undefined halfway down a screen.
+export const CourseAggregateSchema = z.object({
+  course: CourseSchema,
+  slos: z.array(StudentLearningOutcomeSchema),
+  content: z.array(CourseContentSchema),
+  requisites: z.array(CourseRequisiteSchema),
+  comments: z.array(CommentSchema),
+  history: z.array(WorkflowHistorySchema),
+  ccnJustification: CCNJustificationSchema.nullable(),
+}) satisfies z.ZodType<CourseAggregate>;
+
+export const ProgramAggregateSchema = z.object({
+  program: ProgramSchema,
+  courses: z.array(ProgramCourseSchema.extend({ course: CourseSchema })),
+  comments: z.array(CommentSchema),
+  history: z.array(WorkflowHistorySchema),
+}) satisfies z.ZodType<ProgramAggregate>;

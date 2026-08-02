@@ -1,3 +1,5 @@
+import { z, type ZodType } from "zod";
+
 import {
   AIArtifactSchema,
   AIConversationSchema,
@@ -7,6 +9,7 @@ import {
   CommentSchema,
   CourseContentSchema,
   CourseRequisiteSchema,
+  CourseAggregateSchema,
   CourseSchema,
   DEMO_APP_VERSION,
   DEMO_BACKUP_KIND,
@@ -15,6 +18,7 @@ import {
   DomainSnapshotSchema,
   LegacyBackupEnvelopeV1Schema,
   NotificationSchema,
+  ProgramAggregateSchema,
   ProgramCourseSchema,
   ProgramSchema,
   StudentLearningOutcomeSchema,
@@ -1185,10 +1189,15 @@ export class DexieCurriculumRepository implements CurriculumRepository {
           percentage: courses.length ? Math.round((count / courses.length) * 1000) / 10 : 0,
         };
       }),
-      recentActivity: history
-        .filter((item) => item.entityType === "Course")
-        .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
-        .slice(0, 10),
+      // The counts above are derived here and need no checking. This is the
+      // one part of the summary that hands stored rows to a screen.
+      recentActivity: this.validateOnRead(
+        z.array(WorkflowHistorySchema),
+        history
+          .filter((item) => item.entityType === "Course")
+          .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
+          .slice(0, 10),
+      ),
     };
   }
 
@@ -1553,7 +1562,7 @@ export class DexieCurriculumRepository implements CurriculumRepository {
           .sortBy("createdAt"),
         this.database.ccnJustifications.where("courseId").equals(id).first(),
       ]);
-    return {
+    return this.validateOnRead(CourseAggregateSchema, {
       course,
       slos,
       content,
@@ -1561,7 +1570,7 @@ export class DexieCurriculumRepository implements CurriculumRepository {
       comments,
       history,
       ccnJustification: ccnJustification ?? null,
-    };
+    });
   }
 
   private async requireCourseAggregateUnsafe(id: string): Promise<CourseAggregate> {
@@ -1593,7 +1602,30 @@ export class DexieCurriculumRepository implements CurriculumRepository {
       }
       joined.push({ ...link, course });
     }
-    return { program, courses: joined, comments, history };
+    return this.validateOnRead(ProgramAggregateSchema, {
+      program,
+      courses: joined,
+      comments,
+      history,
+    });
+  }
+
+  /**
+   * Aggregates are assembled from rows an older build may have written. A
+   * parse failure here is a corrupt local record, not a bad request, so it
+   * surfaces as a repository error naming the record rather than as a Zod
+   * error escaping into a screen.
+   */
+  private validateOnRead<T>(schema: ZodType<T>, value: unknown): T {
+    const result = schema.safeParse(value);
+    if (!result.success) {
+      throw new RepositoryError(
+        "invalid-backup",
+        "A stored record does not match the current schema. Reset the demo data or restore a backup.",
+        result.error.issues,
+      );
+    }
+    return result.data;
   }
 
   private async requireProgramAggregateUnsafe(id: string): Promise<ProgramAggregate> {

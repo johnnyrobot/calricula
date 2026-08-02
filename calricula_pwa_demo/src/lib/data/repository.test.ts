@@ -182,6 +182,54 @@ describe("DexieCurriculumRepository", () => {
     );
   });
 
+  it("refuses to hand a screen a stored record that no longer matches the schema", async () => {
+    await repository.initialize();
+    const course = await createDraft("110");
+    const program = await repository.createProgram({
+      title: "Validation Certificate",
+      type: "Certificate",
+      departmentId: course.course.departmentId,
+    });
+    await repository.reorderProgramCourses(program.program.id, [
+      {
+        courseId: course.course.id,
+        requirementType: "Required Core",
+        sequence: 1,
+        unitsApplied: "3",
+      },
+    ]);
+
+    // A row written by an older build: units held a number before the schema
+    // pinned them to a string.
+    const stored = (await db().courses.get(course.course.id))!;
+    await db().courses.put({ ...stored, units: 3 as unknown as string });
+
+    await expect(repository.getCourse(course.course.id)).rejects.toMatchObject({
+      code: "invalid-backup",
+    });
+    // The same row reached through the program join is caught there too.
+    await expect(repository.getProgram(program.program.id)).rejects.toMatchObject({
+      code: "invalid-backup",
+    });
+
+    await db().courses.put(stored);
+    expect((await repository.getCourse(course.course.id))?.course.units).toBe(
+      stored.units,
+    );
+
+    // The newest course entry is the one the summary puts first.
+    const activity = (await db().workflowHistory.toArray())
+      .filter((item) => item.entityType === "Course")
+      .sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+    await db().workflowHistory.put({
+      ...activity,
+      changedBy: "legacy-actor-key",
+    });
+    await expect(repository.getDashboard()).rejects.toMatchObject({
+      code: "invalid-backup",
+    });
+  });
+
   it("persists course children and rejects circular requisites atomically", async () => {
     await repository.initialize();
     const references = await repository.getReferences();
