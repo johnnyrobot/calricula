@@ -766,6 +766,120 @@ export async function commitReleaseResultMarker({
   }
 }
 
+/**
+ * One publish attempt and its recoverable record on disk.
+ *
+ * The pending record is the only thing that makes a half-finished publish
+ * recoverable, so who may write it and in what order is the safety property
+ * that matters. Both the publish path and the recovery path used to build,
+ * mutate, and persist it inline; each mutation was three field assignments
+ * followed by an update call that a reader had to match up by eye.
+ *
+ * An attempt is opened before the first mutating Wrangler command and lives
+ * until it is finalized. `recordUpload` is the durable point that turns a lost
+ * publish into a recoverable one, which is why it persists rather than
+ * deferring: it is called from inside the publish, between the upload and the
+ * deploy.
+ */
+export class ReleaseAttempt {
+  #record;
+  #cwd;
+  #write;
+  #update;
+  #finalize;
+
+  constructor(record, options = {}) {
+    this.#record = record;
+    this.#cwd = options.cwd;
+    this.#write = options.writePending ?? writePendingDeployment;
+    this.#update = options.updatePending ?? updatePendingDeployment;
+    this.#finalize = options.finalizePending ?? finalizePendingDeployment;
+  }
+
+  /** Build the record for a new attempt and make it durable before publishing. */
+  static async open(
+    {
+      mode,
+      attemptId,
+      startedAt,
+      target,
+      origin,
+      outputPath,
+      message,
+      gate,
+      openRouterCredentialFingerprint = null,
+    },
+    options = {},
+  ) {
+    const attempt = new ReleaseAttempt(
+      {
+        schemaVersion: 1,
+        mode,
+        attemptId,
+        createdAt: startedAt.toISOString(),
+        reconciliationNotBefore: new Date(
+          startedAt.getTime() + PUBLISH_RECONCILIATION_WINDOW_MS,
+        ).toISOString(),
+        accountId: target.identity.accountId,
+        workerName: target.workerName,
+        origin,
+        wranglerOutputPath: outputPath,
+        versionId: null,
+        versionTag: null,
+        previousDeploymentId: target.deployment?.deploymentId ?? null,
+        previousVersionId: target.deployment?.versionId ?? null,
+        releaseMessage: message,
+        sourceFingerprint: gate.sourceFingerprint,
+        artifactFingerprint: gate.artifacts.fingerprint,
+        publicationFingerprint: gate.publication.fingerprint,
+        gitCommit: gate.git.commit,
+        openRouterCredentialFingerprint,
+      },
+      options,
+    );
+    await attempt.#write(attempt.#record, { cwd: attempt.#cwd });
+    return attempt;
+  }
+
+  /** Adopt a pending record left behind by an earlier process. */
+  static resume(record, options = {}) {
+    return new ReleaseAttempt(record, options);
+  }
+
+  get record() {
+    return this.#record;
+  }
+
+  get publishedAt() {
+    return this.#record.createdAt;
+  }
+
+  get origin() {
+    return this.#record.origin;
+  }
+
+  get versionId() {
+    return this.#record.versionId;
+  }
+
+  /**
+   * Bind this attempt to the version Wrangler uploaded, durably. After this
+   * returns, a crash leaves enough on disk to promote or cancel that exact
+   * version instead of guessing.
+   */
+  async recordUpload({ origin, versionId }) {
+    this.#record.origin = origin;
+    this.#record.versionId = versionId;
+    this.#record.versionTag = `release-${this.#record.attemptId}`;
+    await this.#update(this.#record, { cwd: this.#cwd });
+  }
+
+  /** Promote the attempt to the current deployment and archive its record. */
+  async finalize(deployment, options = {}) {
+    return this.#finalize(this.#record, deployment, options);
+  }
+}
+
 export async function finalizePendingDeployment(
   pending,
   deployment,
@@ -944,6 +1058,7 @@ async function recoverPendingDeployment({
       'Pending deployment is missing its private Wrangler receipt path.',
     );
   }
+  const attempt = ReleaseAttempt.resume(pending);
   try {
     const upload = parseVersionUploadOutput(
       await readFile(pending.wranglerOutputPath, 'utf8'),
@@ -957,10 +1072,10 @@ async function recoverPendingDeployment({
         'Pending deployment version conflicts with its Wrangler receipt.',
       );
     }
-    pending.versionId = upload.versionId;
-    pending.versionTag = `release-${pending.attemptId}`;
-    if (!pending.origin) pending.origin = upload.origin;
-    await updatePendingDeployment(pending);
+    await attempt.recordUpload({
+      origin: pending.origin || upload.origin,
+      versionId: upload.versionId,
+    });
   } catch (error) {
     if (error instanceof ReleaseDeploymentError) throw error;
     // A process may have stopped before Wrangler wrote its receipt. The exact
@@ -974,14 +1089,16 @@ async function recoverPendingDeployment({
   }
   pending.origin = origin;
   if (!pending.versionId) {
-    pending.versionId = (
-      await resolveReleaseVersionByMessage({
-        workerName,
-        releaseMessage: pending.releaseMessage,
-      })
-    ).versionId;
-    pending.versionTag = `release-${pending.attemptId}`;
-    await updatePendingDeployment(pending);
+    // No usable Wrangler receipt: the release message is the only remaining
+    // way to identify the exact version this attempt uploaded.
+    const resolved = await resolveReleaseVersionByMessage({
+      workerName,
+      releaseMessage: pending.releaseMessage,
+    });
+    await attempt.recordUpload({
+      origin,
+      versionId: resolved.versionId,
+    });
   }
   const previous = pending.previousVersionId
     ? {
@@ -1023,12 +1140,12 @@ async function recoverPendingDeployment({
       previous,
     });
   }
-  pending.versionId = deployment.versionId;
-  await updatePendingDeployment(pending);
+  await attempt.recordUpload({
+    origin,
+    versionId: deployment.versionId,
+  });
   return {
-    current: await finalizePendingDeployment(pending, deployment, {
-      lifecycleLease,
-    }),
+    current: await attempt.finalize(deployment, { lifecycleLease }),
     origin,
   };
 }
@@ -1349,34 +1466,18 @@ async function runReleaseDeploymentWithLease(
       }
       const publishStartedAt = new Date();
       publishedAt = publishStartedAt.toISOString();
-      const pending = {
-        schemaVersion: 1,
+      const attempt = await ReleaseAttempt.open({
         mode: bootstrap ? 'bootstrap' : 'full',
         attemptId,
-        createdAt: publishedAt,
-        reconciliationNotBefore: new Date(
-          publishStartedAt.getTime() +
-            PUBLISH_RECONCILIATION_WINDOW_MS,
-        ).toISOString(),
-        accountId: targetBefore.identity.accountId,
-        workerName: targetBefore.workerName,
+        startedAt: publishStartedAt,
+        target: targetBefore,
         origin: configuration.baseOrigin,
-        wranglerOutputPath: outputPath,
-        versionId: null,
-        versionTag: null,
-        previousDeploymentId:
-          targetBefore.deployment?.deploymentId ?? null,
-        previousVersionId:
-          targetBefore.deployment?.versionId ?? null,
-        releaseMessage: message,
-        sourceFingerprint: localGate.sourceFingerprint,
-        artifactFingerprint: localGate.artifacts.fingerprint,
-        publicationFingerprint: localGate.publication.fingerprint,
-        gitCommit: localGate.git.commit,
+        outputPath,
+        message,
+        gate: localGate,
         openRouterCredentialFingerprint:
           releaseSecrets?.openRouterCredentialFingerprint ?? null,
-      };
-      await writePendingDeployment(pending);
+      });
       let publicationReceipt;
       try {
         publishAttempted = true;
@@ -1385,8 +1486,6 @@ async function runReleaseDeploymentWithLease(
           lifecycleLease,
           message,
           onUploaded: async (uploaded) => {
-            const uploadedOrigin =
-              configuration.baseOrigin || uploaded.origin;
             if (
               configuration.baseOrigin &&
               configuration.baseOrigin !== uploaded.origin
@@ -1395,10 +1494,10 @@ async function runReleaseDeploymentWithLease(
                 'Wrangler uploaded to a different origin than CALRICULA_RELEASE_BASE_URL.',
               );
             }
-            pending.origin = uploadedOrigin;
-            pending.versionId = uploaded.versionId;
-            pending.versionTag = `release-${attemptId}`;
-            await updatePendingDeployment(pending);
+            await attempt.recordUpload({
+              origin: configuration.baseOrigin || uploaded.origin,
+              versionId: uploaded.versionId,
+            });
           },
           outputPath,
           sealedPublication: localGate.sealedPublication,
@@ -1424,20 +1523,19 @@ async function runReleaseDeploymentWithLease(
           'Wrangler deployed a different origin than CALRICULA_RELEASE_BASE_URL.',
         );
       }
-      pending.origin = releaseOrigin;
-      pending.versionId = publicationReceipt.versionId;
-      await updatePendingDeployment(pending);
+      await attempt.recordUpload({
+        origin: releaseOrigin,
+        versionId: publicationReceipt.versionId,
+      });
       const deployment = await reconcilePublishedVersion({
         workerName: targetBefore.workerName,
         versionId: publicationReceipt.versionId,
         releaseMessage: message,
         previous: targetBefore.deployment,
       });
-      activeDeployment = await finalizePendingDeployment(
-        pending,
-        deployment,
-        { lifecycleLease },
-      );
+      activeDeployment = await attempt.finalize(deployment, {
+        lifecycleLease,
+      });
       reconciled = true;
     }
     const steps = bootstrap
