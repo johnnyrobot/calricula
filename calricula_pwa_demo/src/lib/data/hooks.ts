@@ -21,6 +21,7 @@ import type {
   ReferenceData,
 } from "./contracts";
 import type { Actor, Course, Notification, Program } from "@/lib/domain";
+import { repositoryInvalidation } from "./invalidation";
 import { curriculumRepository } from "./repository";
 
 export interface RepositoryQueryState<T> {
@@ -30,10 +31,12 @@ export interface RepositoryQueryState<T> {
   refresh: () => void;
 }
 
+// The bus the repository bumps is the one hooks read. Going through the
+// repository only forwarded these calls to the same shared instance.
 export function useRepositoryRevision(): number {
   return useSyncExternalStore(
-    curriculumRepository.subscribe.bind(curriculumRepository),
-    curriculumRepository.getRevision.bind(curriculumRepository),
+    repositoryInvalidation.subscribe,
+    repositoryInvalidation.getRevision,
     () => 0,
   );
 }

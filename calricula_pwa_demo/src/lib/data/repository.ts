@@ -29,11 +29,9 @@ import {
   type AIConversation,
   type AIMessage,
   type BackupEnvelope,
-  type CCNJustification,
   type Comment,
   type Course,
   type CourseAggregate,
-  type CourseContent,
   type CourseRequisite,
   type CourseStatus,
   type CreateCourseInput,
@@ -44,8 +42,6 @@ import {
   type ProgramAggregate,
   type ProgramCourse,
   type ProgramCourseOrderInput,
-  type StudentLearningOutcome,
-  type UpdateCourseInput,
   type UpdateProgramInput,
 } from "@/lib/domain";
 import {
@@ -55,11 +51,8 @@ import {
 
 import type {
   AddCommentInput,
-  AIArtifactQuery,
   AIConversationQuery,
-  CourseContentInput,
   CourseQuery,
-  CourseRequisiteInput,
   CurriculumRepository,
   DashboardSummary,
   ImportResult,
@@ -70,9 +63,7 @@ import type {
   ReferenceData,
   ResetOptions,
   SaveCourseAggregateInput,
-  SetCourseCCNJustificationInput,
   StorageStatus,
-  StudentLearningOutcomeInput,
   TransitionCourseInput,
 } from "./contracts";
 import { DATA_SCHEMA_VERSION, RepositoryError } from "./contracts";
@@ -488,60 +479,6 @@ export class DexieCurriculumRepository implements CurriculumRepository {
     );
   }
 
-  async updateCourse(id: string, input: UpdateCourseInput): Promise<CourseAggregate> {
-    return this.mutate(async () =>
-      this.database.transaction(
-        "rw",
-        this.database.tables,
-        async () => {
-          const course = await this.requireCourse(id);
-          this.assertCourseMutable(course);
-          const departmentId = input.departmentId ?? course.departmentId;
-          if (!(await this.database.departments.get(departmentId))) {
-            throw new RepositoryError("validation", "The selected department does not exist.");
-          }
-          await this.assertCourseIdentifierAvailable(
-            input.subjectCode ?? course.subjectCode,
-            input.courseNumber ?? course.courseNumber,
-            departmentId,
-            course.id,
-            course.lineageId,
-          );
-          const { topCode, cbCodes } = await this.resolveCourseClassification(
-            course,
-            input,
-          );
-          const ccnCode =
-            input.ccnCode === undefined
-              ? course.ccnCode
-              : await this.resolveCCNCode(input.ccnCode);
-          const updated = CourseSchema.parse({
-            ...course,
-            ...input,
-            topCode,
-            ccnCode,
-            cbCodes,
-            id: course.id,
-            lineageId: course.lineageId,
-            subjectCode: (input.subjectCode ?? course.subjectCode).trim().toUpperCase(),
-            courseNumber: (input.courseNumber ?? course.courseNumber).trim().toUpperCase(),
-            status: course.status,
-            version: course.version,
-            createdBy: course.createdBy,
-            createdAt: course.createdAt,
-            updatedAt: this.now().toISOString(),
-            approvedAt: course.approvedAt,
-          });
-          await this.database.courses.put(updated);
-          if (updated.ccnCode) {
-            await this.database.ccnJustifications.where("courseId").equals(id).delete();
-          }
-          return this.requireCourseAggregateUnsafe(id);
-        },
-      ),
-    );
-  }
-
   async deleteCourse(id: string): Promise<void> {
     await this.mutate(async () =>
       this.database.transaction("rw", this.database.tables, async () => {
@@ -805,233 +742,6 @@ export class DexieCurriculumRepository implements CurriculumRepository {
     );
   }
 
-  async replaceCourseSLOs(
-    courseId: string,
-    values: readonly StudentLearningOutcomeInput[],
-  ): Promise<StudentLearningOutcome[]> {
-    return this.mutate(async () =>
-      this.database.transaction(
-        "rw",
-        this.database.courses,
-        this.database.slos,
-        this.database.content,
-        async () => {
-          const course = await this.requireCourse(courseId);
-          this.assertCourseMutable(course);
-          const timestamp = this.now().toISOString();
-          const existing = new Map(
-            (await this.database.slos.where("courseId").equals(courseId).toArray()).map((item) => [
-              item.id,
-              item,
-            ]),
-          );
-          const replacements = values.map((value, index) => {
-            const previous = value.id ? existing.get(value.id) : undefined;
-            return StudentLearningOutcomeSchema.parse({
-              ...value,
-              id: previous?.id ?? this.idFactory(),
-              courseId,
-              sequence: index + 1,
-              createdAt: previous?.createdAt ?? timestamp,
-              updatedAt: timestamp,
-            });
-          });
-          await this.database.slos.where("courseId").equals(courseId).delete();
-          if (replacements.length) await this.database.slos.bulkPut(replacements);
-          const retained = new Set(replacements.map(({ id: sloId }) => sloId));
-          const content = await this.database.content.where("courseId").equals(courseId).toArray();
-          await this.database.content.bulkPut(
-            content.map((item) => ({
-              ...item,
-              linkedSloIds: item.linkedSloIds.filter((sloId) => retained.has(sloId)),
-              updatedAt: timestamp,
-            })),
-          );
-          await this.touchCourse(course, timestamp);
-          return replacements;
-        },
-      ),
-    );
-  }
-
-  async replaceCourseContent(
-    courseId: string,
-    values: readonly CourseContentInput[],
-  ): Promise<CourseContent[]> {
-    return this.mutate(async () =>
-      this.database.transaction(
-        "rw",
-        this.database.courses,
-        this.database.slos,
-        this.database.content,
-        async () => {
-          const course = await this.requireCourse(courseId);
-          this.assertCourseMutable(course);
-          const timestamp = this.now().toISOString();
-          const sloIds = new Set(
-            (await this.database.slos.where("courseId").equals(courseId).primaryKeys()).map(String),
-          );
-          const existing = new Map(
-            (await this.database.content.where("courseId").equals(courseId).toArray()).map((item) => [
-              item.id,
-              item,
-            ]),
-          );
-          const replacements = values.map((value, index) => {
-            const invalid = value.linkedSloIds.find((sloId) => !sloIds.has(sloId));
-            if (invalid) {
-              throw new RepositoryError(
-                "validation",
-                "Course content can only link outcomes from the same course.",
-              );
-            }
-            const previous = value.id ? existing.get(value.id) : undefined;
-            return CourseContentSchema.parse({
-              ...value,
-              id: previous?.id ?? this.idFactory(),
-              courseId,
-              sequence: index + 1,
-              createdAt: previous?.createdAt ?? timestamp,
-              updatedAt: timestamp,
-            });
-          });
-          await this.database.content.where("courseId").equals(courseId).delete();
-          if (replacements.length) await this.database.content.bulkPut(replacements);
-          await this.touchCourse(course, timestamp);
-          return replacements;
-        },
-      ),
-    );
-  }
-
-  async replaceCourseRequisites(
-    courseId: string,
-    values: readonly CourseRequisiteInput[],
-  ): Promise<CourseRequisite[]> {
-    return this.mutate(async () =>
-      this.database.transaction(
-        "rw",
-        this.database.courses,
-        this.database.requisites,
-        async () => {
-          const course = await this.requireCourse(courseId);
-          this.assertCourseMutable(course);
-          const existing = new Map(
-            (await this.database.requisites.where("courseId").equals(courseId).toArray()).map(
-              (item) => [item.id, item],
-            ),
-          );
-          const graph = (await this.database.requisites.toArray())
-            .filter((item) => item.courseId !== courseId && item.requisiteCourseId)
-            .map((item) => ({
-              courseId: item.courseId,
-              requisiteCourseId: item.requisiteCourseId as string,
-            }));
-          const timestamp = this.now().toISOString();
-          const replacements = [];
-          for (const value of values) {
-            if (
-              value.requisiteCourseId &&
-              !(await this.database.courses.get(value.requisiteCourseId))
-            ) {
-              throw new RepositoryError("validation", "The requisite course does not exist.");
-            }
-            if (
-              value.requisiteCourseId &&
-              wouldCreateRequisiteCycle(courseId, value.requisiteCourseId, graph)
-            ) {
-              throw new RepositoryError(
-                "circular-requisite",
-                "This requisite would create a circular dependency.",
-              );
-            }
-            if (value.requisiteCourseId) {
-              graph.push({ courseId, requisiteCourseId: value.requisiteCourseId });
-            }
-            const previous = value.id ? existing.get(value.id) : undefined;
-            replacements.push(
-              CourseRequisiteSchema.parse({
-                ...value,
-                id: previous?.id ?? this.idFactory(),
-                courseId,
-                createdAt: previous?.createdAt ?? timestamp,
-                updatedAt: timestamp,
-              }),
-            );
-          }
-          await this.database.requisites.where("courseId").equals(courseId).delete();
-          if (replacements.length) await this.database.requisites.bulkPut(replacements);
-          await this.touchCourse(course, timestamp);
-          return replacements;
-        },
-      ),
-    );
-  }
-
-  async setCourseCCNJustification(
-    courseId: string,
-    input: SetCourseCCNJustificationInput | null,
-  ): Promise<CCNJustification | null> {
-    return this.mutate(async () =>
-      this.database.transaction(
-        "rw",
-        [
-          this.database.courses,
-          this.database.ccnStandards,
-          this.database.ccnJustifications,
-          this.database.meta,
-          this.database.actors,
-        ],
-        async () => {
-          const course = await this.requireCourse(courseId);
-          this.assertCourseMutable(course);
-          const existing = await this.database.ccnJustifications
-            .where("courseId")
-            .equals(courseId)
-            .first();
-          if (!input) {
-            if (existing) await this.database.ccnJustifications.delete(existing.id);
-            return null;
-          }
-          const ccnCode = await this.resolveCCNCode(input.ccnCode);
-          if (!ccnCode) {
-            throw new RepositoryError("validation", "The selected CCN standard does not exist.");
-          }
-          const validation = validateCCNNonMatchJustification({
-            ...input,
-            ccnCode,
-          }, {
-            courseCcnCode: course.ccnCode,
-          });
-          if (!validation.valid) {
-            throw new RepositoryError("validation", validation.errors.join(" "), validation.errors);
-          }
-          const actor = await this.getActivePersonaUnsafe();
-          const timestamp = this.now().toISOString();
-          const justification = CCNJustificationSchema.parse({
-            id: existing?.id ?? this.idFactory(),
-            courseId,
-            ccnCode,
-            justification: input.justification.trim(),
-            evidence: input.evidence.map((item) => item.trim()).filter(Boolean),
-            createdBy: existing?.createdBy ?? actor.id,
-            createdAt: existing?.createdAt ?? timestamp,
-            updatedAt: timestamp,
-          });
-          await this.database.ccnJustifications.put(justification);
-          await this.touchCourse(course, timestamp);
-          return justification;
-        },
-      ),
-    );
-  }
-  async listComments(entityType: Comment["entityType"], entityId: string): Promise<Comment[]> {
-    await this.initialize();
-    return (await this.database.comments.toArray())
-      .filter((item) => item.entityType === entityType && item.entityId === entityId)
-      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
-  }
-
   async addComment(input: AddCommentInput): Promise<Comment> {
     return this.mutate(async () =>
       this.database.transaction(
@@ -1099,26 +809,6 @@ export class DexieCurriculumRepository implements CurriculumRepository {
         await this.database.comments.put(updated);
         return updated;
       }),
-    );
-  }
-
-  async deleteComment(id: string): Promise<void> {
-    await this.mutate(async () =>
-      this.database.transaction(
-        "rw",
-        this.database.comments,
-        this.database.meta,
-        this.database.actors,
-        async () => {
-          const comment = await this.database.comments.get(id);
-          if (!comment) return;
-          const actor = await this.getActivePersonaUnsafe();
-          if (actor.id !== comment.authorId && actor.role !== "admin") {
-            throw new RepositoryError("forbidden", "Only the author or demo admin can delete this comment.");
-          }
-          await this.database.comments.delete(id);
-        },
-      ),
     );
   }
 
@@ -1324,43 +1014,6 @@ export class DexieCurriculumRepository implements CurriculumRepository {
           return this.requireProgramAggregateUnsafe(id);
         },
       ),
-    );
-  }
-
-  async deleteProgram(id: string): Promise<void> {
-    await this.mutate(async () =>
-      this.database.transaction("rw", this.database.tables, async () => {
-        const program = await this.requireProgram(id);
-        this.assertProgramMutable(program);
-        const conversationIds = new Set(
-          (
-            await this.database.aiConversations
-              .filter((item) => item.entityType === "Program" && item.entityId === id)
-              .toArray()
-          ).map((item) => item.id),
-        );
-        await this.database.programs.delete(id);
-        await this.database.programCourses.where("programId").equals(id).delete();
-        await this.database.comments
-          .filter((item) => item.entityType === "Program" && item.entityId === id)
-          .delete();
-        await this.database.workflowHistory
-          .filter((item) => item.entityType === "Program" && item.entityId === id)
-          .delete();
-        await this.database.notifications
-          .filter((item) => item.entityType === "Program" && item.entityId === id)
-          .delete();
-        await this.database.aiConversations
-          .filter((item) => item.entityType === "Program" && item.entityId === id)
-          .delete();
-        await this.database.aiArtifacts
-          .filter(
-            (item) =>
-              (item.entityType === "Program" && item.entityId === id) ||
-              Boolean(item.conversationId && conversationIds.has(item.conversationId)),
-          )
-          .delete();
-      }),
     );
   }
 
@@ -1581,11 +1234,6 @@ export class DexieCurriculumRepository implements CurriculumRepository {
     return values.slice(0, Math.max(1, query.limit ?? MAX_AI_CONVERSATIONS_PER_ACTOR));
   }
 
-  async getAIConversation(id: string): Promise<AIConversation | null> {
-    await this.initialize();
-    return (await this.database.aiConversations.get(id)) ?? null;
-  }
-
   async saveAIConversation(value: AIConversation): Promise<AIConversation> {
     return this.mutate(async () =>
       this.database.transaction(
@@ -1632,33 +1280,6 @@ export class DexieCurriculumRepository implements CurriculumRepository {
     );
   }
 
-  async deleteAIConversation(id: string): Promise<void> {
-    await this.mutate(async () =>
-      this.database.transaction(
-        "rw",
-        this.database.aiConversations,
-        this.database.aiArtifacts,
-        async () => {
-          await this.database.aiConversations.delete(id);
-          await this.database.aiArtifacts.where("conversationId").equals(id).delete();
-        },
-      ),
-    );
-  }
-
-  async listAIArtifacts(query: AIArtifactQuery = {}): Promise<AIArtifact[]> {
-    await this.initialize();
-    const values = (await this.database.aiArtifacts.toArray())
-      .filter(
-        (item) =>
-          (!query.conversationId || item.conversationId === query.conversationId) &&
-          (!query.entityType || item.entityType === query.entityType) &&
-          (query.entityId === undefined || item.entityId === query.entityId),
-      )
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-    return values.slice(0, Math.max(1, query.limit ?? MAX_AI_ARTIFACTS_PER_ACTOR));
-  }
-
   async saveAIArtifact(value: AIArtifact): Promise<AIArtifact> {
     return this.mutate(async () =>
       this.database.transaction(
@@ -1684,18 +1305,6 @@ export class DexieCurriculumRepository implements CurriculumRepository {
         },
       ),
     );
-  }
-
-  async deleteAIArtifact(id: string): Promise<void> {
-    await this.mutate(async () => this.database.aiArtifacts.delete(id));
-  }
-
-  getRevision(): number {
-    return this.invalidation.getRevision();
-  }
-
-  subscribe(listener: () => void): () => void {
-    return this.invalidation.subscribe(listener);
   }
 
   close(): void {

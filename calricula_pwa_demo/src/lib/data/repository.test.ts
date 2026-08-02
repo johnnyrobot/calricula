@@ -11,7 +11,14 @@ import {
   type Role,
 } from "@/lib/domain";
 
-import { RepositoryError } from "./contracts";
+import {
+  RepositoryError,
+  type CourseContentInput,
+  type CourseRequisiteInput,
+  type SetCourseCCNJustificationInput,
+  type StudentLearningOutcomeInput,
+  type UpdateCourseInput,
+} from "./contracts";
 import { RepositoryInvalidationBus } from "./invalidation";
 import { DexieCurriculumRepository } from "./repository";
 
@@ -19,16 +26,20 @@ describe("DexieCurriculumRepository", () => {
   let databaseName: string;
   let ids: number;
   let repository: DexieCurriculumRepository;
+  // Revisions are the invalidation bus's to report; the repository only bumps
+  // them. Tests observe the bus the repository was handed.
+  let invalidation: RepositoryInvalidationBus;
 
   beforeEach(() => {
     databaseName = `calricula-repository-${crypto.randomUUID()}`;
     ids = 1;
+    invalidation = new RepositoryInvalidationBus(`${databaseName}-events`);
     repository = new DexieCurriculumRepository({
       databaseName,
       now: () => new Date("2026-07-30T20:00:00.000Z"),
       idFactory: () =>
         `90000000-0000-4000-8000-${String(ids++).padStart(12, "0")}`,
-      invalidation: new RepositoryInvalidationBus(`${databaseName}-events`),
+      invalidation,
     });
   });
 
@@ -49,6 +60,37 @@ describe("DexieCurriculumRepository", () => {
       departmentId: references.departments[0].id,
     });
   }
+
+  // The repository exposes one write verb for a course and its children.
+  // These name the partial saves the suite exercises so each test still reads
+  // as the edit it is making.
+  const updateCourse = (courseId: string, course: UpdateCourseInput) =>
+    repository.saveCourseAggregate(courseId, { course });
+
+  const replaceCourseSLOs = async (
+    courseId: string,
+    slos: readonly StudentLearningOutcomeInput[],
+  ) => (await repository.saveCourseAggregate(courseId, { slos })).slos;
+
+  const replaceCourseContent = async (
+    courseId: string,
+    content: readonly CourseContentInput[],
+  ) => (await repository.saveCourseAggregate(courseId, { content })).content;
+
+  const replaceCourseRequisites = async (
+    courseId: string,
+    requisites: readonly CourseRequisiteInput[],
+  ) => (await repository.saveCourseAggregate(courseId, { requisites })).requisites;
+
+  const setCourseCCNJustification = async (
+    courseId: string,
+    ccnJustification: SetCourseCCNJustificationInput | null,
+  ) =>
+    (await repository.saveCourseAggregate(courseId, { ccnJustification }))
+      .ccnJustification;
+
+  const listCourseComments = async (courseId: string) =>
+    (await repository.getCourse(courseId))?.comments ?? [];
 
   it("seeds the canonical fixture and exposes references without table access", async () => {
     const initialized = await repository.initialize();
@@ -147,7 +189,7 @@ describe("DexieCurriculumRepository", () => {
       title: "Repository Test Course",
       departmentId: references.departments[0].id,
     });
-    const slos = await repository.replaceCourseSLOs(course.course.id, [
+    const slos = await replaceCourseSLOs(course.course.id, [
       {
         sequence: 7,
         outcomeText: "Evaluate a curriculum proposal.",
@@ -155,7 +197,7 @@ describe("DexieCurriculumRepository", () => {
         performanceCriteria: null,
       },
     ]);
-    await repository.replaceCourseContent(course.course.id, [
+    await replaceCourseContent(course.course.id, [
       {
         sequence: 9,
         topic: "Curriculum review",
@@ -166,7 +208,7 @@ describe("DexieCurriculumRepository", () => {
     ]);
 
     await expect(
-      repository.replaceCourseRequisites(course.course.id, [
+      replaceCourseRequisites(course.course.id, [
         {
           type: "Prerequisite",
           validationType: "Sequential",
@@ -216,7 +258,7 @@ describe("DexieCurriculumRepository", () => {
     expect(approved.course.status).toBe("Approved");
     expect(approved.history).toHaveLength(4);
     await expect(
-      repository.updateCourse(created.course.id, { title: "Changed after approval" }),
+      updateCourse(created.course.id, { title: "Changed after approval" }),
     ).rejects.toBeInstanceOf(RepositoryError);
   });
 
@@ -283,7 +325,7 @@ describe("DexieCurriculumRepository", () => {
               : role === reviewerRole[fromStatus] || role === "admin";
           const shouldSucceed =
             fromStatus !== "Approved" && graphAllows && roleAllows;
-          const revisionBefore = repository.getRevision();
+          const revisionBefore = invalidation.getRevision();
           const transition = repository.transitionCourse(created.course.id, {
             targetStatus,
             actorId: actor.id,
@@ -302,7 +344,7 @@ describe("DexieCurriculumRepository", () => {
               toStatus: targetStatus,
               changedBy: actor.id,
             });
-            expect(repository.getRevision()).toBeGreaterThan(revisionBefore);
+            expect(invalidation.getRevision()).toBeGreaterThan(revisionBefore);
           } else {
             await expect(transition).rejects.toMatchObject({
               code:
@@ -328,7 +370,7 @@ describe("DexieCurriculumRepository", () => {
                 )
                 .count(),
             ).toBe(0);
-            expect(repository.getRevision()).toBe(revisionBefore);
+            expect(invalidation.getRevision()).toBe(revisionBefore);
           }
         }
       }
@@ -429,7 +471,7 @@ describe("DexieCurriculumRepository", () => {
       createdAt: "2026-07-30T19:00:00.000Z",
     });
     const before = await repository.getCourse(course.course.id);
-    const revisionBefore = repository.getRevision();
+    const revisionBefore = invalidation.getRevision();
 
     await expect(
       repository.transitionCourse(course.course.id, {
@@ -444,7 +486,7 @@ describe("DexieCurriculumRepository", () => {
         .equals(course.course.id)
         .count(),
     ).toBe(0);
-    expect(repository.getRevision()).toBe(revisionBefore);
+    expect(invalidation.getRevision()).toBe(revisionBefore);
   });
 
   it("round-trips a backup and reset without exporting provider secrets", async () => {
@@ -560,7 +602,7 @@ describe("DexieCurriculumRepository", () => {
   it("filters, sorts, paginates, updates, duplicates, and versions courses", async () => {
     await repository.initialize();
     const created = await createDraft("401", "Zulu Course");
-    const updated = await repository.updateCourse(created.course.id, {
+    const updated = await updateCourse(created.course.id, {
       title: "Alpha Course",
       units: "2.5",
     });
@@ -591,7 +633,7 @@ describe("DexieCurriculumRepository", () => {
     expect(version.course.topCode).toBe(approved.topCode);
     expect(version.course.ccnCode).toBe(approved.ccnCode);
     await expect(validateBackup(repository)).resolves.toBeUndefined();
-    await repository.updateCourse(version.course.id, { title: `${approved.title} revised` });
+    await updateCourse(version.course.id, { title: `${approved.title} revised` });
   });
 
   it("enforces course conflicts, references, immutability, and deletion cascades", async () => {
@@ -599,7 +641,7 @@ describe("DexieCurriculumRepository", () => {
     const first = await createDraft("501");
     await expect(createDraft("501")).rejects.toMatchObject({ code: "conflict" });
     await expect(
-      repository.updateCourse(first.course.id, {
+      updateCourse(first.course.id, {
         departmentId: "00000000-0000-4000-8000-999999999999",
       }),
     ).rejects.toMatchObject({ code: "validation" });
@@ -632,7 +674,7 @@ describe("DexieCurriculumRepository", () => {
     await repository.deleteCourse(first.course.id);
     expect(await repository.getCourse(first.course.id)).toBeNull();
     expect((await repository.getProgram(program.program.id))?.program.totalUnits).toBe("0");
-    expect(await repository.listComments("Course", first.course.id)).toEqual([]);
+    expect(await listCourseComments(first.course.id)).toEqual([]);
     await expect(validateBackup(repository)).resolves.toBeUndefined();
   });
 
@@ -662,14 +704,14 @@ describe("DexieCurriculumRepository", () => {
     });
     await expect(validateBackup(repository)).resolves.toBeUndefined();
 
-    const changedTop = await repository.updateCourse(created.course.id, {
+    const changedTop = await updateCourse(created.course.id, {
       topCode: secondTop,
     });
     expect(changedTop.course.topCode).toBe(secondTop);
     expect(changedTop.course.cbCodes.CB03).toBe(secondTop);
     await expect(validateBackup(repository)).resolves.toBeUndefined();
 
-    const cleared = await repository.updateCourse(created.course.id, {
+    const cleared = await updateCourse(created.course.id, {
       topCode: " ",
       ccnCode: " ",
     });
@@ -678,7 +720,7 @@ describe("DexieCurriculumRepository", () => {
     expect(cleared.course.cbCodes).not.toHaveProperty("CB03");
     await expect(validateBackup(repository)).resolves.toBeUndefined();
 
-    const inferred = await repository.updateCourse(created.course.id, {
+    const inferred = await updateCourse(created.course.id, {
       cbCodes: { ...cleared.course.cbCodes, CB03: firstTop },
     });
     expect(inferred.course.topCode).toBe(firstTop);
@@ -701,23 +743,23 @@ describe("DexieCurriculumRepository", () => {
 
     const beforeRejectedUpdates = await repository.getCourse(created.course.id);
     await expect(
-      repository.updateCourse(created.course.id, {
+      updateCourse(created.course.id, {
         topCode: firstTop,
         cbCodes: { CB03: secondTop },
       }),
     ).rejects.toMatchObject({ code: "validation" });
     await expect(
-      repository.updateCourse(created.course.id, {
+      updateCourse(created.course.id, {
         topCode: "9999.99",
       }),
     ).rejects.toMatchObject({ code: "validation" });
     await expect(
-      repository.updateCourse(created.course.id, {
+      updateCourse(created.course.id, {
         ccnCode: "NOPE C9999",
       }),
     ).rejects.toMatchObject({ code: "validation" });
     await expect(
-      repository.updateCourse(created.course.id, {
+      updateCourse(created.course.id, {
         cbCodes: { CB03: "9999.99" },
       }),
     ).rejects.toMatchObject({ code: "validation" });
@@ -777,14 +819,14 @@ describe("DexieCurriculumRepository", () => {
       topCode: localTop.code,
       cbCodes: { CB03: localTop.code, CB05: "A" },
     });
-    await repository.setCourseCCNJustification(created.course.id, {
+    await setCourseCCNJustification(created.course.id, {
       ccnCode: unsupportedImpliedStandard.ccnCode,
       justification:
         "The local course intentionally uses a different sequence and instructional scope.",
       evidence: ["Department review"],
     });
 
-    const adopted = await repository.updateCourse(created.course.id, {
+    const adopted = await updateCourse(created.course.id, {
       ccnCode: " comm   c1000 ",
     });
     expect(adopted.course.ccnCode).toBe(
@@ -796,7 +838,7 @@ describe("DexieCurriculumRepository", () => {
     await expect(validateBackup(repository)).resolves.toBeUndefined();
 
     await expect(
-      repository.updateCourse(created.course.id, {
+      updateCourse(created.course.id, {
         topCode: unsupportedImpliedStandard.impliedTopCode,
         cbCodes: { CB03: unsupportedImpliedStandard.impliedTopCode },
       }),
@@ -824,7 +866,7 @@ describe("DexieCurriculumRepository", () => {
       topCode: firstTop,
       cbCodes: { CB03: firstTop },
     });
-    await repository.setCourseCCNJustification(course.course.id, {
+    await setCourseCCNJustification(course.course.id, {
       ccnCode: standard.ccnCode,
       justification:
         "The local course intentionally uses a different sequence and instructional scope.",
@@ -882,20 +924,20 @@ describe("DexieCurriculumRepository", () => {
     const course = await createDraft("601");
     const standard = (await repository.getReferences()).ccnStandards[0];
     await expect(
-      repository.setCourseCCNJustification(course.course.id, {
+      setCourseCCNJustification(course.course.id, {
         ccnCode: "NOT A STANDARD",
         justification: "This is a sufficiently long explanation for testing.",
         evidence: [],
       }),
     ).rejects.toMatchObject({ code: "validation" });
     await expect(
-      repository.setCourseCCNJustification(course.course.id, {
+      setCourseCCNJustification(course.course.id, {
         ccnCode: standard.ccnCode,
         justification: "short",
         evidence: [],
       }),
     ).rejects.toMatchObject({ code: "validation" });
-    const justification = await repository.setCourseCCNJustification(course.course.id, {
+    const justification = await setCourseCCNJustification(course.course.id, {
       ccnCode: standard.ccnCode,
       justification:
         "The local course intentionally uses a different sequence and learning scope.",
@@ -906,14 +948,13 @@ describe("DexieCurriculumRepository", () => {
       justification?.id,
     );
     await expect(validateBackup(repository)).resolves.toBeUndefined();
-    expect(await repository.setCourseCCNJustification(course.course.id, null)).toBeNull();
+    expect(await setCourseCCNJustification(course.course.id, null)).toBeNull();
     await expect(validateBackup(repository)).resolves.toBeUndefined();
   });
 
-  it("supports comments while enforcing comment ownership", async () => {
+  it("supports comments and rejects them for entities that do not exist", async () => {
     await repository.initialize();
     const course = await createDraft("701");
-    const faculty = await repository.getActivePersona();
     const comment = await repository.addComment({
       entityType: "Course",
       entityId: course.course.id,
@@ -922,16 +963,9 @@ describe("DexieCurriculumRepository", () => {
     });
     expect((await repository.setCommentResolved(comment.id, true)).resolvedAt).toBeTruthy();
     expect((await repository.setCommentResolved(comment.id, false)).resolvedAt).toBeNull();
-    const chair = (await repository.listPersonas()).find(({ role }) => role === "chair")!;
-    await repository.setActivePersona(chair.id);
-    await expect(repository.deleteComment(comment.id)).rejects.toMatchObject({
-      code: "forbidden",
-    });
-    const admin = (await repository.listPersonas()).find(({ role }) => role === "admin")!;
-    await repository.setActivePersona(admin.id);
-    await repository.deleteComment(comment.id);
-    expect(await repository.listComments("Course", course.course.id)).toEqual([]);
-    await repository.setActivePersona(faculty.id);
+    expect((await listCourseComments(course.course.id)).map(({ id }) => id)).toEqual([
+      comment.id,
+    ]);
     await expect(
       repository.addComment({
         entityType: "Course",
@@ -995,8 +1029,6 @@ describe("DexieCurriculumRepository", () => {
         },
       ]),
     ).rejects.toMatchObject({ code: "validation" });
-    await repository.deleteProgram(program.program.id);
-    expect(await repository.getProgram(program.program.id)).toBeNull();
   });
 
   it("canonicalizes and validates program TOP codes across backup round-trips", async () => {
@@ -1104,9 +1136,10 @@ describe("DexieCurriculumRepository", () => {
       sourceIds: [],
       createdAt: "2026-07-30T20:00:00.000Z",
     });
-    expect(await repository.getAIConversation(conversationId)).toEqual(withMessage);
-    expect(await repository.listAIConversations({ entityId: course.course.id })).toHaveLength(1);
-    expect(await repository.listAIArtifacts({ conversationId })).toEqual([artifact]);
+    expect(await repository.listAIConversations({ entityId: course.course.id })).toEqual([
+      withMessage,
+    ]);
+    expect(artifact.conversationId).toBe(conversationId);
     await expect(
       repository.saveAIConversation({
         ...conversation,
@@ -1114,10 +1147,6 @@ describe("DexieCurriculumRepository", () => {
         entityId: "00000000-0000-4000-8000-999999999999",
       }),
     ).rejects.toMatchObject({ code: "validation" });
-    await repository.deleteAIArtifact(artifact.id);
-    expect(await repository.listAIArtifacts({ conversationId })).toEqual([]);
-    await repository.deleteAIConversation(conversationId);
-    expect(await repository.getAIConversation(conversationId)).toBeNull();
   });
 
   it("rejects malformed and newer backups without mutating current records", async () => {
@@ -1162,7 +1191,7 @@ describe("DexieCurriculumRepository", () => {
 
   it("reopens existing data, resets to a chosen persona, and publishes revisions", async () => {
     const events: number[] = [];
-    const unsubscribe = repository.subscribe(() => events.push(repository.getRevision()));
+    const unsubscribe = invalidation.subscribe(() => events.push(invalidation.getRevision()));
     await repository.initialize();
     const personas = await repository.listPersonas();
     const admin = personas.find(({ role }) => role === "admin")!;
@@ -1227,7 +1256,7 @@ describe("DexieCurriculumRepository", () => {
   it("covers child replacement validation and pruning", async () => {
     await repository.initialize();
     const course = await createDraft("A02");
-    const first = await repository.replaceCourseSLOs(course.course.id, [
+    const first = await replaceCourseSLOs(course.course.id, [
       {
         sequence: 1,
         outcomeText: "Analyze evidence.",
@@ -1235,7 +1264,7 @@ describe("DexieCurriculumRepository", () => {
         performanceCriteria: null,
       },
     ]);
-    await repository.replaceCourseContent(course.course.id, [
+    await replaceCourseContent(course.course.id, [
       {
         sequence: 1,
         topic: "Evidence",
@@ -1244,7 +1273,7 @@ describe("DexieCurriculumRepository", () => {
         linkedSloIds: [first[0].id],
       },
     ]);
-    const updated = await repository.replaceCourseSLOs(course.course.id, [
+    const updated = await replaceCourseSLOs(course.course.id, [
       {
         ...first[0],
         outcomeText: "Evaluate evidence.",
@@ -1255,7 +1284,7 @@ describe("DexieCurriculumRepository", () => {
       first[0].id,
     ]);
     await expect(
-      repository.replaceCourseContent(course.course.id, [
+      replaceCourseContent(course.course.id, [
         {
           sequence: 1,
           topic: "Invalid",
@@ -1266,7 +1295,7 @@ describe("DexieCurriculumRepository", () => {
       ]),
     ).rejects.toMatchObject({ code: "validation" });
     await expect(
-      repository.replaceCourseRequisites(course.course.id, [
+      replaceCourseRequisites(course.course.id, [
         {
           type: "Prerequisite",
           validationType: "Content Review",
@@ -1277,7 +1306,7 @@ describe("DexieCurriculumRepository", () => {
       ]),
     ).rejects.toMatchObject({ code: "validation" });
     expect(
-      await repository.replaceCourseRequisites(course.course.id, [
+      await replaceCourseRequisites(course.course.id, [
         {
           type: "Advisory",
           validationType: "Other",
@@ -1335,9 +1364,6 @@ describe("DexieCurriculumRepository", () => {
       .items[0];
     if (approved) {
       await expect(repository.updateProgram(approved.id, { title: "No change" })).rejects.toMatchObject({
-        code: "approved-immutable",
-      });
-      await expect(repository.deleteProgram(approved.id)).rejects.toMatchObject({
         code: "approved-immutable",
       });
     }
@@ -1652,7 +1678,7 @@ describe("DexieCurriculumRepository", () => {
       task: "newest",
       createdAt: "2026-07-31T20:00:00.000Z",
     });
-    expect(await repository.listAIArtifacts({ limit: 200 })).toHaveLength(100);
+    expect(await repository.database.aiArtifacts.count()).toBe(100);
   });
 });
 

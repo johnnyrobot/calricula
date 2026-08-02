@@ -5,7 +5,6 @@ import type {
   AIConversation,
   AIMessage,
   BackupEnvelope,
-  CCNJustification,
   CCNStandard,
   Comment,
   Course,
@@ -197,7 +196,6 @@ export interface CurriculumRepository {
   listCourses(query?: CourseQuery): Promise<PageResult<Course>>;
   getCourse(id: string): Promise<CourseAggregate | null>;
   createCourse(input: CreateCourseInput): Promise<CourseAggregate>;
-  updateCourse(id: string, input: UpdateCourseInput): Promise<CourseAggregate>;
   deleteCourse(id: string): Promise<void>;
   duplicateCourse(id: string): Promise<CourseAggregate>;
   createNewCourseVersion(id: string): Promise<CourseAggregate>;
@@ -205,34 +203,15 @@ export interface CurriculumRepository {
     courseId: string,
     input: SaveCourseAggregateInput,
   ): Promise<CourseAggregate>;
-  replaceCourseSLOs(
-    courseId: string,
-    values: readonly StudentLearningOutcomeInput[],
-  ): Promise<StudentLearningOutcome[]>;
-  replaceCourseContent(
-    courseId: string,
-    values: readonly CourseContentInput[],
-  ): Promise<CourseContent[]>;
-  replaceCourseRequisites(
-    courseId: string,
-    values: readonly CourseRequisiteInput[],
-  ): Promise<CourseRequisite[]>;
-  setCourseCCNJustification(
-    courseId: string,
-    input: SetCourseCCNJustificationInput | null,
-  ): Promise<CCNJustification | null>;
 
-  listComments(entityType: Comment["entityType"], entityId: string): Promise<Comment[]>;
   addComment(input: AddCommentInput): Promise<Comment>;
   setCommentResolved(id: string, resolved: boolean): Promise<Comment>;
-  deleteComment(id: string): Promise<void>;
   transitionCourse(courseId: string, input: TransitionCourseInput): Promise<CourseAggregate>;
 
   listPrograms(query?: ProgramQuery): Promise<PageResult<Program>>;
   getProgram(id: string): Promise<ProgramAggregate | null>;
   createProgram(input: CreateProgramInput): Promise<ProgramAggregate>;
   updateProgram(id: string, input: UpdateProgramInput): Promise<ProgramAggregate>;
-  deleteProgram(id: string): Promise<void>;
   reorderProgramCourses(
     programId: string,
     order: readonly ProgramCourseOrderInput[],
@@ -249,16 +228,10 @@ export interface CurriculumRepository {
   setActivePersona(actorId: string): Promise<Actor>;
 
   listAIConversations(query?: AIConversationQuery): Promise<AIConversation[]>;
-  getAIConversation(id: string): Promise<AIConversation | null>;
   saveAIConversation(value: AIConversation): Promise<AIConversation>;
   appendAIMessage(conversationId: string, value: AIMessage): Promise<AIConversation>;
-  deleteAIConversation(id: string): Promise<void>;
-  listAIArtifacts(query?: AIArtifactQuery): Promise<AIArtifact[]>;
   saveAIArtifact(value: AIArtifact): Promise<AIArtifact>;
-  deleteAIArtifact(id: string): Promise<void>;
 
-  getRevision(): number;
-  subscribe(listener: () => void): () => void;
   close(): void;
 }
 
