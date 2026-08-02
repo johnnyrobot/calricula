@@ -340,7 +340,32 @@ function wranglerExecutable() {
   );
 }
 
-async function publishWorker(
+/**
+ * Everything the two publishing steps do to the world outside this module:
+ * the two preconditions they refuse to run without, the child environment they
+ * hand Wrangler, the gated child process itself, and reading back what it
+ * wrote. Substituting this is the only way to exercise the publish sequence
+ * without a Cloudflare account, which is why it is one value rather than six
+ * threaded parameters.
+ */
+export const WRANGLER_PUBLISHER = {
+  assertReleaseInputsTracked: assertTrackedReleaseInputs,
+  assertOfficialEnvironment: assertOfficialCloudflareEnvironment,
+  childEnvironment: wranglerChildEnvironment,
+  executable: wranglerExecutable,
+  run: runPausedPublisher,
+  readOutput: (outputPath) => readFile(outputPath, 'utf8'),
+};
+
+async function prepareWranglerInvocation(publisher, outputPath) {
+  await publisher.assertReleaseInputsTracked();
+  publisher.assertOfficialEnvironment(process.env);
+  const environment = publisher.childEnvironment(process.env);
+  environment.WRANGLER_OUTPUT_FILE_PATH = outputPath;
+  return environment;
+}
+
+export async function publishWorker(
   {
     attemptId,
     lifecycleLease,
@@ -350,12 +375,10 @@ async function publishWorker(
     sealedPublication,
     secretsFile = '',
   },
+  publisher = WRANGLER_PUBLISHER,
 ) {
-  await assertTrackedReleaseInputs();
-  assertOfficialCloudflareEnvironment(process.env);
-  const environment = wranglerChildEnvironment(process.env);
-  environment.WRANGLER_OUTPUT_FILE_PATH = outputPath;
-  const uploadExitCode = await runPausedPublisher({
+  const environment = await prepareWranglerInvocation(publisher, outputPath);
+  const uploadExitCode = await publisher.run({
     args: wranglerVersionUploadArguments({
       attemptId,
       message,
@@ -363,7 +386,7 @@ async function publishWorker(
       secretsFile,
     }),
     environment,
-    executable: wranglerExecutable(),
+    executable: publisher.executable(),
     lifecycleLease,
   });
   if (uploadExitCode !== 0) {
@@ -372,18 +395,18 @@ async function publishWorker(
     );
   }
   const uploaded = parseVersionUploadOutput(
-    await readFile(outputPath, 'utf8'),
+    await publisher.readOutput(outputPath),
     'calricula-demo',
   );
   await onUploaded(uploaded);
-  const deployExitCode = await runPausedPublisher({
+  const deployExitCode = await publisher.run({
     args: wranglerVersionDeployArguments({
       message,
       sealedPublication,
       versionId: uploaded.versionId,
     }),
     environment,
-    executable: wranglerExecutable(),
+    executable: publisher.executable(),
     lifecycleLease,
   });
   if (deployExitCode !== 0) {
@@ -392,32 +415,32 @@ async function publishWorker(
     );
   }
   const deployed = parseVersionDeployOutput(
-    await readFile(outputPath, 'utf8'),
+    await publisher.readOutput(outputPath),
     'calricula-demo',
     uploaded.versionId,
   );
   return { ...uploaded, ...deployed };
 }
 
-async function promoteUploadedVersion({
-  lifecycleLease,
-  message,
-  outputPath,
-  sealedPublication,
-  versionId,
-}) {
-  await assertTrackedReleaseInputs();
-  assertOfficialCloudflareEnvironment(process.env);
-  const environment = wranglerChildEnvironment(process.env);
-  environment.WRANGLER_OUTPUT_FILE_PATH = outputPath;
-  const exitCode = await runPausedPublisher({
+export async function promoteUploadedVersion(
+  {
+    lifecycleLease,
+    message,
+    outputPath,
+    sealedPublication,
+    versionId,
+  },
+  publisher = WRANGLER_PUBLISHER,
+) {
+  const environment = await prepareWranglerInvocation(publisher, outputPath);
+  const exitCode = await publisher.run({
     args: wranglerVersionDeployArguments({
       message,
       sealedPublication,
       versionId,
     }),
     environment,
-    executable: wranglerExecutable(),
+    executable: publisher.executable(),
     lifecycleLease,
   });
   if (exitCode !== 0) {
@@ -426,7 +449,7 @@ async function promoteUploadedVersion({
     );
   }
   return parseVersionDeployOutput(
-    await readFile(outputPath, 'utf8'),
+    await publisher.readOutput(outputPath),
     'calricula-demo',
     versionId,
   );
