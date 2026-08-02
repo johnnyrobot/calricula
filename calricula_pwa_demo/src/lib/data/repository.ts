@@ -127,7 +127,7 @@ export interface DexieCurriculumRepositoryOptions {
 }
 
 export class DexieCurriculumRepository implements CurriculumRepository {
-  readonly database: CurriculumDatabase;
+  private readonly database: CurriculumDatabase;
   private readonly now: () => Date;
   private readonly idFactory: () => string;
   private readonly invalidation: RepositoryInvalidationBus;
@@ -146,6 +146,20 @@ export class DexieCurriculumRepository implements CurriculumRepository {
         return globalThis.crypto.randomUUID();
       });
     this.invalidation = options.invalidation ?? repositoryInvalidation;
+  }
+
+  /**
+   * The Dexie handle, for tests only. It is deliberately absent from
+   * {@link CurriculumRepository}: the exported `curriculumRepository` is typed
+   * as that interface, so no production caller can reach a table directly.
+   *
+   * Tests need it to arrange states no public verb can produce — a legacy
+   * `schemaVersion` to migrate from, a course row forced into a status the
+   * workflow will not transition into, bulk fixtures for the prune caps.
+   * Reach for a public verb first; use this when there is no such verb.
+   */
+  unsafeDatabaseForTests(): CurriculumDatabase {
+    return this.database;
   }
 
   initialize(): Promise<InitializationResult> {

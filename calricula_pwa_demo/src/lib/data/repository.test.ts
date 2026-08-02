@@ -89,6 +89,8 @@ describe("DexieCurriculumRepository", () => {
     (await repository.saveCourseAggregate(courseId, { ccnJustification }))
       .ccnJustification;
 
+  const db = () => repository.unsafeDatabaseForTests();
+
   const listCourseComments = async (courseId: string) =>
     (await repository.getCourse(courseId))?.comments ?? [];
 
@@ -118,25 +120,25 @@ describe("DexieCurriculumRepository", () => {
       repository.initialize(),
     ]);
     expect(initialized.every(({ seeded }) => seeded)).toBe(true);
-    expect(await repository.database.courses.count()).toBe(22);
-    expect(await repository.database.meta.count()).toBe(1);
+    expect(await db().courses.count()).toBe(22);
+    expect(await db().meta.count()).toBe(1);
 
     expect(await repository.initialize()).toMatchObject({
       seeded: false,
       migrated: false,
       schemaVersion: DEMO_SCHEMA_VERSION,
     });
-    expect(await repository.database.courses.count()).toBe(22);
+    expect(await db().courses.count()).toBe(22);
   });
 
   it("migrates local schema 1 metadata to schema 2 transactionally and only once", async () => {
     await repository.initialize();
-    const existing = await repository.database.meta.get("demo");
+    const existing = await db().meta.get("demo");
     expect(existing).toBeTruthy();
     const tableCountsBefore = await Promise.all(
-      repository.database.tables.map((table) => table.count()),
+      db().tables.map((table) => table.count()),
     );
-    await repository.database.meta.put({
+    await db().meta.put({
       ...existing!,
       schemaVersion: 1,
       appVersion: "0.0.1",
@@ -148,13 +150,13 @@ describe("DexieCurriculumRepository", () => {
       schemaVersion: 2,
       seedVersion: existing!.seedVersion,
     });
-    expect(await repository.database.meta.get("demo")).toMatchObject({
+    expect(await db().meta.get("demo")).toMatchObject({
       schemaVersion: 2,
       appVersion: DEMO_APP_VERSION,
     });
     expect(
       await Promise.all(
-        repository.database.tables.map((table) => table.count()),
+        db().tables.map((table) => table.count()),
       ),
     ).toEqual(tableCountsBefore);
     expect(await repository.initialize()).toMatchObject({
@@ -166,8 +168,8 @@ describe("DexieCurriculumRepository", () => {
 
   it("rejects a newer local schema without changing it", async () => {
     await repository.initialize();
-    const existing = await repository.database.meta.get("demo");
-    await repository.database.meta.put({
+    const existing = await db().meta.get("demo");
+    await db().meta.put({
       ...existing!,
       schemaVersion: DEMO_SCHEMA_VERSION + 1,
     });
@@ -175,7 +177,7 @@ describe("DexieCurriculumRepository", () => {
     await expect(repository.initialize()).rejects.toMatchObject({
       code: "unsupported-backup",
     });
-    expect((await repository.database.meta.get("demo"))?.schemaVersion).toBe(
+    expect((await db().meta.get("demo"))?.schemaVersion).toBe(
       DEMO_SCHEMA_VERSION + 1,
     );
   });
@@ -305,12 +307,12 @@ describe("DexieCurriculumRepository", () => {
                 : null,
             updatedAt: "2026-07-30T19:00:00.000Z",
           };
-          await repository.database.courses.put(baseline);
-          await repository.database.workflowHistory
+          await db().courses.put(baseline);
+          await db().workflowHistory
             .where("entityId")
             .equals(created.course.id)
             .delete();
-          await repository.database.notifications
+          await db().notifications
             .filter(
               (notification) =>
                 notification.entityType === "Course" &&
@@ -352,17 +354,17 @@ describe("DexieCurriculumRepository", () => {
                   ? "approved-immutable"
                   : "invalid-transition",
             });
-            expect(await repository.database.courses.get(created.course.id)).toEqual(
+            expect(await db().courses.get(created.course.id)).toEqual(
               baseline,
             );
             expect(
-              await repository.database.workflowHistory
+              await db().workflowHistory
                 .where("entityId")
                 .equals(created.course.id)
                 .count(),
             ).toBe(0);
             expect(
-              await repository.database.notifications
+              await db().notifications
                 .filter(
                   (notification) =>
                     notification.entityType === "Course" &&
@@ -459,7 +461,7 @@ describe("DexieCurriculumRepository", () => {
     )!;
     const collidingNotificationId =
       `90000000-0000-4000-8000-${String(ids + 1).padStart(12, "0")}`;
-    await repository.database.notifications.add({
+    await db().notifications.add({
       id: collidingNotificationId,
       actorId: chair.id,
       type: "submission",
@@ -481,7 +483,7 @@ describe("DexieCurriculumRepository", () => {
 
     expect(await repository.getCourse(course.course.id)).toEqual(before);
     expect(
-      await repository.database.workflowHistory
+      await db().workflowHistory
         .where("entityId")
         .equals(course.course.id)
         .count(),
@@ -1650,7 +1652,7 @@ describe("DexieCurriculumRepository", () => {
       messages: [],
       updatedAt: new Date(Date.parse(timestamp) + index * 1000).toISOString(),
     }));
-    await repository.database.aiConversations.bulkPut(extras);
+    await db().aiConversations.bulkPut(extras);
     await repository.saveAIConversation({
       ...retained,
       id: "97200000-0000-4000-8000-000000000099",
@@ -1671,14 +1673,14 @@ describe("DexieCurriculumRepository", () => {
       sourceIds: [],
       createdAt: new Date(Date.parse(timestamp) + index * 1000).toISOString(),
     }));
-    await repository.database.aiArtifacts.bulkPut(artifacts);
+    await db().aiArtifacts.bulkPut(artifacts);
     await repository.saveAIArtifact({
       ...artifacts[0],
       id: "97300000-0000-4000-8000-000000000999",
       task: "newest",
       createdAt: "2026-07-31T20:00:00.000Z",
     });
-    expect(await repository.database.aiArtifacts.count()).toBe(100);
+    expect(await db().aiArtifacts.count()).toBe(100);
   });
 });
 
