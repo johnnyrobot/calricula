@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CourseAggregate } from '@/lib/domain';
 import { courseDraftRecoveryKey } from '@/lib/pwa/course-draft-recovery';
+import { flushPendingWork } from '@/lib/pwa/pending-work';
 import { CourseEditor } from './CourseEditor';
 import type { ComplianceAuditView, CourseViewModel } from './types';
 
@@ -390,5 +391,127 @@ describe('CourseEditor autosave', () => {
     expect(
       window.localStorage.getItem(courseDraftRecoveryKey('course-1')),
     ).toBeNull();
+  });
+});
+
+/**
+ * The editor saves on five paths that no click can reach: tab close, page
+ * hide, legacy history navigation, unmount, and a flush requested by another
+ * part of the shell. Each is pinned here because each has to survive any
+ * change to where the draft session lives.
+ */
+describe('CourseEditor exit paths', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    push.mockReset();
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
+    window.localStorage.clear();
+  });
+
+  function editTitle(title: string) {
+    fireEvent.change(screen.getByLabelText('Official course title'), {
+      target: { value: title },
+    });
+  }
+
+  it('saves and warns the browser when a dirty editor is unloaded', () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor(onSave);
+    editTitle('Closed before the debounce');
+
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
+  it('lets a clean editor unload without saving or warning', () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor(onSave);
+
+    const event = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(event);
+
+    expect(onSave).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+  });
+
+  it('saves when the page is hidden, which is the only signal a mobile tab gives', () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor(onSave);
+    editTitle('Backgrounded on a phone');
+
+    window.dispatchEvent(new Event('pagehide'));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      title: 'Backgrounded on a phone',
+    });
+  });
+
+  it('saves on legacy history navigation when the Navigation API is absent', () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor(onSave);
+    editTitle('Back button, old browser');
+
+    window.dispatchEvent(new Event('popstate'));
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('saves a pending draft when the editor unmounts', () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const editor = renderEditor(onSave);
+    editTitle('Unmounted mid-edit');
+
+    editor.unmount();
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+    expect(onSave.mock.calls[0][0]).toMatchObject({
+      title: 'Unmounted mid-edit',
+    });
+  });
+
+  it('answers a shell-wide flush request and reports whether the draft was saved', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor(onSave);
+    editTitle('Saved before a demo reset');
+
+    await act(async () => {
+      await expect(flushPendingWork()).resolves.toBe(true);
+    });
+
+    expect(onSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a failed flush so the shell can refuse to destroy the draft', async () => {
+    const onSave = vi.fn().mockRejectedValue(new Error('Local storage is full.'));
+    const editor = renderEditor(onSave);
+    editTitle('Must survive a reset');
+
+    await act(async () => {
+      await expect(flushPendingWork()).resolves.toBe(false);
+    });
+
+    editor.unmount();
+  });
+
+  it('stops saving once unmounted', () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    const editor = renderEditor(onSave);
+    editTitle('Only saved once');
+    editor.unmount();
+    onSave.mockClear();
+
+    window.dispatchEvent(new Event('pagehide'));
+    window.dispatchEvent(new Event('popstate'));
+
+    expect(onSave).not.toHaveBeenCalled();
   });
 });
