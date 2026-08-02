@@ -261,6 +261,24 @@ describe('CourseEditor autosave', () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  it('reports a failed submission in the same alert the save errors use', async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    renderEditor(onSave, {
+      onSubmitForReview: vi
+        .fn()
+        .mockRejectedValue(new Error('Department review is closed for this term.')),
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit for review' }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Department review is closed for this term.',
+    );
+  });
+
   it('disables draft submission and explains the active persona policy', () => {
     renderEditor(vi.fn().mockResolvedValue(undefined), {
       canSubmitForReview: false,

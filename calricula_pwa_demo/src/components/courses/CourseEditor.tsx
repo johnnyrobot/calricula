@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   BookOpen,
@@ -22,8 +22,7 @@ import {
 } from 'lucide-react';
 import type { CourseAggregate } from '@/lib/data';
 import type { Department, TopCode } from '@/lib/domain';
-import { courseDraftRecoveryKey } from '@/lib/pwa/course-draft-recovery';
-import { registerPendingWorkFlusher } from '@/lib/pwa/pending-work';
+import { useCourseDraftSession } from './course-draft-session';
 import {
   CCNSection,
   ComplianceSection,
@@ -41,9 +40,7 @@ import {
 import type {
   CCNMatchView,
   ComplianceAuditView,
-  CourseEditorPatch,
   CourseViewModel,
-  SaveState,
 } from './types';
 
 type TabId =
@@ -72,40 +69,6 @@ const TABS: Array<{
   { id: 'history', label: 'History', shortLabel: 'History', icon: Clock3 },
 ];
 
-interface NavigationDestinationLike {
-  url: string;
-}
-
-interface NavigateEventLike extends Event {
-  canIntercept: boolean;
-  downloadRequest: string | null;
-  hashChange: boolean;
-  destination: NavigationDestinationLike;
-  intercept(options: { handler: () => Promise<void> }): void;
-}
-
-interface NavigationLike {
-  addEventListener(
-    type: 'navigate',
-    listener: (event: NavigateEventLike) => void,
-  ): void;
-  removeEventListener(
-    type: 'navigate',
-    listener: (event: NavigateEventLike) => void,
-  ): void;
-}
-
-function calculateTotal(course: CourseViewModel) {
-  return String(
-    (Number(course.lectureHours || 0) +
-      Number(course.labHours || 0) +
-      Number(course.activityHours || 0) +
-      Number(course.tbaHours || 0) +
-      Number(course.outsideHours || 0)) *
-      18,
-  );
-}
-
 function formatDate(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.valueOf())
@@ -114,124 +77,6 @@ function formatDate(value: string) {
         dateStyle: 'medium',
         timeStyle: 'short',
       }).format(date);
-}
-
-function normalizedDecimal(value: string) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? String(parsed) : value;
-}
-
-function withoutPersistenceId<T extends { id: string }>(
-  value: T,
-): Omit<T, 'id'> {
-  const copy: Partial<T> = { ...value };
-  delete copy.id;
-  return copy as Omit<T, 'id'>;
-}
-
-/**
- * Compares editable meaning rather than persistence-only IDs and timestamps.
- * A successful local save may replace temporary child IDs, so those are
- * normalized to their sequence before deciding that another tab changed data.
- */
-function editableFingerprint(value: CourseViewModel) {
-  const sloSequence = new Map(
-    value.slos.map((slo) => [slo.id, slo.sequence] as const),
-  );
-  return JSON.stringify({
-    id: value.id,
-    subjectCode: value.subjectCode,
-    courseNumber: value.courseNumber,
-    title: value.title,
-    departmentId: value.departmentId,
-    catalogDescription: value.catalogDescription,
-    units: normalizedDecimal(value.units),
-    lectureHours: normalizedDecimal(value.lectureHours),
-    labHours: normalizedDecimal(value.labHours),
-    activityHours: normalizedDecimal(value.activityHours),
-    tbaHours: normalizedDecimal(value.tbaHours),
-    outsideHours: normalizedDecimal(value.outsideHours),
-    totalStudentHours: normalizedDecimal(value.totalStudentHours),
-    status: value.status,
-    version: value.version,
-    effectiveTerm: value.effectiveTerm,
-    topCode: value.topCode,
-    cId: value.cId,
-    ccnCode: value.ccnCode,
-    ccnCandidateCode: value.ccnCandidateCode,
-    ccnDisposition: value.ccnDisposition,
-    ccnJustification: value.ccnJustification,
-    slos: value.slos.map(withoutPersistenceId),
-    contentItems: value.contentItems.map((item) => ({
-      ...withoutPersistenceId(item),
-      hours: normalizedDecimal(item.hours),
-      linkedSloIds: item.linkedSloIds.map(
-        (sloId) => sloSequence.get(sloId) ?? sloId,
-      ),
-    })),
-    requisites: value.requisites.map(withoutPersistenceId),
-  });
-}
-
-interface CourseDraftRecovery {
-  kind: 'calricula-course-draft-recovery';
-  courseId: string;
-  sourceUpdatedAt: string;
-  capturedAt: string;
-  course: CourseViewModel;
-}
-
-function readDraftRecovery(courseId: string): CourseDraftRecovery | null {
-  try {
-    const raw = window.localStorage.getItem(courseDraftRecoveryKey(courseId));
-    if (!raw) return null;
-    const value = JSON.parse(raw) as Partial<CourseDraftRecovery>;
-    if (
-      value.kind !== 'calricula-course-draft-recovery' ||
-      value.courseId !== courseId ||
-      typeof value.sourceUpdatedAt !== 'string' ||
-      !value.course ||
-      value.course.id !== courseId ||
-      !Array.isArray(value.course.slos) ||
-      !Array.isArray(value.course.contentItems) ||
-      !Array.isArray(value.course.requisites)
-    ) {
-      window.localStorage.removeItem(courseDraftRecoveryKey(courseId));
-      return null;
-    }
-    return value as CourseDraftRecovery;
-  } catch {
-    return null;
-  }
-}
-
-function persistDraftRecovery(
-  course: CourseViewModel,
-  sourceUpdatedAt: string,
-): void {
-  try {
-    const recovery: CourseDraftRecovery = {
-      kind: 'calricula-course-draft-recovery',
-      courseId: course.id,
-      sourceUpdatedAt,
-      capturedAt: new Date().toISOString(),
-      course,
-    };
-    window.localStorage.setItem(
-      courseDraftRecoveryKey(course.id),
-      JSON.stringify(recovery),
-    );
-  } catch {
-    // IndexedDB autosave and manual export remain available if this storage is blocked.
-  }
-}
-
-function clearDraftRecovery(courseId: string): void {
-  try {
-    window.localStorage.removeItem(courseDraftRecoveryKey(courseId));
-  } catch {
-    // A stale recovery entry is harmless and will be compared before reuse.
-  }
 }
 
 export function CourseEditor({
@@ -264,334 +109,36 @@ export function CourseEditor({
   submitDisabledReason?: string | null;
 }) {
   const router = useRouter();
-  const [course, setCourse] = useState(initialCourse);
+  const {
+    course,
+    change,
+    saveState,
+    saveError,
+    flush,
+    navigate,
+    externalUpdate,
+    acceptExternalUpdate,
+    keepLocalDraft,
+    exportUnsavedDraft,
+  } = useCourseDraftSession({ initialCourse, onSave });
   const [activeTab, setActiveTab] = useState<TabId>('overview');
-  const [saveState, setSaveState] = useState<SaveState>('idle');
-  const [saveError, setSaveError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
   const [comment, setComment] = useState('');
   const [commentSection, setCommentSection] = useState('General');
   const [commentError, setCommentError] = useState('');
   const [commentBusy, setCommentBusy] = useState(false);
   const [commentActionId, setCommentActionId] = useState<string | null>(null);
   const [commentActionError, setCommentActionError] = useState('');
-  const [externalUpdate, setExternalUpdate] =
-    useState<CourseViewModel | null>(null);
-  const snapshotRef = useRef(initialCourse);
-  const sourceFingerprintRef = useRef(editableFingerprint(initialCourse));
-  const sourceUpdatedAtRef = useRef(initialCourse.updatedAt);
-  const externalUpdateRef = useRef<CourseViewModel | null>(null);
-  const recoveryCheckedRef = useRef(false);
-  const pendingRevisionRef = useRef(0);
-  const savedRevisionRef = useRef(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const savePromiseRef = useRef<Promise<boolean> | null>(null);
   const tabListRef = useRef<HTMLDivElement>(null);
   const comments = initialCourse.comments;
   const history = initialCourse.history;
-
-  const flushSave = useCallback(async (): Promise<boolean> => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-
-    if (externalUpdateRef.current) {
-      setSaveState('conflict');
-      return false;
-    }
-    if (savePromiseRef.current) return savePromiseRef.current;
-    if (savedRevisionRef.current === pendingRevisionRef.current) return true;
-
-    const promise = (async () => {
-      while (savedRevisionRef.current !== pendingRevisionRef.current) {
-        const revision = pendingRevisionRef.current;
-        const snapshot = snapshotRef.current;
-        setSaveState('saving');
-        setSaveError('');
-        try {
-          await onSave(snapshot);
-          savedRevisionRef.current = revision;
-          if (
-            pendingRevisionRef.current === revision &&
-            editableFingerprint(snapshotRef.current) ===
-              editableFingerprint(snapshot)
-          ) {
-            clearDraftRecovery(snapshot.id);
-          }
-        } catch (error) {
-          setSaveState('error');
-          setSaveError(
-            error instanceof Error ? error.message : 'Changes could not be saved.',
-          );
-          return false;
-        }
-      }
-      setSaveState('saved');
-      window.setTimeout(() => {
-        if (pendingRevisionRef.current === savedRevisionRef.current) setSaveState('idle');
-      }, 2200);
-      return true;
-    })();
-    savePromiseRef.current = promise;
-    try {
-      return await promise;
-    } finally {
-      if (savePromiseRef.current === promise) savePromiseRef.current = null;
-    }
-  }, [onSave]);
-
-  const scheduleSave = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      void flushSave();
-    }, 900);
-  }, [flushSave]);
-
-  const exportUnsavedDraft = () => {
-    const snapshot = snapshotRef.current;
-    const blob = new Blob(
-      [
-        JSON.stringify(
-          {
-            kind: 'calricula-unsaved-course-draft',
-            exportedAt: new Date().toISOString(),
-            course: snapshot,
-          },
-          null,
-          2,
-        ),
-      ],
-      { type: 'application/json' },
-    );
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    const safeCode = `${snapshot.subjectCode}-${snapshot.courseNumber}`
-      .replace(/[^A-Za-z0-9._-]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .toLowerCase();
-    anchor.href = url;
-    anchor.download = `calricula-unsaved-${safeCode || 'course'}.json`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const changeCourse = useCallback(
-    (patch: CourseEditorPatch) => {
-      setCourse((current) => {
-        let next = { ...current, ...patch };
-        const hoursChanged = [
-          'lectureHours',
-          'labHours',
-          'activityHours',
-          'tbaHours',
-          'outsideHours',
-        ].some((field) => field in patch);
-        if (hoursChanged) {
-          next = {
-            ...next,
-            totalStudentHours: calculateTotal(next),
-          };
-        }
-        snapshotRef.current = next;
-        persistDraftRecovery(next, sourceUpdatedAtRef.current);
-        return next;
-      });
-      pendingRevisionRef.current += 1;
-      setSaveState(externalUpdateRef.current ? 'conflict' : 'saving');
-      setSaveError('');
-      if (!externalUpdateRef.current) scheduleSave();
-    },
-    [scheduleSave],
-  );
-
-  useEffect(() => {
-    const incomingFingerprint = editableFingerprint(initialCourse);
-    if (incomingFingerprint === sourceFingerprintRef.current) return;
-
-    const localFingerprint = editableFingerprint(snapshotRef.current);
-    const hasPendingLocalChanges =
-      pendingRevisionRef.current !== savedRevisionRef.current ||
-      savePromiseRef.current !== null;
-
-    if (localFingerprint === incomingFingerprint || !hasPendingLocalChanges) {
-      sourceFingerprintRef.current = incomingFingerprint;
-      sourceUpdatedAtRef.current = initialCourse.updatedAt;
-      snapshotRef.current = initialCourse;
-      setCourse(initialCourse);
-      externalUpdateRef.current = null;
-      setExternalUpdate(null);
-      if (!hasPendingLocalChanges) setSaveState('idle');
-      return;
-    }
-
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    externalUpdateRef.current = initialCourse;
-    setExternalUpdate(initialCourse);
-    setSaveState('conflict');
-  }, [initialCourse]);
-
-  useEffect(() => {
-    if (recoveryCheckedRef.current) return;
-    recoveryCheckedRef.current = true;
-    const recovery = readDraftRecovery(initialCourse.id);
-    if (!recovery) return;
-    if (
-      editableFingerprint(recovery.course) ===
-      editableFingerprint(initialCourse)
-    ) {
-      clearDraftRecovery(initialCourse.id);
-      return;
-    }
-
-    snapshotRef.current = recovery.course;
-    // Browser recovery is an external system and can only be read after mount.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCourse(recovery.course);
-    pendingRevisionRef.current += 1;
-    setSaveError('');
-
-    if (recovery.sourceUpdatedAt === initialCourse.updatedAt) {
-      setSaveState('saving');
-      scheduleSave();
-      return;
-    }
-
-    externalUpdateRef.current = initialCourse;
-    setExternalUpdate(initialCourse);
-    setSaveState('conflict');
-  }, [initialCourse, scheduleSave]);
-
-  const reloadExternalUpdate = () => {
-    const incoming = externalUpdateRef.current;
-    if (!incoming) return;
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    sourceFingerprintRef.current = editableFingerprint(incoming);
-    sourceUpdatedAtRef.current = incoming.updatedAt;
-    snapshotRef.current = incoming;
-    savedRevisionRef.current = pendingRevisionRef.current;
-    externalUpdateRef.current = null;
-    setExternalUpdate(null);
-    setCourse(incoming);
-    clearDraftRecovery(incoming.id);
-    setSaveError('');
-    setSaveState('idle');
-  };
-
-  const keepAndSaveLocalDraft = async () => {
-    const incoming = externalUpdateRef.current;
-    if (!incoming) return;
-    sourceFingerprintRef.current = editableFingerprint(incoming);
-    sourceUpdatedAtRef.current = incoming.updatedAt;
-    externalUpdateRef.current = null;
-    setExternalUpdate(null);
-    setSaveState('saving');
-    await flushSave();
-  };
-
-  useEffect(() => {
-    return registerPendingWorkFlusher(flushSave);
-  }, [flushSave]);
-
-  useEffect(() => {
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (pendingRevisionRef.current !== savedRevisionRef.current) {
-        void flushSave();
-        event.preventDefault();
-        event.returnValue = '';
-      }
-    };
-    const pageHide = () => {
-      if (pendingRevisionRef.current !== savedRevisionRef.current) void flushSave();
-    };
-    const navigation = (
-      window as Window & { navigation?: NavigationLike }
-    ).navigation;
-    const waitForSaveBeforeNavigation = (event: NavigateEventLike) => {
-      if (
-        pendingRevisionRef.current === savedRevisionRef.current ||
-        !event.canIntercept ||
-        event.downloadRequest ||
-        event.hashChange
-      ) {
-        return;
-      }
-      event.intercept({
-        handler: async () => {
-          const saved = await flushSave();
-          if (!saved) {
-            throw new Error('Navigation stopped because the course could not be saved.');
-          }
-        },
-      });
-    };
-    const flushOnLegacyHistoryNavigation = () => {
-      if (
-        !navigation &&
-        pendingRevisionRef.current !== savedRevisionRef.current
-      ) {
-        void flushSave();
-      }
-    };
-    const followInternalLinkAfterSave = (event: MouseEvent) => {
-      if (
-        event.defaultPrevented ||
-        event.button !== 0 ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.shiftKey ||
-        event.altKey ||
-        pendingRevisionRef.current === savedRevisionRef.current
-      ) {
-        return;
-      }
-
-      const target = event.target;
-      const anchor =
-        target instanceof Element ? target.closest<HTMLAnchorElement>('a[href]') : null;
-      const href = anchor?.getAttribute('href');
-      if (
-        !anchor ||
-        !href?.startsWith('/') ||
-        anchor.target ||
-        anchor.hasAttribute('download')
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      void flushSave().then((saved) => {
-        if (saved) router.push(href);
-      });
-    };
-    window.addEventListener('beforeunload', beforeUnload);
-    window.addEventListener('pagehide', pageHide);
-    navigation?.addEventListener('navigate', waitForSaveBeforeNavigation);
-    window.addEventListener('popstate', flushOnLegacyHistoryNavigation);
-    document.addEventListener('click', followInternalLinkAfterSave, true);
-    return () => {
-      window.removeEventListener('beforeunload', beforeUnload);
-      window.removeEventListener('pagehide', pageHide);
-      navigation?.removeEventListener('navigate', waitForSaveBeforeNavigation);
-      window.removeEventListener('popstate', flushOnLegacyHistoryNavigation);
-      document.removeEventListener('click', followInternalLinkAfterSave, true);
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (pendingRevisionRef.current !== savedRevisionRef.current) void flushSave();
-    };
-  }, [flushSave, router]);
-
-  const navigate = async (href: string) => {
-    if (await flushSave()) router.push(href);
-  };
+  // The draft session clears its own message on every save attempt, so at most
+  // one of these is set and the alert below shows whichever it is.
+  const editorError = saveError || submitError;
 
   const selectTab = async (tab: TabId) => {
-    await flushSave();
+    await flush();
     setActiveTab(tab);
   };
 
@@ -631,15 +178,17 @@ export function CourseEditor({
 
   const submitForReview = async () => {
     if (!canSubmitForReview) return;
-    const saved = await flushSave();
+    const saved = await flush();
     if (!saved) return;
     setSubmitting(true);
-    setSaveError('');
+    setSubmitError('');
     try {
       await onSubmitForReview();
       router.push(`/courses/view/?id=${encodeURIComponent(course.id)}`);
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'The draft could not be submitted.');
+      setSubmitError(
+        error instanceof Error ? error.message : 'The draft could not be submitted.',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -667,20 +216,20 @@ export function CourseEditor({
             course={course}
             aggregate={aggregate}
             departments={departments}
-            onChange={changeCourse}
+            onChange={change}
           />
         );
       case 'slos':
-        return <SLOSection course={course} aggregate={aggregate} onChange={changeCourse} />;
+        return <SLOSection course={course} aggregate={aggregate} onChange={change} />;
       case 'content':
-        return <ContentSection course={course} aggregate={aggregate} onChange={changeCourse} />;
+        return <ContentSection course={course} aggregate={aggregate} onChange={change} />;
       case 'requisites':
         return (
           <RequisitesSection
             course={course}
             courseOptions={courseOptions}
             circularError={/circular/i.test(saveError) ? saveError : undefined}
-            onChange={changeCourse}
+            onChange={change}
           />
         );
       case 'ccn':
@@ -690,7 +239,7 @@ export function CourseEditor({
             aggregate={aggregate}
             matches={ccnMatches}
             topCodes={topCodes}
-            onChange={changeCourse}
+            onChange={change}
           />
         );
       case 'compliance':
@@ -862,7 +411,7 @@ export function CourseEditor({
             <SaveIndicator state={saveState} />
             {saveState === 'error' ? (
               <>
-                <button type="button" onClick={() => void flushSave()} className="luminous-button-secondary">
+                <button type="button" onClick={() => void flush()} className="luminous-button-secondary">
                   <Save aria-hidden="true" className="h-4 w-4" />
                   Retry save
                 </button>
@@ -907,10 +456,10 @@ export function CourseEditor({
             ) : null}
           </div>
         </div>
-        {saveError ? (
+        {editorError ? (
           <div className="mt-4 flex items-start gap-3 border border-seal-returned bg-seal-returned/5 px-4 py-3" role="alert">
             <CircleAlert aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-seal-returned" />
-            <p className="font-sans text-sm leading-6 text-seal-returned">{saveError}</p>
+            <p className="font-sans text-sm leading-6 text-seal-returned">{editorError}</p>
           </div>
         ) : null}
         {externalUpdate ? (
@@ -935,14 +484,14 @@ export function CourseEditor({
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button
                     className="luminous-button-primary"
-                    onClick={reloadExternalUpdate}
+                    onClick={acceptExternalUpdate}
                     type="button"
                   >
                     Reload other tab&apos;s changes
                   </button>
                   <button
                     className="luminous-button-secondary"
-                    onClick={() => void keepAndSaveLocalDraft()}
+                    onClick={() => void keepLocalDraft()}
                     type="button"
                   >
                     Keep and save my draft
