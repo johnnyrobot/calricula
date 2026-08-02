@@ -23,7 +23,8 @@ calricula_pwa_demo/
 ├── docs/
 │   ├── adr/
 │   │   └── 0001-client-side-ai-session-readiness.md
-│   └── agents/
+│   ├── agents/
+│   └── handoffs/
 └── src/
 ```
 
