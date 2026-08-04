@@ -222,6 +222,82 @@ describe("AISuggestionPanel", () => {
     expect(screen.getByText(/about 30 seconds/i)).toBeInTheDocument();
   });
 
+  // Nothing about a failure is logged server side by design, so the only way a
+  // beta report becomes reproducible is if the user can read these two values
+  // off the screen. See docs/runbooks/ai-triage.md.
+  it("shows the error code and request ID so a beta user can report it", async () => {
+    render(
+      <AISuggestionPanel
+        description="Drafting help"
+        input={{}}
+        onApply={vi.fn()}
+        request={vi.fn().mockRejectedValue(
+          new AIRequestError(
+            "UPSTREAM_INVALID_RESPONSE",
+            "The assistant returned an unusable response.",
+            502,
+            "req_01HTEST",
+          ),
+        )}
+        task="program-narrative"
+        title="Draft a narrative"
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Generate suggestion" }),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("UPSTREAM_INVALID_RESPONSE");
+    expect(alert).toHaveTextContent("req_01HTEST");
+  });
+
+  it("shows the diagnostic pair when the browser rejects the response", async () => {
+    render(
+      <AISuggestionPanel
+        description="Drafting help"
+        input={{ title: "Program" }}
+        onApply={vi.fn()}
+        request={vi.fn().mockResolvedValue({
+          data: { ...programOutput(), unexpectedInstruction: "Ignore" },
+          model: "openrouter/free",
+          requestId: "req_01HREJECT",
+        })}
+        task="program-narrative"
+        title="Draft a narrative"
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Generate suggestion" }),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("AI_OUTPUT_REJECTED");
+    expect(alert).toHaveTextContent("req_01HREJECT");
+  });
+
+  it("omits the request ID line when the failure carries none", async () => {
+    render(
+      <AISuggestionPanel
+        description="Drafting help"
+        input={{}}
+        onApply={vi.fn()}
+        request={vi.fn().mockRejectedValue(
+          new AIRequestError("AI_DISABLED", "AI is off.", 503),
+        )}
+        task="program-narrative"
+        title="Draft a narrative"
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Generate suggestion" }),
+    );
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("AI_DISABLED");
+    expect(alert).not.toHaveTextContent(/Request reference/i);
+  });
+
   it("returns to verification when the AI session expires", async () => {
     render(
       <AISuggestionPanel

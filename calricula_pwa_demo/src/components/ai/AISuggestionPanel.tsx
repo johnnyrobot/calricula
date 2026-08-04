@@ -36,6 +36,7 @@ import {
 } from "../../lib/ai/session-readiness";
 
 import { AIConsentGate } from "./AIConsentGate";
+import { ErrorDiagnostics } from "./ErrorDiagnostics";
 import { useOnlineStatus } from "./useOnlineStatus";
 
 export type AISuggestionRequest = (
@@ -362,6 +363,7 @@ export function AISuggestionPanel<TApplied = unknown>({
                 Try again in about {displayError.retryAfterSeconds} seconds.
               </p>
             ) : null}
+            <ErrorDiagnostics error={displayError} />
           </div>
         </div>
       ) : null}

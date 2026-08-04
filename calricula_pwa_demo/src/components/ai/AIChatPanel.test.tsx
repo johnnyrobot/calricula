@@ -284,6 +284,40 @@ describe("AIChatPanel", () => {
     ).toBeInTheDocument();
   });
 
+  // The chat surface is reachable independently of the suggestion panels, so it
+  // needs the same reportable diagnostics. See docs/runbooks/ai-triage.md.
+  it("shows the error code and request ID so a beta user can report it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            success: false,
+            requestId: "req_01HCHAT",
+            error: {
+              code: "UPSTREAM_INVALID_RESPONSE",
+              message: "The assistant returned an unusable response.",
+            },
+          }),
+          {
+            status: 502,
+            headers: { "content-type": "application/json" },
+          },
+        ),
+      ),
+    );
+    render(<AIChatPanel />);
+    fireEvent.change(
+      screen.getByLabelText("Message the curriculum assistant"),
+      { target: { value: "Question" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("UPSTREAM_INVALID_RESPONSE");
+    expect(alert).toHaveTextContent("req_01HCHAT");
+  });
+
   it("shows the consent boundary when no session is marked ready", () => {
     clearAISessionMarker();
     render(<AIChatPanel />);

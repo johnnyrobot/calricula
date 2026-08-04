@@ -28,6 +28,7 @@ import {
 import type { EntityType } from "../../lib/domain";
 
 import { AIConsentGate } from "./AIConsentGate";
+import { ErrorDiagnostics } from "./ErrorDiagnostics";
 import { useOnlineStatus } from "./useOnlineStatus";
 
 export interface AIChatPanelProps {
@@ -306,6 +307,7 @@ export function AIChatPanel({
           ) : (
             <p className="mb-0">{error.message}</p>
           )}
+          <ErrorDiagnostics error={error} />
         </div>
       ) : null}
 
