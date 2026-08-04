@@ -1,7 +1,6 @@
 "use client";
 
 import type { Program } from "../../lib/domain";
-import { persistAcceptedAIArtifact } from "../../lib/ai/persistence";
 
 import {
   AISuggestionPanel,
@@ -66,26 +65,11 @@ export function ProgramAIControls({
   request,
   tokenProvider,
 }: ProgramAIControlsProps) {
-  const entityId =
-    "id" in program && typeof program.id === "string" ? program.id : null;
-
   return (
     <AISuggestionPanel<string>
       description="Draft a program narrative from the fields and course groupings shown here. Verify degree claims, transfer language, labor-market statements, and local approval requirements before saving."
       input={buildProgramAIInput(program, context)}
       normalize={normalizeProgramNarrative}
-      onAccepted={
-        entityId
-          ? (value, result) =>
-              persistAcceptedAIArtifact({
-                entityType: "Program",
-                entityId,
-                task: "program-narrative",
-                content: value,
-                result,
-              })
-          : undefined
-      }
       onApply={onApply}
       request={request}
       task="program-narrative"

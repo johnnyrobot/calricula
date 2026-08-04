@@ -353,7 +353,6 @@ describe("AISuggestionPanel", () => {
 
   it("does not apply generated content until Apply is selected", async () => {
     const apply = vi.fn();
-    const accepted = vi.fn();
     const decision = vi.fn();
     const request = vi.fn().mockResolvedValue({
       data: programOutput("Proposed narrative"),
@@ -368,7 +367,6 @@ describe("AISuggestionPanel", () => {
         normalize={(value) =>
           (value as { goalsAndObjectives: string }).goalsAndObjectives
         }
-        onAccepted={accepted}
         onDecision={decision}
         onApply={apply}
         request={request}
@@ -382,17 +380,9 @@ describe("AISuggestionPanel", () => {
     );
     expect(await screen.findByText("Proposed narrative")).toBeInTheDocument();
     expect(apply).not.toHaveBeenCalled();
-    expect(accepted).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Apply suggestion" }));
     await waitFor(() => expect(apply).toHaveBeenCalledWith("Proposed narrative"));
-    expect(accepted).toHaveBeenCalledWith(
-      "Proposed narrative",
-      expect.objectContaining({
-        model: "openrouter/free",
-        requestId: "request-1",
-      }),
-    );
     expect(decision).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "apply",
@@ -426,13 +416,11 @@ describe("AISuggestionPanel", () => {
 
   it("rejects malformed injected output before preview, Apply, or persistence", async () => {
     const apply = vi.fn();
-    const accepted = vi.fn();
     const decision = vi.fn();
     render(
       <AISuggestionPanel
         description="Drafting help"
         input={{ title: "Program" }}
-        onAccepted={accepted}
         onApply={apply}
         onDecision={decision}
         request={vi.fn().mockResolvedValue({
@@ -458,7 +446,6 @@ describe("AISuggestionPanel", () => {
       screen.queryByRole("button", { name: "Apply suggestion" }),
     ).not.toBeInTheDocument();
     expect(apply).not.toHaveBeenCalled();
-    expect(accepted).not.toHaveBeenCalled();
     expect(decision).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "reject",

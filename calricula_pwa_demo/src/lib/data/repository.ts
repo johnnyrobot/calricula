@@ -1,7 +1,6 @@
 import { z, type ZodType } from "zod";
 
 import {
-  AIArtifactSchema,
   AIConversationSchema,
   AIMessageSchema,
   BackupEnvelopeSchema,
@@ -29,7 +28,6 @@ import {
   snapshotToBackupRecords,
   validateReferentialIntegrity,
   type Actor,
-  type AIArtifact,
   type AIConversation,
   type AIMessage,
   type BackupEnvelope,
@@ -96,7 +94,6 @@ const LEGAL_COURSE_TRANSITIONS: Readonly<
 const DEFAULT_PAGE_SIZE = 25;
 const MAX_AI_MESSAGES = 10;
 const MAX_AI_CONVERSATIONS_PER_ACTOR = 50;
-const MAX_AI_ARTIFACTS_PER_ACTOR = 100;
 
 function page<T>(values: readonly T[], requestedPage = 1, requestedSize = DEFAULT_PAGE_SIZE): PageResult<T> {
   const pageSize = Math.max(1, Math.min(100, Math.trunc(requestedSize)));
@@ -1303,33 +1300,6 @@ export class DexieCurriculumRepository implements CurriculumRepository {
     );
   }
 
-  async saveAIArtifact(value: AIArtifact): Promise<AIArtifact> {
-    return this.mutate(async () =>
-      this.database.transaction(
-        "rw",
-        this.database.aiArtifacts,
-        this.database.aiConversations,
-        this.database.actors,
-        this.database.courses,
-        this.database.programs,
-        async () => {
-          await this.requireActor(value.actorId);
-          await this.assertEntityReference(value.entityType, value.entityId);
-          if (
-            value.conversationId &&
-            !(await this.database.aiConversations.get(value.conversationId))
-          ) {
-            throw new RepositoryError("validation", "AI conversation reference does not exist.");
-          }
-          const artifact = AIArtifactSchema.parse(value);
-          await this.database.aiArtifacts.put(artifact);
-          await this.pruneAIArtifacts(artifact.actorId);
-          return artifact;
-        },
-      ),
-    );
-  }
-
   close(): void {
     this.database.close();
     this.invalidation.close();
@@ -1872,14 +1842,6 @@ export class DexieCurriculumRepository implements CurriculumRepository {
     await this.database.aiArtifacts
       .filter((artifact) => Boolean(artifact.conversationId && ids.has(artifact.conversationId)))
       .delete();
-  }
-
-  private async pruneAIArtifacts(actorId: string): Promise<void> {
-    const values = (await this.database.aiArtifacts.where("actorId").equals(actorId).toArray())
-      .sort((left, right) => right.createdAt.localeCompare(left.createdAt));
-    await this.database.aiArtifacts.bulkDelete(
-      values.slice(MAX_AI_ARTIFACTS_PER_ACTOR).map(({ id }) => id),
-    );
   }
 
   private async readSnapshot(): Promise<DomainSnapshot> {

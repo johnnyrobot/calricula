@@ -7,7 +7,6 @@ import {
   AI_COMPLIANCE_SOURCE_PACK,
   getAIComplianceSource,
 } from "../../lib/ai";
-import { persistAcceptedAIArtifact } from "../../lib/ai/persistence";
 
 import {
   AISuggestionPanel,
@@ -394,18 +393,6 @@ export function CourseAIControls({
         task !== "top-code" || selectedTopCodeValue(value) !== null
       }
       normalize={(data) => unwrapCourseAITaskValue(task, data)}
-      onAccepted={(value, result) =>
-        persistAcceptedAIArtifact({
-          entityType: "Course",
-          entityId: course.id,
-          task,
-          content:
-            task === "top-code"
-              ? selectedTopCodeValue(value)
-              : value,
-          result,
-        })
-      }
       onApply={(value) => {
         if (task === "top-code") {
           const selected = selectedTopCodeValue(value);

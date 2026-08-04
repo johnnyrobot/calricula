@@ -1,15 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../lib/ai/persistence", () => ({
-  persistAcceptedAIArtifact: vi.fn(),
-}));
-
 import {
   AI_COMPLIANCE_SOURCE_PACK,
   markAISessionReady,
 } from "../../lib/ai";
-import { persistAcceptedAIArtifact } from "../../lib/ai/persistence";
 
 import {
   buildCourseAITaskInput,
@@ -61,8 +56,6 @@ describe("CourseAIControls response normalization", () => {
     window.sessionStorage.clear();
     aiUiState.online = true;
     markAISessionReady();
-    vi.mocked(persistAcceptedAIArtifact).mockReset();
-    vi.mocked(persistAcceptedAIArtifact).mockResolvedValue();
   });
 
   it.each([
@@ -170,14 +163,6 @@ describe("CourseAIControls response normalization", () => {
           title: "Computer Information Systems",
         }),
       ),
-    );
-    expect(persistAcceptedAIArtifact).toHaveBeenCalledWith(
-      expect.objectContaining({
-        entityType: "Course",
-        entityId: course.id,
-        task: "top-code",
-        content: expect.objectContaining({ code: "0707.00" }),
-      }),
     );
   });
 

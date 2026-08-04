@@ -68,10 +68,6 @@ export interface AISuggestionPanelProps<TApplied = unknown> {
   task: AITask;
   input: unknown;
   onApply: (value: TApplied) => void | Promise<void>;
-  onAccepted?: (
-    value: TApplied,
-    result: AIResult<unknown>,
-  ) => void | Promise<void>;
   onDecision?: (
     decision: AISuggestionDecision<TApplied>,
   ) => void | Promise<void>;
@@ -109,7 +105,6 @@ export function AISuggestionPanel<TApplied = unknown>({
   task,
   input,
   onApply,
-  onAccepted,
   onDecision,
   normalize,
   renderSuggestion,
@@ -240,9 +235,7 @@ export function AISuggestionPanel<TApplied = unknown>({
         );
       }
       if (!isApplyReady(currentValue)) return;
-      const validatedResult = { ...result, data: validatedData };
       await onApply(currentValue);
-      await onAccepted?.(currentValue, validatedResult);
       await onDecision?.({
         kind: "apply",
         task,

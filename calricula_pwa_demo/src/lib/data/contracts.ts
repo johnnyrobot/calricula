@@ -155,13 +155,6 @@ export interface AIConversationQuery {
   limit?: number;
 }
 
-export interface AIArtifactQuery {
-  conversationId?: string;
-  entityType?: AIArtifact["entityType"];
-  entityId?: string | null;
-  limit?: number;
-}
-
 export type RepositoryErrorCode =
   | "not-found"
   | "validation"
@@ -247,19 +240,21 @@ export interface NotificationInbox {
  * different modules for different reasons, so they are separate roles even
  * though both are "AI persistence".
  */
+/**
+ * Conversations are the only AI data this demo persists. The `aiArtifacts`
+ * table is still declared in `database.ts` — dropping it is a schema migration
+ * and existing installs may hold rows — but nothing writes to it. It once had a
+ * write path and no read or delete path, which is not an audit trail; it is
+ * data a user could neither see nor remove. Re-adding one is a feature with a
+ * UI, not a repository method.
+ */
 export interface AIConversationPersistence {
   listAIConversations(query?: AIConversationQuery): Promise<AIConversation[]>;
   saveAIConversation(value: AIConversation): Promise<AIConversation>;
   appendAIMessage(conversationId: string, value: AIMessage): Promise<AIConversation>;
 }
 
-export interface AIArtifactPersistence {
-  saveAIArtifact(value: AIArtifact): Promise<AIArtifact>;
-}
-
-export interface AIPersistence
-  extends AIConversationPersistence,
-    AIArtifactPersistence {}
+export type AIPersistence = AIConversationPersistence;
 
 /**
  * Controls that exist because this is a local-first demo: seeding, resetting,

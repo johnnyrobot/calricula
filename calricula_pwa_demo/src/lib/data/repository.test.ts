@@ -1174,22 +1174,9 @@ describe("DexieCurriculumRepository", () => {
       createdAt: "2026-07-30T20:00:00.000Z",
     });
     expect(withMessage.messages).toHaveLength(1);
-    const artifact = await repository.saveAIArtifact({
-      id: "93000000-0000-4000-8000-000000000001",
-      actorId: actor.id,
-      conversationId,
-      entityType: "Course",
-      entityId: course.course.id,
-      task: "slo",
-      content: { outcome: "Evaluate evidence." },
-      modelUsed: "openrouter/free",
-      sourceIds: [],
-      createdAt: "2026-07-30T20:00:00.000Z",
-    });
     expect(await repository.listAIConversations({ entityId: course.course.id })).toEqual([
       withMessage,
     ]);
-    expect(artifact.conversationId).toBe(conversationId);
     await expect(
       repository.saveAIConversation({
         ...conversation,
@@ -1443,20 +1430,6 @@ describe("DexieCurriculumRepository", () => {
         createdAt: "2026-07-30T20:00:00.000Z",
       }),
     ).rejects.toMatchObject({ code: "not-found" });
-    await expect(
-      repository.saveAIArtifact({
-        id: "95000000-0000-4000-8000-000000000001",
-        actorId: faculty.id,
-        conversationId: "00000000-0000-4000-8000-999999999999",
-        entityType: null,
-        entityId: null,
-        task: "invalid",
-        content: {},
-        modelUsed: null,
-        sourceIds: [],
-        createdAt: "2026-07-30T20:00:00.000Z",
-      }),
-    ).rejects.toMatchObject({ code: "validation" });
     await expect(
       repository.saveAIConversation({
         id: "96000000-0000-4000-8000-000000000001",
@@ -1722,13 +1695,44 @@ describe("DexieCurriculumRepository", () => {
       createdAt: new Date(Date.parse(timestamp) + index * 1000).toISOString(),
     }));
     await db().aiArtifacts.bulkPut(artifacts);
-    await repository.saveAIArtifact({
-      ...artifacts[0],
-      id: "97300000-0000-4000-8000-000000000999",
-      task: "newest",
-      createdAt: "2026-07-31T20:00:00.000Z",
+    // Nothing prunes this table any more because nothing writes to it. Rows
+    // put here directly stay exactly as they were.
+    expect(await db().aiArtifacts.count()).toBe(101);
+  });
+
+  // The interface could write AI artifacts but never read or delete them, so a
+  // beta would have accumulated real curriculum text nothing could surface.
+  // The write path is gone; the Dexie table stays declared because dropping it
+  // is a schema migration and existing installs may hold rows.
+  it("exposes no AI artifact read, write, or delete path", async () => {
+    for (const method of [
+      "saveAIArtifact",
+      "listAIArtifacts",
+      "deleteAIArtifact",
+    ]) {
+      expect(method in repository).toBe(false);
+    }
+  });
+
+  it("writes no AI artifact when a suggestion is accepted end to end", async () => {
+    const course = await createDraft("410");
+    await repository.saveAIConversation({
+      id: "98000000-0000-4000-8000-000000000001",
+      actorId: (await repository.getActivePersona()).id,
+      entityType: "Course",
+      entityId: course.course.id,
+      title: "Outcomes",
+      messages: [],
+      createdAt: "2026-07-30T20:00:00.000Z",
+      updatedAt: "2026-07-30T20:00:00.000Z",
     });
-    expect(await db().aiArtifacts.count()).toBe(100);
+    expect(await db().aiArtifacts.count()).toBe(0);
+  });
+
+  it("keeps the inert artifact table in the backup round trip", async () => {
+    const backup = await repository.exportBackup();
+    expect(backup.records.aiArtifacts).toEqual([]);
+    await validateBackup(repository);
   });
 });
 

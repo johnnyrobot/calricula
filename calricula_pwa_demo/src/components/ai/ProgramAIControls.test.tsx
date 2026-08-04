@@ -1,17 +1,12 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("../../lib/ai/persistence", () => ({
-  persistAcceptedAIArtifact: vi.fn(),
-}));
-
 import {
   buildProgramAIInput,
   normalizeProgramNarrative,
   ProgramAIControls,
 } from "./ProgramAIControls";
 import { markAISessionReady } from "../../lib/ai";
-import { persistAcceptedAIArtifact } from "../../lib/ai/persistence";
 
 const aiUiState = vi.hoisted(() => ({ online: true }));
 
@@ -33,8 +28,6 @@ describe("ProgramAIControls response normalization", () => {
     window.sessionStorage.clear();
     aiUiState.online = true;
     markAISessionReady();
-    vi.mocked(persistAcceptedAIArtifact).mockReset();
-    vi.mocked(persistAcceptedAIArtifact).mockResolvedValue();
   });
 
   it("preserves every structured Worker narrative section", () => {
@@ -138,16 +131,9 @@ describe("ProgramAIControls response normalization", () => {
     ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Apply suggestion" }));
     await waitFor(() => expect(onApply).toHaveBeenCalled());
-    expect(persistAcceptedAIArtifact).toHaveBeenCalledWith(
-      expect.objectContaining({
-        entityType: "Program",
-        entityId: program.id,
-        task: "program-narrative",
-      }),
-    );
   });
 
-  it("does not create a linked artifact for an unsaved program object", async () => {
+  it("applies a suggestion for an unsaved program object", async () => {
     render(
       <ProgramAIControls
         onApply={vi.fn()}
@@ -170,6 +156,5 @@ describe("ProgramAIControls response normalization", () => {
         screen.getByRole("button", { name: "Applied to draft" }),
       ).toBeDisabled(),
     );
-    expect(persistAcceptedAIArtifact).not.toHaveBeenCalled();
   });
 });

@@ -50,10 +50,6 @@ export default defineConfig({
           lines: 90,
           branches: 85,
         },
-        'src/lib/ai/persistence.ts': {
-          lines: 90,
-          branches: 85,
-        },
         'src/lib/ai/session.ts': {
           lines: 90,
           branches: 85,
