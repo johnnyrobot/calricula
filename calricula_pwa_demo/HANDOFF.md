@@ -42,7 +42,7 @@ release-gate attempts at step 5 of 14.
 | `.release-evidence/local-gate.json` | Missing | No bootstrap or full release seal exists |
 | Cloudflare bootstrap/deployment | Not performed | No release-owned hostname, version, deployment, or rollback receipt |
 | Turnstile/OpenRouter configuration | Missing | No site key, secret, HMAC secret, provider key, or evaluated model chain supplied |
-| `test:e2e:full` stability | **Blocker for gate step 11** | Roughly one failure per 84-test run, a different test and browser each time. Reproduced at `cebba8a`, before the public-beta work, so it is pre-existing. See "Pre-existing `test:e2e:full` instability" |
+| `test:e2e:full` stability | Diagnosed and fixed 2026-08-04 | Two root causes: worker oversubscription in the release runner, and one test navigating before an async persona write committed. 5 of 5 consecutive clean full runs pass, from 2 of 3 failing. See "Resolved `test:e2e:full` instability" |
 | Live model qualification | Implemented, not yet run against a live model | `ai:evaluate` qualifies each candidate on all seven task routes — chat, catalog-description, slos, content-outline, top-code, program-narrative, compliance-explanation — at one request per route, 28 requests maximum, no retries. The rubric is pinned to the Worker validators by `tests/worker/ai-eval-parity.test.ts`; `release-evidence` refuses evidence unless every route passes. Running it needs `OPENROUTER_API_KEY` |
 | Production E2E/Lighthouse/offline | Not run | Requires exact deployed origin |
 | Live AI canaries | Not run | Requires staged release and one human-completed Turnstile session |
@@ -304,44 +304,49 @@ them as evidence about `274d428`, not about `c83084f`:
 release policy is `npm audit --omit=dev --audit-level=high`; do not misstate a
 passing production audit as a clean audit of all development dependencies.
 
-## Pre-existing `test:e2e:full` instability — open, and it blocks the gate
+## Resolved `test:e2e:full` instability
 
-**Observed 2026-08-04 while verifying the public-beta work. Not caused by it.**
+**Diagnosed and fixed on 2026-08-04.** Before the fix, `npm run test:e2e:full`
+failed about once per run with a *different* test and browser each time, which
+made it read as an environmental flake. It was two real defects.
 
-`npm run test:e2e:full` runs 84 tests across five browser projects with six
-workers against a single `wrangler dev` server on :4177. It fails roughly once
-per run, and **the failing test moves**:
+**Symptom.** Roughly one failure per 84-test run. Every failure was a timeout
+(`page.goto` never reaching `load`, `locator.click`, `NS_BINDING_ABORTED`), and
+the failing test moved between runs. Reproduced at `cebba8a`, so it predated the
+public-beta work.
 
-| Run | Result |
-|---|---|
-| Public-beta head, run 1 | 83/84. `e2e/workflow-depth.spec.ts:163` (chromium): after "Close editor" the URL was the approved source course `…6005`, not the new draft |
-| Public-beta head, run 2 | 83/84. `e2e/programs-backup.spec.ts` (firefox) |
-| `cebba8a`, clean worktree, before any of this work | 83/84. A `page.goto` timeout |
-| `workflow-depth.spec.ts:163` alone, chromium, 3 consecutive runs | 3/3 passed |
+**Root cause 1 — worker oversubscription.** `run-release-e2e.mjs` used
+Playwright's default worker count, `ceil(cores / 2)` = 6 on a 12-core host. That
+heuristic assumes one light browser; this suite drives three projects per group,
+and each worker runs a full browser that spawns several processes. Measured load
+average reached **21.1 on 12 cores** (1.76× oversubscribed) and the slowest test
+stretched from **7.8s serial to 24.1s** — against a 30s default timeout. With
+~6s of headroom, ordinary scheduling jitter pushed *some* test past the deadline
+about half the time, and which one was effectively random.
 
-Because it reproduces at `cebba8a`, it is **pre-existing**, not a regression
-from the seven-route evaluation, artifact-removal, or triage work.
+Fixed by `browserProjectWorkers()`, which divides cores by three instead. The
+slowest test drops to about 10s. **No timeout was raised and no retry was
+added** — the deadline is unchanged; the contention that was blowing through it
+is gone.
 
-Two things this is **not**, and neither may be assumed:
+**Root cause 2 — navigating before an async write committed.**
+`e2e/resilience-a11y.spec.ts` switched demo persona with a bare `selectOption`
+and immediately called `page.goto("/approvals/")`. `setActivePersona` is an
+asynchronous IndexedDB write, so the docket could render under the *previous*
+persona and the awaited approval card would never appear — a clean 30s hang,
+independent of load. `workflow-depth.spec.ts` already had the correct helper,
+which waits for the `AppShell` live-region announcement; that helper now lives
+in `e2e/helpers.ts` as `switchPersona` and both specs use it.
 
-- It is **not** established as environmental. "It passes on rerun" is evidence
-  *for* a timing defect, not against one — that assumption is exactly what let
-  the `AppShell` defect survive three handoffs.
-- It is **not** dismissible as a test-only problem. The run-1 failure is a
-  plausible product behaviour: closing the editor navigated to the approved
-  *source* course rather than the draft just created. If that is a real
-  navigation race, users would hit it.
+**Evidence.** Before: 2 of 3 full runs failed. After: **5 of 5 consecutive full
+runs pass** on a settled machine. The worker cap is unit-tested in
+`scripts/run-release-e2e.test.mjs`.
 
-**Why it matters now:** `test:e2e:full` is **step 11 of 14** in
-`RELEASE_GATE_STEPS`. The gate stops at the first failing step and only writes
-the `.release-evidence/local-gate.json` seal after all of them pass, so at a
-per-run failure rate near one in eighty-four this will intermittently block
-Phase 2 and Phase 4.
-
-**Do not** resolve it by retrying the gate until it passes, adding a Playwright
-retry, raising a timeout, or quarantining a spec. Diagnose it with
-`superpowers:systematic-debugging`, starting from the run-1 navigation
-observation, which is the most specific signal available.
+**Caveat worth keeping.** Running suites back-to-back with no cooldown still
+produced occasional `NS_ERROR_CONNECTION_REFUSED`, because each
+`test:e2e:full` cycles three local servers and rapid restarts race on the port.
+That is a property of hammering the suite in a loop, not of a normal run, and it
+was not observed once the machine was allowed to settle between runs.
 
 ## Resolved local instability — the `AppShell` "flake"
 

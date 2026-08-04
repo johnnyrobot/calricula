@@ -4,22 +4,8 @@ import {
   createDraftCourse,
   expectLocalSaveSettled,
   selectEditorSection,
+  switchPersona,
 } from "./helpers";
-
-async function switchPerspective(
-  page: import("@playwright/test").Page,
-  optionLabel: string,
-  actorName: string,
-) {
-  const perspective = page.getByLabel("Demo perspective");
-  await perspective.selectOption({ label: optionLabel });
-  await expect(
-    page.getByRole("status").filter({
-      hasText: `Demo perspective changed to ${actorName}.`,
-    }),
-  ).toBeVisible();
-  await expect(perspective.locator("option:checked")).toHaveText(optionLabel);
-}
 
 async function chooseApprovalRecord(
   page: import("@playwright/test").Page,
@@ -68,7 +54,7 @@ test("a faculty-authored course completes every approval stage and starts a new 
   );
   await expect(page.getByText("Department Review").first()).toBeVisible();
 
-  await switchPerspective(
+  await switchPersona(
     page,
     "Department chair",
     "Demo Curriculum Chair",
@@ -106,7 +92,7 @@ test("a faculty-authored course completes every approval stage and starts a new 
     page.getByTestId("approval-card").filter({ hasText: title }),
   ).toHaveCount(0);
 
-  await switchPerspective(
+  await switchPersona(
     page,
     "Articulation officer",
     "Demo Articulation Officer",

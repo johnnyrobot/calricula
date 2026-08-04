@@ -8,6 +8,7 @@ import {
   createDraftCourse,
   expectAxeClean,
   expectLocalSaveSettled,
+  switchPersona,
 } from "./helpers";
 
 async function waitForServiceWorkerControl(
@@ -509,9 +510,7 @@ test("approval review and confirmation states remain keyboard-usable and WCAG cl
   await page.getByRole("button", { name: "Submit for review" }).click();
   await expect(page).toHaveURL(/\/courses\/view\/\?id=[^&]+$/);
 
-  await page
-    .getByLabel("Demo perspective")
-    .selectOption({ label: "Department chair" });
+  await switchPersona(page, "Department chair", "Demo Curriculum Chair");
   await page.goto("/approvals/");
   await expect(
     page.getByRole("heading", { name: "Approval docket" }),

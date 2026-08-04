@@ -1,7 +1,29 @@
 import { spawn } from 'node:child_process';
+import { cpus } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
+
+/**
+ * Worker count for the browser project groups.
+ *
+ * Playwright defaults to `ceil(cores / 2)`, a heuristic that assumes one
+ * relatively light browser. This suite drives three projects per group and each
+ * Playwright worker runs a full browser that itself spawns several processes,
+ * so that default oversubscribes the machine: on a 12-core host it produced a
+ * load average above 21 and stretched the slowest test from 7.8s (serial) to
+ * 24.1s, against a 30s default timeout. With only ~6s of headroom, ordinary
+ * scheduling jitter pushed some test past the deadline on roughly half of all
+ * runs — and which test failed was effectively random.
+ *
+ * Dividing by three instead keeps the slowest test near 10s. This is a capacity
+ * fix, not a deadline extension: no timeout is raised, no test is retried, and
+ * the tests do the same work as before.
+ */
+export function browserProjectWorkers(coreCount = cpus().length) {
+  const cores = Number.isFinite(coreCount) && coreCount > 0 ? coreCount : 2;
+  return Math.max(2, Math.floor(cores / 3));
+}
 
 export const WRANGLER_PROJECTS = [
   'chromium',
@@ -75,6 +97,7 @@ export async function runReleaseE2e() {
   );
   await runProjects(WRANGLER_PROJECTS, 'wrangler', {
     grepInvert: WRANGLER_ISOLATED_TEST,
+    workers: browserProjectWorkers(),
   });
   console.log(
     '[release-e2e] Running the offline service-worker reload check through a fresh, serial Wrangler lifecycle.',
@@ -86,7 +109,9 @@ export async function runReleaseE2e() {
   console.log(
     '[release-e2e] Running WebKit and mobile WebKit through the deterministic static export server.',
   );
-  await runProjects(STATIC_PROJECTS, 'static');
+  await runProjects(STATIC_PROJECTS, 'static', {
+    workers: browserProjectWorkers(),
+  });
 }
 
 const entryPoint = process.argv[1]

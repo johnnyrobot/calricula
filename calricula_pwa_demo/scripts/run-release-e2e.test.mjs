@@ -4,6 +4,7 @@ import {
   STATIC_PROJECTS,
   WRANGLER_ISOLATED_TEST,
   WRANGLER_PROJECTS,
+  browserProjectWorkers,
   releaseE2eArguments,
   releaseE2eEnvironment,
 } from './run-release-e2e.mjs';
@@ -64,5 +65,38 @@ describe('local release E2E topology', () => {
       WRANGLER_ISOLATED_TEST,
       '--workers=1',
     ]);
+  });
+
+  it('caps browser workers below Playwright\'s CPU default', () => {
+    // Playwright defaults to ceil(cores / 2). That heuristic assumes one
+    // lightweight browser; this suite drives three, and each spawns several
+    // processes. On a 12-core machine the default (6) pushed load average past
+    // 21 and stretched the slowest test to 24.1s against a 30s timeout, so a
+    // different test timed out on roughly half of all runs.
+    expect(browserProjectWorkers(12)).toBe(4);
+    expect(browserProjectWorkers(12)).toBeLessThan(Math.ceil(12 / 2));
+  });
+
+  it('keeps at least two workers on small machines and scales on large ones', () => {
+    expect(browserProjectWorkers(1)).toBe(2);
+    expect(browserProjectWorkers(2)).toBe(2);
+    expect(browserProjectWorkers(4)).toBe(2);
+    expect(browserProjectWorkers(32)).toBe(10);
+  });
+
+  it('applies the cap to both browser groups but never to the serial check', () => {
+    expect(
+      releaseE2eArguments(WRANGLER_PROJECTS, {
+        workers: browserProjectWorkers(12),
+      }),
+    ).toContain('--workers=4');
+    expect(
+      releaseE2eArguments(STATIC_PROJECTS, {
+        workers: browserProjectWorkers(12),
+      }),
+    ).toContain('--workers=4');
+    expect(
+      releaseE2eArguments(WRANGLER_PROJECTS, { workers: 1 }),
+    ).toContain('--workers=1');
   });
 });

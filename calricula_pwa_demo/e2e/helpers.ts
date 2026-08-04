@@ -167,6 +167,32 @@ export async function expectLocalSaveSettled(page: Page): Promise<void> {
   ).toBeVisible({ timeout: 15_000 });
 }
 
+/**
+ * Switches demo persona and waits for the switch to actually land.
+ *
+ * `setActivePersona` is an asynchronous IndexedDB write. Selecting the option
+ * only *starts* it, so navigating straight afterwards can load the next route
+ * under the previous persona — which shows the wrong approval docket and leaves
+ * a test waiting for a card that will never appear. `AppShell` announces
+ * completion in a live region; waiting for that announcement, and for the
+ * select to actually reflect the choice, is the condition that makes the switch
+ * observable rather than assumed.
+ */
+export async function switchPersona(
+  page: Page,
+  optionLabel: string,
+  actorName: string,
+): Promise<void> {
+  const perspective = page.getByLabel("Demo perspective");
+  await perspective.selectOption({ label: optionLabel });
+  await expect(
+    page.getByRole("status").filter({
+      hasText: `Demo perspective changed to ${actorName}.`,
+    }),
+  ).toBeVisible();
+  await expect(perspective.locator("option:checked")).toHaveText(optionLabel);
+}
+
 export async function selectEditorSection(
   page: Page,
   section: string,
