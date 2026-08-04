@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
+import { EVAL_FIXTURES, scoreFixture } from './ai-eval-fixtures.mjs';
 import { readJsonWithinLimit } from './read-json-with-limit.mjs';
 
 const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1';
@@ -8,83 +9,29 @@ const OPENROUTER_COMPLETIONS_URL = `${OPENROUTER_API_BASE}/chat/completions`;
 const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_RESPONSE_BYTES = 512 * 1024;
 export const MAX_CANDIDATES = 4;
-export const FIXTURES_PER_CANDIDATE = 2;
+export const FIXTURES_PER_CANDIDATE = EVAL_FIXTURES.length;
 export const MAX_GENERATION_REQUESTS =
   MAX_CANDIDATES * FIXTURES_PER_CANDIDATE;
 export const MINIMUM_CONTEXT_LENGTH = 32_768;
+/**
+ * Free-tier providers rate-limit around 20 requests per minute. Seven routes
+ * per candidate is well inside that, but the requests are paced anyway so a
+ * four-candidate run cannot trip a limit and score a model as failing for a
+ * reason that has nothing to do with its output quality.
+ */
+export const REQUEST_SPACING_MS = 3_000;
 
 const MODEL_ID_PATTERN =
   /^[A-Za-z0-9._-]+\/[A-Za-z0-9._:-]+:free$/;
 const PRICE_FIELDS = ['prompt', 'completion', 'request'];
-const ACTION_VERBS = [
-  'Analyze',
-  'Apply',
-  'Compare',
-  'Construct',
-  'Create',
-  'Demonstrate',
-  'Design',
-  'Evaluate',
-  'Explain',
-  'Identify',
-  'Implement',
-  'Interpret',
-  'Solve',
-];
-const ACTION_VERB_PATTERN = `^(${ACTION_VERBS.join('|')})\\b`;
-
-const PLAIN_FIXTURE = {
-  task: 'plain',
-  messages: [
-    {
-      role: 'system',
-      content:
-        'You are being evaluated as a concise curriculum-writing assistant. Follow the user request exactly and do not add headings, lists, or JSON.',
-    },
-    {
-      role: 'user',
-      content:
-        'In one sentence of 12 to 45 words, explain why measurable course outcomes help curriculum review. Use both the words "outcomes" and "review".',
-    },
-  ],
-};
-
-const STRUCTURED_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  properties: {
-    slos: {
-      type: 'array',
-      minItems: 2,
-      maxItems: 2,
-      items: {
-        type: 'string',
-        minLength: 12,
-        maxLength: 240,
-        pattern: ACTION_VERB_PATTERN,
-      },
-    },
-  },
-  required: ['slos'],
-};
-
-const STRUCTURED_FIXTURE = {
-  task: 'structured',
-  messages: [
-    {
-      role: 'system',
-      content:
-        'Draft exactly two distinct, observable student learning outcomes from the supplied synthetic course data. Return only the required JSON object.',
-    },
-    {
-      role: 'user',
-      content:
-        'Course: TEST 100, Curriculum Workflow Fundamentals. Topics: measurable learning outcomes; local curriculum review workflow. Each outcome must begin with an action verb allowed by the response schema.',
-    },
-  ],
-};
 
 export class EvaluationConfigurationError extends Error {}
+
+function defaultSleep(milliseconds) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
 
 function isRecord(value) {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -248,6 +195,7 @@ async function validateLiveCandidates(candidates, apiKey, fetchFn) {
 }
 
 function baseCompletionBody(model, fixture) {
+  const structured = fixture.kind === 'structured';
   return {
     model,
     messages: fixture.messages,
@@ -260,21 +208,19 @@ function baseCompletionBody(model, fixture) {
         completion: 0,
         request: 0,
       },
-      ...(fixture.task === 'structured'
-        ? { require_parameters: true }
-        : {}),
+      ...(structured ? { require_parameters: true } : {}),
     },
     stream: false,
     temperature: 0,
-    max_tokens: fixture.task === 'plain' ? 160 : 400,
-    ...(fixture.task === 'structured'
+    max_tokens: fixture.maxTokens,
+    ...(structured
       ? {
           response_format: {
             type: 'json_schema',
             json_schema: {
-              name: 'calricula_model_evaluation_slos',
+              name: `calricula_eval_${fixture.task.replace(/-/g, '_')}`,
               strict: true,
-              schema: STRUCTURED_SCHEMA,
+              schema: fixture.schema,
             },
           },
         }
@@ -320,50 +266,11 @@ function extractCompletion(payload, model) {
   return payload.choices[0].message.content.trim();
 }
 
-function validatePlainContent(content) {
-  if (
-    content.length < 20 ||
-    content.length > 600 ||
-    content.includes('\n') ||
-    !/\boutcomes\b/i.test(content) ||
-    !/\breview\b/i.test(content)
-  ) {
-    return false;
-  }
-  const words = content.split(/\s+/).filter(Boolean);
-  return words.length >= 12 && words.length <= 45;
-}
-
-function validateStructuredContent(content) {
-  let value;
-  try {
-    value = JSON.parse(content);
-  } catch {
-    return false;
-  }
-  if (
-    !isRecord(value) ||
-    Object.keys(value).length !== 1 ||
-    !Array.isArray(value.slos) ||
-    value.slos.length !== 2
-  ) {
-    return false;
-  }
-  const normalized = [];
-  for (const slo of value.slos) {
-    if (
-      typeof slo !== 'string' ||
-      slo.length < 12 ||
-      slo.length > 240 ||
-      !new RegExp(ACTION_VERB_PATTERN).test(slo)
-    ) {
-      return false;
-    }
-    normalized.push(slo.trim().toLowerCase());
-  }
-  return new Set(normalized).size === normalized.length;
-}
-
+/**
+ * Scores one task route. A transport, policy, or shape failure is scored as a
+ * failed fixture with every check false — the evaluator never retries, so a
+ * flaky provider reads as a failing candidate rather than a silent pass.
+ */
 async function evaluateFixture({
   apiKey,
   model,
@@ -372,7 +279,7 @@ async function evaluateFixture({
   now,
 }) {
   const started = now();
-  let passed = false;
+  let score = null;
   try {
     const payload = await fetchJson(
       fetchFn,
@@ -383,16 +290,20 @@ async function evaluateFixture({
         body: JSON.stringify(baseCompletionBody(model, fixture)),
       },
     );
-    const content = extractCompletion(payload, model);
-    passed =
-      fixture.task === 'plain'
-        ? validatePlainContent(content)
-        : validateStructuredContent(content);
+    score = scoreFixture(fixture, extractCompletion(payload, model));
   } catch {
-    passed = false;
+    score = {
+      passed: false,
+      checks: fixture.checks.map((check) => ({
+        id: check.id,
+        workerEnforced: check.workerEnforced,
+        passed: false,
+      })),
+    };
   }
   return {
-    passed,
+    passed: score.passed,
+    checks: score.checks,
     latencyMs: Math.max(0, Math.round(now() - started)),
   };
 }
@@ -402,6 +313,7 @@ export async function evaluateCandidates({
   candidates,
   fetchFn = globalThis.fetch.bind(globalThis),
   now = () => performance.now(),
+  sleep = defaultSleep,
 }) {
   if (typeof apiKey !== 'string' || !apiKey.trim()) {
     throw new EvaluationConfigurationError(
@@ -429,32 +341,42 @@ export async function evaluateCandidates({
 
   const results = [];
   for (const model of candidates) {
-    const plain = await evaluateFixture({
-      apiKey: apiKey.trim(),
-      model,
-      fixture: PLAIN_FIXTURE,
-      fetchFn,
-      now,
-    });
-    const structured = await evaluateFixture({
-      apiKey: apiKey.trim(),
-      model,
-      fixture: STRUCTURED_FIXTURE,
-      fetchFn,
-      now,
-    });
-    const passedCount = Number(plain.passed) + Number(structured.passed);
+    const byTask = {};
+    const checks = {};
+    const latencyByTask = {};
+    let passedCount = 0;
+
+    for (const [index, fixture] of EVAL_FIXTURES.entries()) {
+      if (index > 0) {
+        await sleep(REQUEST_SPACING_MS);
+      }
+      const outcome = await evaluateFixture({
+        apiKey: apiKey.trim(),
+        model,
+        fixture,
+        fetchFn,
+        now,
+      });
+      byTask[fixture.task] = outcome.passed;
+      checks[fixture.task] = outcome.checks;
+      latencyByTask[fixture.task] = outcome.latencyMs;
+      passedCount += Number(outcome.passed);
+    }
+
+    const latencies = Object.values(latencyByTask);
     results.push({
       model,
       pass: {
-        plain: plain.passed,
-        structured: structured.passed,
         rate: passedCount / FIXTURES_PER_CANDIDATE,
+        byTask,
       },
+      checks,
       latencyMs: {
-        plain: plain.latencyMs,
-        structured: structured.latencyMs,
-        mean: Math.round((plain.latencyMs + structured.latencyMs) / 2),
+        byTask: latencyByTask,
+        mean: Math.round(
+          latencies.reduce((total, value) => total + value, 0) /
+            latencies.length,
+        ),
       },
     });
   }
@@ -466,8 +388,11 @@ function usage() {
   OPENROUTER_API_KEY=... npm run ai:evaluate -- --models model/name:free[,model/name:free]
 
 The command revalidates one to four concrete candidates against the authenticated
-and ZDR-filtered catalogs, then makes exactly one fixed plain request and one
-strict JSON-schema request per model. It never retries and never prints content.`);
+and ZDR-filtered catalogs, then makes exactly one fixed request per AI task route
+per model (${FIXTURES_PER_CANDIDATE} routes, at most ${MAX_GENERATION_REQUESTS} generation requests), paced to respect
+free-tier limits. It never retries and never prints prompts or model content.
+
+A candidate is eligible only when pass.rate is 1 — every route.`);
 }
 
 function parseArguments(argv) {
@@ -488,13 +413,17 @@ function parseArguments(argv) {
   return parseCandidateModels(models);
 }
 
-export async function runCli(argv = process.argv.slice(2)) {
+export async function runCli(argv = process.argv.slice(2), options = {}) {
   const candidates = parseArguments(argv);
   if (candidates === null) return;
   const results = await evaluateCandidates({
-    apiKey: process.env.OPENROUTER_API_KEY ?? '',
+    apiKey: options.apiKey ?? process.env.OPENROUTER_API_KEY ?? '',
     candidates,
+    ...(options.fetchFn ? { fetchFn: options.fetchFn } : {}),
+    ...(options.now ? { now: options.now } : {}),
+    ...(options.sleep ? { sleep: options.sleep } : {}),
   });
+  // Only task names, check IDs, booleans, and latencies — never content.
   console.log(JSON.stringify(results, null, 2));
   if (results.some((result) => result.pass.rate !== 1)) {
     process.exitCode = 1;

@@ -1,16 +1,25 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { EVAL_FIXTURES } from './ai-eval-fixtures.mjs';
+import { EVAL_SAMPLES } from './ai-eval-samples.mjs';
 import {
   EvaluationConfigurationError,
+  FIXTURES_PER_CANDIDATE,
   MAX_CANDIDATES,
   MAX_GENERATION_REQUESTS,
   MINIMUM_CONTEXT_LENGTH,
+  REQUEST_SPACING_MS,
   evaluateCandidates,
   parseCandidateModels,
+  runCli,
 } from './ai-evaluate.mjs';
 
 const MODEL = 'example/curriculum-model:free';
 const SECOND_MODEL = 'example/second-model:free';
+const TASKS = EVAL_FIXTURES.map((fixture) => fixture.task);
+const STRUCTURED_TASKS = EVAL_FIXTURES.filter(
+  (fixture) => fixture.kind === 'structured',
+).map((fixture) => fixture.task);
 
 function modelMetadata(id) {
   return {
@@ -44,12 +53,18 @@ function completion(model, content, usage = { cost: 0 }) {
   };
 }
 
+/** `calricula_eval_content_outline` -> `content-outline` */
+function taskFromSchemaName(name) {
+  return name.replace(/^calricula_eval_/, '').replace(/_/g, '-');
+}
+
 function createHarness({
   candidates = [MODEL],
   metadataTransform = (metadata) => metadata,
   completionUsage = { cost: 0 },
   structuredStatus = 200,
   structuredBody,
+  taskBodies = {},
 } = {}) {
   const calls = [];
   const fetchFn = vi.fn(async (input, init = {}) => {
@@ -81,15 +96,11 @@ function createHarness({
           structuredStatus,
         );
       }
+      const task = taskFromSchemaName(body.response_format.json_schema.name);
       return jsonResponse(
         completion(
           body.model,
-          JSON.stringify({
-            slos: [
-              'Analyze evidence used in a local curriculum review.',
-              'Create measurable outcomes for a proposed course.',
-            ],
-          }),
+          taskBodies[task] ?? EVAL_SAMPLES[task].good,
           completionUsage,
         ),
       );
@@ -97,7 +108,7 @@ function createHarness({
     return jsonResponse(
       completion(
         body.model,
-        'Measurable course outcomes give faculty shared evidence for consistent and transparent curriculum review decisions.',
+        taskBodies.chat ?? EVAL_SAMPLES.chat.good,
         completionUsage,
       ),
     );
@@ -111,6 +122,12 @@ function deterministicClock(step = 10) {
     value += step;
     return value;
   };
+}
+
+function generationCalls(harness) {
+  return harness.calls.filter(({ url }) =>
+    url.pathname.endsWith('/chat/completions'),
+  );
 }
 
 describe('ai:evaluate candidate validation', () => {
@@ -142,6 +159,7 @@ describe('ai:evaluate candidate validation', () => {
         apiKey: 'test-only-key',
         candidates: [MODEL],
         fetchFn: harness.fetchFn,
+        sleep: async () => {},
       }),
     ).rejects.toThrow(EvaluationConfigurationError);
     expect(harness.fetchFn).toHaveBeenCalledTimes(2);
@@ -180,38 +198,41 @@ describe('ai:evaluate candidate validation', () => {
         apiKey: 'test-only-key',
         candidates: [MODEL],
         fetchFn: harness.fetchFn,
+        sleep: async () => {},
       }),
     ).rejects.toThrow(EvaluationConfigurationError);
-    expect(
-      harness.calls.filter(({ url }) =>
-        url.pathname.endsWith('/chat/completions'),
-      ),
-    ).toHaveLength(0);
+    expect(generationCalls(harness)).toHaveLength(0);
   });
 });
 
-describe('ai:evaluate fixed fixtures', () => {
-  it('makes two policy-restricted requests per candidate and emits only pass and latency data', async () => {
+describe('ai:evaluate seven-route qualification', () => {
+  it('budgets one request per task route for each candidate', () => {
+    expect(FIXTURES_PER_CANDIDATE).toBe(7);
+    expect(MAX_GENERATION_REQUESTS).toBe(28);
+    expect(TASKS).toHaveLength(FIXTURES_PER_CANDIDATE);
+  });
+
+  it('makes one policy-restricted request per route and emits only pass, check, and latency data', async () => {
     const harness = createHarness();
     const results = await evaluateCandidates({
       apiKey: 'test-only-key',
       candidates: [MODEL],
       fetchFn: harness.fetchFn,
       now: deterministicClock(),
+      sleep: async () => {},
     });
 
-    expect(harness.fetchFn).toHaveBeenCalledTimes(4);
-    const generationCalls = harness.calls.filter(({ url }) =>
-      url.pathname.endsWith('/chat/completions'),
-    );
-    expect(generationCalls).toHaveLength(2);
-
-    const [plainBody, structuredBody] = generationCalls.map(({ init }) =>
+    expect(harness.fetchFn).toHaveBeenCalledTimes(2 + FIXTURES_PER_CANDIDATE);
+    const bodies = generationCalls(harness).map(({ init }) =>
       JSON.parse(String(init.body)),
     );
-    for (const body of [plainBody, structuredBody]) {
+    expect(bodies).toHaveLength(FIXTURES_PER_CANDIDATE);
+
+    for (const body of bodies) {
       expect(body.model).toBe(MODEL);
       expect(body).not.toHaveProperty('models');
+      expect(body.stream).toBe(false);
+      expect(body.temperature).toBe(0);
       expect(body.provider).toMatchObject({
         allow_fallbacks: false,
         data_collection: 'deny',
@@ -223,39 +244,87 @@ describe('ai:evaluate fixed fixtures', () => {
         },
       });
     }
-    expect(plainBody).not.toHaveProperty('response_format');
-    expect(structuredBody.provider.require_parameters).toBe(true);
-    expect(structuredBody.response_format).toMatchObject({
-      type: 'json_schema',
-      json_schema: {
-        strict: true,
-        schema: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['slos'],
-        },
+
+    const [chatBody, ...structuredBodies] = bodies;
+    expect(chatBody).not.toHaveProperty('response_format');
+    expect(chatBody.provider).not.toHaveProperty('require_parameters');
+    expect(structuredBodies).toHaveLength(STRUCTURED_TASKS.length);
+    expect(
+      structuredBodies.map((body) =>
+        taskFromSchemaName(body.response_format.json_schema.name),
+      ),
+    ).toEqual(STRUCTURED_TASKS);
+    for (const body of structuredBodies) {
+      expect(body.provider.require_parameters).toBe(true);
+      expect(body.response_format.type).toBe('json_schema');
+      expect(body.response_format.json_schema.strict).toBe(true);
+      expect(body.response_format.json_schema.schema.type).toBe('object');
+    }
+
+    expect(results).toHaveLength(1);
+    expect(results[0].model).toBe(MODEL);
+    expect(results[0].pass.rate).toBe(1);
+    expect(results[0].pass.byTask).toEqual(
+      Object.fromEntries(TASKS.map((task) => [task, true])),
+    );
+    expect(Object.keys(results[0].checks)).toEqual(TASKS);
+    expect(results[0].checks.slos).toContainEqual({
+      id: 'action-verb-start',
+      workerEnforced: false,
+      passed: true,
+    });
+    expect(Object.keys(results[0].latencyMs.byTask)).toEqual(TASKS);
+    expect(results[0].latencyMs.mean).toBe(10);
+
+    const serialized = JSON.stringify(results);
+    expect(serialized).not.toContain('Measurable course outcomes');
+    expect(serialized).not.toContain('Analyze a course outline');
+    expect(serialized).not.toContain('Computer Information Systems');
+    expect(serialized).not.toContain('test-only-key');
+  });
+
+  it('reports a per-task verdict and fails a candidate that misses one task', async () => {
+    const harness = createHarness({
+      taskBodies: {
+        'content-outline': EVAL_SAMPLES['content-outline'].bad,
       },
     });
 
-    expect(results).toEqual([
-      {
-        model: MODEL,
-        pass: {
-          plain: true,
-          structured: true,
-          rate: 1,
-        },
-        latencyMs: {
-          plain: 10,
-          structured: 10,
-          mean: 10,
-        },
-      },
-    ]);
-    const serialized = JSON.stringify(results);
-    expect(serialized).not.toContain('Measurable course outcomes');
-    expect(serialized).not.toContain('Analyze evidence');
-    expect(serialized).not.toContain('test-only-key');
+    const [result] = await evaluateCandidates({
+      apiKey: 'test-only-key',
+      candidates: [MODEL],
+      fetchFn: harness.fetchFn,
+      now: deterministicClock(),
+      sleep: async () => {},
+    });
+
+    expect(result.pass.byTask['content-outline']).toBe(false);
+    expect(result.pass.byTask.slos).toBe(true);
+    expect(result.pass.rate).toBeCloseTo(6 / 7);
+    expect(
+      result.checks['content-outline'].find(
+        (check) => check.id === 'hours-sum-exact',
+      ).passed,
+    ).toBe(false);
+    expect(
+      result.checks['content-outline'].find(
+        (check) => check.id === 'positive-hours',
+      ).passed,
+    ).toBe(true);
+  });
+
+  it('paces generation requests to respect free-tier rate limits', async () => {
+    const harness = createHarness();
+    const sleep = vi.fn(async () => {});
+    await evaluateCandidates({
+      apiKey: 'test-only-key',
+      candidates: [MODEL],
+      fetchFn: harness.fetchFn,
+      now: deterministicClock(),
+      sleep,
+    });
+    expect(sleep).toHaveBeenCalledTimes(FIXTURES_PER_CANDIDATE - 1);
+    expect(sleep).toHaveBeenCalledWith(REQUEST_SPACING_MS);
   });
 
   it('does not retry a failed fixture or expose its upstream body', async () => {
@@ -265,28 +334,25 @@ describe('ai:evaluate fixed fixtures', () => {
       candidates: [MODEL],
       fetchFn: harness.fetchFn,
       now: deterministicClock(7),
+      sleep: async () => {},
     });
 
-    expect(harness.fetchFn).toHaveBeenCalledTimes(4);
+    expect(harness.fetchFn).toHaveBeenCalledTimes(2 + FIXTURES_PER_CANDIDATE);
+    expect(generationCalls(harness)).toHaveLength(FIXTURES_PER_CANDIDATE);
+    expect(results[0].pass.byTask.chat).toBe(true);
+    for (const task of STRUCTURED_TASKS) {
+      expect(results[0].pass.byTask[task]).toBe(false);
+    }
+    expect(results[0].pass.rate).toBeCloseTo(1 / 7);
     expect(
-      harness.calls.filter(({ url }) =>
-        url.pathname.endsWith('/chat/completions'),
-      ),
-    ).toHaveLength(2);
-    expect(results[0]).toMatchObject({
-      model: MODEL,
-      pass: {
-        plain: true,
-        structured: false,
-        rate: 0.5,
-      },
-    });
+      results[0].checks['top-code'].every((check) => !check.passed),
+    ).toBe(true);
     expect(JSON.stringify(results)).not.toContain(
       'SENSITIVE_UPSTREAM_FAILURE_BODY',
     );
   });
 
-  it('fails a fixture when cost details are nonnumeric', async () => {
+  it('fails every route when cost details are nonnumeric', async () => {
     const harness = createHarness({
       completionUsage: {
         cost: 0,
@@ -298,16 +364,16 @@ describe('ai:evaluate fixed fixtures', () => {
       candidates: [MODEL],
       fetchFn: harness.fetchFn,
       now: deterministicClock(),
+      sleep: async () => {},
     });
 
-    expect(results[0]?.pass).toEqual({
-      plain: false,
-      structured: false,
-      rate: 0,
-    });
+    expect(results[0].pass.rate).toBe(0);
+    expect(results[0].pass.byTask).toEqual(
+      Object.fromEntries(TASKS.map((task) => [task, false])),
+    );
   });
 
-  it('caps generation requests at two fixtures for each of four candidates', async () => {
+  it('caps generation requests at seven routes for each of four candidates', async () => {
     const candidates = Array.from(
       { length: MAX_CANDIDATES },
       (_, index) => `example/model-${index}:free`,
@@ -319,15 +385,54 @@ describe('ai:evaluate fixed fixtures', () => {
       candidates,
       fetchFn: harness.fetchFn,
       now: deterministicClock(),
+      sleep: async () => {},
     });
 
-    expect(
-      harness.calls.filter(({ url }) =>
-        url.pathname.endsWith('/chat/completions'),
-      ),
-    ).toHaveLength(MAX_GENERATION_REQUESTS);
-    expect(harness.fetchFn).toHaveBeenCalledTimes(
-      2 + MAX_GENERATION_REQUESTS,
-    );
+    expect(generationCalls(harness)).toHaveLength(MAX_GENERATION_REQUESTS);
+    expect(harness.fetchFn).toHaveBeenCalledTimes(2 + MAX_GENERATION_REQUESTS);
+  });
+});
+
+describe('ai:evaluate command line', () => {
+  it('never writes model-generated content to stdout', async () => {
+    const harness = createHarness();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await runCli(['--models', MODEL], {
+        apiKey: 'test-only-key',
+        fetchFn: harness.fetchFn,
+        now: deterministicClock(),
+        sleep: async () => {},
+      });
+      const printed = log.mock.calls.flat().join('\n');
+      expect(printed).toContain(MODEL);
+      expect(printed).toContain('hours-sum-exact');
+      expect(printed).not.toContain('Measurable course outcomes');
+      expect(printed).not.toContain('Analyze a course outline');
+      expect(printed).not.toContain('Computer Information Systems');
+      expect(printed).not.toContain('test-only-key');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('exits non-zero when any route fails for any candidate', async () => {
+    const harness = createHarness({
+      taskBodies: { 'top-code': EVAL_SAMPLES['top-code'].bad },
+    });
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const previousExitCode = process.exitCode;
+    try {
+      await runCli(['--models', MODEL], {
+        apiKey: 'test-only-key',
+        fetchFn: harness.fetchFn,
+        now: deterministicClock(),
+        sleep: async () => {},
+      });
+      expect(process.exitCode).toBe(1);
+    } finally {
+      process.exitCode = previousExitCode;
+      log.mockRestore();
+    }
   });
 });
