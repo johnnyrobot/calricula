@@ -35,6 +35,19 @@ vi.mock("./DemoProvider", () => ({
   useDemo: shellState.useDemo,
 }));
 
+// `AppShell` reaches `ContextualAssistant` through `next/dynamic`, and that
+// component's module subtree - the chat panel, AI client, and schemas - is
+// transformed and evaluated on first import, inside whatever wait is running
+// when React resolves the lazy boundary. Its `loading:` placeholder is
+// `aria-hidden`, so nothing matching the trigger's role exists until then.
+// Measured across full coverage runs, that wait took 644-1001ms against
+// testing-library's default 1000ms budget: this file failed whenever the
+// sample crossed the line, and machine load shifted the whole distribution
+// right. Importing the module eagerly moves the cost into this file's import
+// phase, where no per-assertion timeout applies, and drops the wait to 3-13ms.
+// Keep this import.
+import "@/components/ai/ContextualAssistant";
+
 import { AppShell } from "./AppShell";
 
 const faculty = {

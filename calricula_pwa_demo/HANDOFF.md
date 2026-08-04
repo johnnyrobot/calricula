@@ -25,8 +25,10 @@ closed — see `docs/handoffs/2026-08-02-architecture-deepening.md` and
 same status it had on 2026-07-31. What it did change is the evidence figures and
 the Git range, both updated throughout this document. Two new risks are recorded
 that were not present on 2026-07-31: the security-scan range below is now stale
-(see "Security scan state"), and one unit test fails roughly half the time (see
-"Known local instability"), which will make the release gate unreliable.
+(see "Security scan state"), and a long-standing `AppShell` test failure was
+diagnosed as a marginal-timeout defect and fixed on 2026-08-04 (see "Resolved
+local instability"); before that fix it would have failed a substantial share of
+release-gate attempts at step 5 of 14.
 
 | Area | Status | Evidence boundary |
 | --- | --- | --- |
@@ -34,7 +36,7 @@ that were not present on 2026-07-31: the security-scan range below is now stale
 | Six historical security findings | Remediated in code | Requires diff-scan validation before closure |
 | `src/lib/**` provenance | Fixed | 46 files tracked at `c83084f` (44 at `274d428`; `ai/session-readiness.ts` and its test added by `5c0de4c`); fresh-checkout package reproduction passed at `274d428` and not rerun since |
 | Aggregate local verification | Passed at `c83084f` | `npm run verify` exit 0 on 2026-08-03: 554 UI/repository tests in 75 files, 174 Worker tests, 7 Chromium smoke tests. Not a substitute for the release gate |
-| Local test stability | **Degraded** | One `AppShell` test failed 3 of 6 `test:coverage` runs on 2026-08-03; see "Known local instability" |
+| Local test stability | Restored | The long-standing `AppShell` "flake" was a marginal-timeout defect, diagnosed and fixed 2026-08-04; 0 failures in 10 consecutive coverage runs. See "Resolved local instability" |
 | Security diff scan | Blocked before start, and its range is now stale | Setup wait timed out; no new scan artifacts. Head has since moved `274d428` → `c83084f` |
 | New complete standard scan | Not run | Required because historical scan omitted `src/lib/**` |
 | `.release-evidence/local-gate.json` | Missing | No bootstrap or full release seal exists |
@@ -297,36 +299,48 @@ them as evidence about `274d428`, not about `c83084f`:
 release policy is `npm audit --omit=dev --audit-level=high`; do not misstate a
 passing production audit as a clean audit of all development dependencies.
 
-## Known local instability
+## Resolved local instability — the `AppShell` "flake"
 
-`src/components/shell/AppShell.test.tsx > AppShell > exposes current navigation,
-local status, and offline continuity` fails nondeterministically. On 2026-08-03
-it failed **3 of 6** `npm run test:coverage` runs on an otherwise idle machine.
+**Diagnosed and fixed on 2026-08-04.** Recorded here because three prior
+handoffs (2026-08-01, 2026-08-02, 2026-08-03) carried it as an unexplained
+environmental flake with the advice "rerun before diagnosing; do not add
+retries." It was neither environmental nor a flake.
 
-The failure is always the same and always at the same assertion
-(`AppShell.test.tsx:227`):
+Symptom: `src/components/shell/AppShell.test.tsx > exposes current navigation,
+local status, and offline continuity` failed nondeterministically — 4 of 14
+`npm run test:coverage` runs — always at the same assertion, always
+`Unable to find role="button" and name "Open contextual AI assistant"`. Every
+assertion before it passed.
 
-```text
-TestingLibraryElementError: Unable to find role="button" and name "Open contextual AI assistant"
-```
+Root cause: `AppShell` reaches `ContextualAssistant` through `next/dynamic`.
+That component's module subtree — the chat panel, AI client, and schemas — is
+transformed and evaluated on **first** import, inside whatever wait is running
+when React resolves the lazy boundary, and its `loading:` placeholder is
+`aria-hidden`, so nothing matching the trigger's role exists until it resolves.
+Instrumenting the wait across full coverage runs measured **644, 660, 818, 894,
+948, and 1001 ms** against testing-library's default **1000 ms** `findByRole`
+budget. The test failed whenever the sample crossed the line; machine load
+shifted the whole distribution right, which is why the observed rate ranged from
+1-in-8 on an idle machine to 3-in-6 under load. Istanbul instrumentation is what
+makes the subtree expensive: measured in isolation it costs 246 ms bare and
+1202 ms under coverage.
 
-Every assertion before it passes, so the shell renders; only the contextual AI
-button is missing when `findByRole` gives up.
+Fix: one eager `import "@/components/ai/ContextualAssistant"` in the test file,
+which moves the transform into the file's import phase where no per-assertion
+timeout applies. The measured wait drops to **3-13 ms**, restoring roughly
+987 ms of margin. No timeout was raised, no retry added, no test weakened or
+skipped, and `retries: 0` stands. Coverage is byte-identical before and after
+(85.14/74.31/81.98/87) because the module was already being loaded through the
+dynamic import.
 
-Why this matters for release: `release:gate` runs `test:coverage` as step 5 of
-14, before the expensive steps. At the observed rate roughly half of all gate
-attempts will fail there, and each failure discards ~40 minutes of gate work.
+Verification: 0 failures in 10 consecutive full coverage runs, against a 4-in-14
+baseline, plus the direct before/after timing measurements above.
 
-Prior handoffs (2026-08-01, 2026-08-02, 2026-08-03) recorded this as a rare
-environmental flake and advised "rerun before diagnosing; do not add retries."
-**That advice was calibrated to a one-in-many failure and no longer fits.** At
-50% this is a defect to diagnose, not noise to rerun through. The `retries: 0`
-policy is still right — do not paper over it with retries, and do not weaken or
-skip the test. Diagnose why that button's appearance is not deterministic under
-the test's async gating.
-
-This is a local-suite defect. Nothing indicates a production fault, and the
-7-test Chromium smoke suite has not reproduced it.
+Two general lessons worth keeping: a marginal timeout presents as a
+load-sensitive flake, and "rerun and it passes" is evidence *for* a timing
+defect rather than against one. Nothing here indicated a production fault — the
+lazy boundary is deliberate architecture and the Chromium smoke suite never
+reproduced it.
 
 ## Security scan state
 
