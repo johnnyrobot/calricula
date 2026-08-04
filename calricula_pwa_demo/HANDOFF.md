@@ -42,6 +42,7 @@ release-gate attempts at step 5 of 14.
 | `.release-evidence/local-gate.json` | Missing | No bootstrap or full release seal exists |
 | Cloudflare bootstrap/deployment | Not performed | No release-owned hostname, version, deployment, or rollback receipt |
 | Turnstile/OpenRouter configuration | Missing | No site key, secret, HMAC secret, provider key, or evaluated model chain supplied |
+| `test:e2e:full` stability | **Blocker for gate step 11** | Roughly one failure per 84-test run, a different test and browser each time. Reproduced at `cebba8a`, before the public-beta work, so it is pre-existing. See "Pre-existing `test:e2e:full` instability" |
 | Live model qualification | Implemented, not yet run against a live model | `ai:evaluate` qualifies each candidate on all seven task routes — chat, catalog-description, slos, content-outline, top-code, program-narrative, compliance-explanation — at one request per route, 28 requests maximum, no retries. The rubric is pinned to the Worker validators by `tests/worker/ai-eval-parity.test.ts`; `release-evidence` refuses evidence unless every route passes. Running it needs `OPENROUTER_API_KEY` |
 | Production E2E/Lighthouse/offline | Not run | Requires exact deployed origin |
 | Live AI canaries | Not run | Requires staged release and one human-completed Turnstile session |
@@ -302,6 +303,45 @@ them as evidence about `274d428`, not about `c83084f`:
 `npm ci` reported development-only audit findings during previous runs. The
 release policy is `npm audit --omit=dev --audit-level=high`; do not misstate a
 passing production audit as a clean audit of all development dependencies.
+
+## Pre-existing `test:e2e:full` instability — open, and it blocks the gate
+
+**Observed 2026-08-04 while verifying the public-beta work. Not caused by it.**
+
+`npm run test:e2e:full` runs 84 tests across five browser projects with six
+workers against a single `wrangler dev` server on :4177. It fails roughly once
+per run, and **the failing test moves**:
+
+| Run | Result |
+|---|---|
+| Public-beta head, run 1 | 83/84. `e2e/workflow-depth.spec.ts:163` (chromium): after "Close editor" the URL was the approved source course `…6005`, not the new draft |
+| Public-beta head, run 2 | 83/84. `e2e/programs-backup.spec.ts` (firefox) |
+| `cebba8a`, clean worktree, before any of this work | 83/84. A `page.goto` timeout |
+| `workflow-depth.spec.ts:163` alone, chromium, 3 consecutive runs | 3/3 passed |
+
+Because it reproduces at `cebba8a`, it is **pre-existing**, not a regression
+from the seven-route evaluation, artifact-removal, or triage work.
+
+Two things this is **not**, and neither may be assumed:
+
+- It is **not** established as environmental. "It passes on rerun" is evidence
+  *for* a timing defect, not against one — that assumption is exactly what let
+  the `AppShell` defect survive three handoffs.
+- It is **not** dismissible as a test-only problem. The run-1 failure is a
+  plausible product behaviour: closing the editor navigated to the approved
+  *source* course rather than the draft just created. If that is a real
+  navigation race, users would hit it.
+
+**Why it matters now:** `test:e2e:full` is **step 11 of 14** in
+`RELEASE_GATE_STEPS`. The gate stops at the first failing step and only writes
+the `.release-evidence/local-gate.json` seal after all of them pass, so at a
+per-run failure rate near one in eighty-four this will intermittently block
+Phase 2 and Phase 4.
+
+**Do not** resolve it by retrying the gate until it passes, adding a Playwright
+retry, raising a timeout, or quarantining a spec. Diagnose it with
+`superpowers:systematic-debugging`, starting from the run-1 navigation
+observation, which is the most specific signal available.
 
 ## Resolved local instability — the `AppShell` "flake"
 
