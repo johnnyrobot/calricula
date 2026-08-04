@@ -49,6 +49,8 @@ export const EVAL_COMPLIANCE_SOURCE_PACK: Readonly<
       sourceTitle: string;
       sourceSection: string;
       excerpt: string;
+      url: string;
+      checksum: string;
     }>
   >
 >;

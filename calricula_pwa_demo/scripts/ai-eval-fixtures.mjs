@@ -54,12 +54,18 @@ export const EVAL_COMPLIANCE_SOURCE_PACK = Object.freeze({
     sourceSection: '§ 55002(a)(1)(C), Units',
     excerpt:
       'Course outlines of record shall record the total number of hours in each instructional category specified in governing board policy.',
+    url: 'https://govt.westlaw.com/calregs/Document/I825A4A90BB1811F0933DFD2696D93541?contextData=%28sc.Default%29&originationContext=documenttoc&transitionType=CategoryPageItem&viewType=FullText',
+    checksum:
+      'sha256:839c8f4f1bd8d44f1f78137ccf4a812a9c59b819a2da959326bac342e52c78e6',
   }),
   'title5-credit-hour': Object.freeze({
     sourceTitle: 'California Code of Regulations, title 5, section 55002.5',
     sourceSection: '§ 55002.5(a), Credit Hour Definition',
     excerpt:
       'One credit hour of community college work (one unit of credit) shall require a minimum of 48 semester hours of total student work.',
+    url: 'https://govt.westlaw.com/calregs/Document/IECE98DC0507C11EE80669BF4F3976CB1?contextData=%28sc.Default%29&originationContext=documenttoc&transitionType=CategoryPageItem&viewType=FullText',
+    checksum:
+      'sha256:f8a5ef427582c25688603a32a1c537282d6337730da147672af76425bb8a6e03',
   }),
   'pcah-current-edition': Object.freeze({
     sourceTitle:
@@ -67,12 +73,18 @@ export const EVAL_COMPLIANCE_SOURCE_PACK = Object.freeze({
     sourceSection: 'p. 44, Criteria for the Course Outline of Record',
     excerpt:
       'The Chancellor’s Office review and chaptering processes require the submission of a COR that meets the standards for courses established in Title 5, § 55002.',
+    url: 'https://www.cccco.edu/-/media/CCCCO-Website/docs/curriculum/program-course-approval-handbook-8th-edition.pdf',
+    checksum:
+      'sha256:ecbcd9235e013f4b823d5d6605ca1681b9425955f28ce89a20848be7f8d766ee',
   }),
   'ccn-current-guidance': Object.freeze({
     sourceTitle: 'California Education Code section 66725.5',
     sourceSection: '§ 66725.5(a)(2), Common Course Numbering System',
     excerpt:
       'ensure that comparable courses across all community colleges have the same course number.',
+    url: 'https://leginfo.legislature.ca.gov/faces/codes_displaySection.xhtml?sectionNum=66725.5.&lawCode=EDC',
+    checksum:
+      'sha256:bb02261c81bbc8d2fd535db18876b40f482e7cfa9bb74d6d3e3a1bf0a510a0a6',
   }),
 });
 
@@ -153,6 +165,8 @@ function complianceSourcePackPrompt() {
       `title: ${source.sourceTitle}`,
       `page_or_section: ${source.sourceSection}`,
       `excerpt: ${source.excerpt}`,
+      `url: ${source.url}`,
+      `checksum: ${source.checksum}`,
     ].join('\n');
   }).join('\n');
 }

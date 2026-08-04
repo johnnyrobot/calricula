@@ -34,7 +34,7 @@ release-gate attempts at step 5 of 14.
 | --- | --- | --- |
 | Local-first PWA implementation | Implemented | Tracked application and test source |
 | Six historical security findings | Remediated in code | Requires diff-scan validation before closure |
-| `src/lib/**` provenance | Fixed | 46 files tracked at `c83084f` (44 at `274d428`; `ai/session-readiness.ts` and its test added by `5c0de4c`); fresh-checkout package reproduction passed at `274d428` and not rerun since |
+| `src/lib/**` provenance | Fixed | 47 files tracked (46 at `c83084f`; 44 at `274d428`; `ai/session-readiness.ts` and its test added by `5c0de4c`, `ai/eval-catalog-parity.test.ts` by the seven-route evaluation work); fresh-checkout package reproduction passed at `274d428` and not rerun since |
 | Aggregate local verification | Passed at `c83084f` | `npm run verify` exit 0 on 2026-08-03: 554 UI/repository tests in 75 files, 174 Worker tests, 7 Chromium smoke tests. Not a substitute for the release gate |
 | Local test stability | Restored | The long-standing `AppShell` "flake" was a marginal-timeout defect, diagnosed and fixed 2026-08-04; 0 failures in 10 consecutive coverage runs. See "Resolved local instability" |
 | Security diff scan | Blocked before start, and its range is now stale | Setup wait timed out; no new scan artifacts. Head has since moved `274d428` → `c83084f` |
@@ -66,10 +66,11 @@ release-gate attempts at step 5 of 14.
   Both pathspecs are cwd-relative, so running this from `calricula_pwa_demo/`
   makes the exclude match nothing and lists all 267 demo files. That output is a
   wrong-cwd artefact, not a boundary violation.
-- All **46** runtime files under `calricula_pwa_demo/src/lib/**` are tracked and
+- All **47** runtime files under `calricula_pwa_demo/src/lib/**` are tracked and
   protected by the demo `.gitignore` negations. This was 44 at `274d428`;
-  `5c0de4c` added `src/lib/ai/session-readiness.ts` and its test. `AGENTS.md`
-  states the expected count — keep the two in step.
+  `5c0de4c` added `src/lib/ai/session-readiness.ts` and its test, and the
+  seven-route evaluation work added `src/lib/ai/eval-catalog-parity.test.ts`.
+  `AGENTS.md` states the expected count — keep the two in step.
 - `openrouter-llms-full.txt` remains an intentionally ignored local design
   reference. It is not a Git, build, static-export, precache, or deployment
   input.
