@@ -1,6 +1,6 @@
 # Calricula PWA Demo - Security Remediation and Deployment Handoff
 
-Last reconciled: 2026-07-31 (America/Los_Angeles)
+Last reconciled: 2026-08-03 (America/Los_Angeles)
 
 This document is the point-in-time handoff for the standalone local-first PWA
 under `/Users/laccd/code/calricula/calricula_pwa_demo`. It is deliberately
@@ -18,13 +18,24 @@ Cloudflare bootstrap, Turnstile configuration, live model qualification,
 AI-enabled deployment, production browser checks, Lighthouse, offline checks,
 and the two live AI canaries are still outstanding.
 
+**Reconcile note, 2026-08-03.** Since the 2026-07-31 handoff, 22 commits of
+internal architecture work landed on this branch (a nine-candidate review, now
+closed — see `docs/handoffs/2026-08-02-architecture-deepening.md` and
+`docs/adr/`). It changed no release fact: every row in the table below has the
+same status it had on 2026-07-31. What it did change is the evidence figures and
+the Git range, both updated throughout this document. Two new risks are recorded
+that were not present on 2026-07-31: the security-scan range below is now stale
+(see "Security scan state"), and one unit test fails roughly half the time (see
+"Known local instability"), which will make the release gate unreliable.
+
 | Area | Status | Evidence boundary |
 | --- | --- | --- |
 | Local-first PWA implementation | Implemented | Tracked application and test source |
 | Six historical security findings | Remediated in code | Requires diff-scan validation before closure |
-| `src/lib/**` provenance | Fixed | 44 files tracked; fresh-checkout package reproduction passed |
-| Aggregate local verification | Passed before this handoff | 468 UI/repository tests, 136 Worker tests, 7 Chromium smoke tests; rerun via release gate |
-| Security diff scan | Blocked before start | Setup wait timed out; no new scan artifacts |
+| `src/lib/**` provenance | Fixed | 46 files tracked at `c83084f` (44 at `274d428`; `ai/session-readiness.ts` and its test added by `5c0de4c`); fresh-checkout package reproduction passed at `274d428` and not rerun since |
+| Aggregate local verification | Passed at `c83084f` | `npm run verify` exit 0 on 2026-08-03: 554 UI/repository tests in 75 files, 174 Worker tests, 7 Chromium smoke tests. Not a substitute for the release gate |
+| Local test stability | **Degraded** | One `AppShell` test failed 3 of 6 `test:coverage` runs on 2026-08-03; see "Known local instability" |
+| Security diff scan | Blocked before start, and its range is now stale | Setup wait timed out; no new scan artifacts. Head has since moved `274d428` → `c83084f` |
 | New complete standard scan | Not run | Required because historical scan omitted `src/lib/**` |
 | `.release-evidence/local-gate.json` | Missing | No bootstrap or full release seal exists |
 | Cloudflare bootstrap/deployment | Not performed | No release-owned hostname, version, deployment, or rollback receipt |
@@ -41,11 +52,22 @@ and the two live AI canaries are still outstanding.
 - Tracked demo baseline: `b446c760f89f4e5efd13f2db1540984f8cfa59bc`
 - Primary six-finding remediation commit: `3101f4a7acc933ca07d27268344ac13bd28b43a0`
 - Last code-only checkpoint before this documentation: `274d42813447b719d7f3dc82ab968d24349ea3a2`
-- The implementation checkpoint was clean when this handoff was authored.
-- `git diff --name-only main...HEAD -- . ':(exclude)calricula_pwa_demo/**'`
-  was empty: no parent frontend/backend file changed.
-- All 44 runtime files under `calricula_pwa_demo/src/lib/**` are tracked and
-  protected by the demo `.gitignore` negations.
+- Release-relevant head at the 2026-07-31 reconcile: `274d428`
+- **Current head at the 2026-08-03 reconcile: `c83084fe2a965273e3b998fc9976eae4521bcf35`**
+  — 22 architecture-only commits beyond `274d428`, listed by
+  `git log --oneline 274d428..HEAD`. None of them touches release scripts'
+  behaviour, `wrangler.jsonc` vars, or the security posture.
+- The implementation checkpoint was clean at both reconciles.
+- Run from the **repository root** (`/Users/laccd/code/calricula`):
+  `git diff --name-only main...HEAD -- . ':(exclude)calricula_pwa_demo/**'`
+  It was empty at both reconciles: no parent frontend/backend file changed.
+  Both pathspecs are cwd-relative, so running this from `calricula_pwa_demo/`
+  makes the exclude match nothing and lists all 267 demo files. That output is a
+  wrong-cwd artefact, not a boundary violation.
+- All **46** runtime files under `calricula_pwa_demo/src/lib/**` are tracked and
+  protected by the demo `.gitignore` negations. This was 44 at `274d428`;
+  `5c0de4c` added `src/lib/ai/session-readiness.ts` and its test. `AGENTS.md`
+  states the expected count — keep the two in step.
 - `openrouter-llms-full.txt` remains an intentionally ignored local design
   reference. It is not a Git, build, static-export, precache, or deployment
   input.
@@ -61,6 +83,16 @@ Relevant commits, oldest first:
 | `f766387` | Compare releases at one canonical path |
 | `0c42813` | Diagnose reproducibility mismatch layer |
 | `274d428` | Bind fresh checkout to the exact deployable package |
+
+Architecture-only commits added between the 2026-07-31 and 2026-08-03
+reconciles, oldest first. They close a nine-candidate internal review; none
+changes release, security, or deployment behaviour:
+
+| Commit | Purpose |
+| --- | --- |
+| `0b0e595` … `84d2a11` | Candidates 1, 2, 7, 6, 9, 8, 3, 4 — see `docs/handoffs/2026-08-02-architecture-deepening.md` |
+| `f451f02` | Commit that handoff to `docs/handoffs/` |
+| `6834d95`, `b05d737`, `3b97f13`, `6e94f9f`, `c83084f` | Candidate 5 — narrow the curriculum repository interface, 47 → 33 methods; see `docs/adr/0002-repository-interface-roles-and-test-seam.md` |
 
 Every commit contains the required trailer:
 
@@ -232,29 +264,69 @@ Implemented fix:
 
 ## Verification already performed
 
-The following checks passed during the implementation session. They are useful
-evidence of code health but are **not** a substitute for the fresh release
-gate required at the final commit:
+The following checks passed via `npm run verify` (exit 0) at `c83084f` on
+2026-08-03. They are useful evidence of code health but are **not** a substitute
+for the fresh release gate required at the final commit — `verify` is 8 steps;
+`release:gate` is 14 and adds fresh-checkout reproduction, the five-browser E2E
+matrix, local production verification, Lighthouse, and the evidence seal:
 
 - production dependency audit: zero production vulnerabilities at the
-  configured threshold;
+  configured threshold (`npm audit --omit=dev --audit-level=high`);
 - ESLint and TypeScript typecheck;
-- 68 Vitest files / 468 UI, domain, repository, and release-script tests;
-- coverage: 84.45% statements, 73.55% branches, 81.80% functions, and 86.33%
-  lines, including the higher risk-module thresholds;
-- 136 workerd-compatible Worker tests;
-- static export validation: 211 files and approximately 2.32 MiB total;
-- dry-run Worker validation: approximately 15.91 KiB compressed;
+- 75 Vitest files / 554 UI, domain, repository, and release-script tests;
+- coverage: 85.14% statements, 74.31% branches, 81.98% functions, and 87.00%
+  lines, including the higher risk-module thresholds — `repository.ts` at
+  94.69/88.72/94.02/96.22 against its 90-line/85-branch floor;
+- 174 workerd-compatible Worker tests across 5 files;
+- static export validation: 211 of a 20,000 limit and approximately 2.31 MiB
+  total, largest chunk 0.22 MiB; Workbox precached 207 finite files (2.27 MiB);
+- dry-run Worker validation: 68.46 KiB uploaded, 16.53 KiB gzipped,
+  approximately 0.02 MiB compressed by the validator, against the 3 MiB ceiling;
 - 7 Chromium critical-path smoke tests;
+The last two items below are carried from the 2026-07-31 reconcile and were
+**not** rerun on 2026-08-03. `npm run verify` does not include either one. Treat
+them as evidence about `274d428`, not about `c83084f`:
+
 - original six scan PoCs rerun against the repaired source; vulnerable source
-  signatures no longer reproduced;
+  signatures no longer reproduced (at `274d428`);
 - exact-commit fresh checkout reproduced at one canonical path with matching
   source and sealed publication-package digests, then copied into the working
-  release directory unchanged.
+  release directory unchanged (at `274d428`).
 
 `npm ci` reported development-only audit findings during previous runs. The
 release policy is `npm audit --omit=dev --audit-level=high`; do not misstate a
 passing production audit as a clean audit of all development dependencies.
+
+## Known local instability
+
+`src/components/shell/AppShell.test.tsx > AppShell > exposes current navigation,
+local status, and offline continuity` fails nondeterministically. On 2026-08-03
+it failed **3 of 6** `npm run test:coverage` runs on an otherwise idle machine.
+
+The failure is always the same and always at the same assertion
+(`AppShell.test.tsx:227`):
+
+```text
+TestingLibraryElementError: Unable to find role="button" and name "Open contextual AI assistant"
+```
+
+Every assertion before it passes, so the shell renders; only the contextual AI
+button is missing when `findByRole` gives up.
+
+Why this matters for release: `release:gate` runs `test:coverage` as step 5 of
+14, before the expensive steps. At the observed rate roughly half of all gate
+attempts will fail there, and each failure discards ~40 minutes of gate work.
+
+Prior handoffs (2026-08-01, 2026-08-02, 2026-08-03) recorded this as a rare
+environmental flake and advised "rerun before diagnosing; do not add retries."
+**That advice was calibrated to a one-in-many failure and no longer fits.** At
+50% this is a defect to diagnose, not noise to rerun through. The `retries: 0`
+policy is still right — do not paper over it with retries, and do not weaken or
+skip the test. Diagnose why that button's appearance is not deterministic under
+the test's async gating.
+
+This is a local-suite defect. Nothing indicates a production fault, and the
+7-test Chromium smoke suite has not reproduced it.
 
 ## Security scan state
 
@@ -276,7 +348,12 @@ Pending remediation diff scan:
 - Scope required by the app: repository root; the exact Git range contains
   only demo changes.
 - Base: `b446c760f89f4e5efd13f2db1540984f8cfa59bc`
-- Head: `274d42813447b719d7f3dc82ab968d24349ea3a2`
+- Head **as configured on 2026-07-31**: `274d42813447b719d7f3dc82ab968d24349ea3a2`
+- **This range is stale as of 2026-08-03.** The branch head is now `c83084f`,
+  22 commits later. Re-target the pending scan at
+  `b446c76..c83084f` (or the head at the time you run it) before pressing
+  **Start scan**; a scan of the old range would leave the entire architecture
+  review unreviewed.
 - Setup validated, but `await_codex_security_scan_start` timed out after 840
   seconds because **Start scan** was not pressed.
 - No scan ID, artifact directory, preflight, goal, phase progress, canonical

@@ -97,8 +97,11 @@ git check-ignore -v calricula_pwa_demo/src/lib/data/repository.ts || true
 git diff --name-only main...HEAD -- . ':(exclude)calricula_pwa_demo/**'
 ```
 
-The expected tracked `src/lib/**` count at the current handoff is 44. The last
-command must remain empty unless the user explicitly changes the boundary.
+The expected tracked `src/lib/**` count at the current handoff is 46 (it was 44
+through `274d428`; `5c0de4c` added `src/lib/ai/session-readiness.ts` and its
+test). The last command must remain empty unless the user explicitly changes the
+boundary — and it is only meaningful from the repository root, because both of
+its pathspecs are cwd-relative.
 
 ## Testing expectations
 
