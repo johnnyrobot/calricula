@@ -9,10 +9,36 @@ This is committed rather than left in `$TMPDIR` on purpose: the two documents
 this work started from live at OS temp paths and will not survive a reboot.
 Everything from them that still matters is reproduced below.
 
+## Errata — corrected 2026-08-03
+
+Three errors were found in this document after C5 was executed. Each was
+re-verified against the code on 2026-08-03 before being written here. The
+affected passages below are corrected in place and marked `[corrected …]`.
+
+1. **The `repository.database` assertion count was understated by seven times.**
+   This document said "the three `repository.test.ts` assertions" and cited
+   `79,266,313`. There were **21**, at lines `79, 80, 87, 92, 95, 97, 109, 115,
+   127, 128, 136, 266, 267, 271, 313, 317, 323, 420, 442, 1627, 1648` — counted
+   directly from `f451f02:…/repository.test.ts`, the commit immediately before
+   C5. The three cited were only the ones the source report happened to name.
+   This materially understated the C5 estimate.
+2. **Loose end #1 was already closed when it was written.** `docs/handoffs/`
+   does appear in `docs/agents/domain.md`'s example tree, at
+   `docs/agents/domain.md:27` — added by `f451f02`, the same commit that added
+   this file.
+3. **The scope-invariant command must be run from the repository root.** Both
+   pathspecs are cwd-relative, so from `calricula_pwa_demo/` the exclude matches
+   nothing and the command lists all 267 demo files — it reads as a catastrophic
+   boundary violation when nothing is wrong. From `/Users/laccd/code/calricula`
+   it is correctly empty. `CLAUDE.md` carried the same defect and was fixed on
+   2026-08-03; `AGENTS.md:91` already said "run from the repository root" and was
+   always correct.
+
 ## Where the work stands
 
 A nine-candidate architecture review was worked through over two sessions.
-Eight candidates are done and one remains.
+Eight candidates were done and one remained when this was written; C5 was
+completed on 2026-08-03 and the review is now closed.
 
 | # | Candidate | Commit |
 |---|---|---|
@@ -24,7 +50,7 @@ Eight candidates are done and one remains.
 | 8 | reach the repository only from route screens | `a447e29` |
 | 3 | release records testable → publish sequence injectable → attempt lifecycle | `9df25a9`, `5c18b71`, `84d2a11` |
 | 4 | deepen the course draft session out of `CourseEditor` | `fcc1d02`, `c088713` |
-| **5** | **narrow the curriculum repository interface** | **not started** |
+| 5 | narrow the curriculum repository interface | `6834d95`, `b05d737`, `3b97f13`, `6e94f9f`, `c83084f` (done 2026-08-03; see [ADR-0002](../adr/0002-repository-interface-roles-and-test-seam.md)) |
 
 Read the commit messages for the reasoning — they carry it, and it is not
 repeated here. `git log --oneline main..HEAD` lists the branch.
@@ -37,7 +63,8 @@ this is its C5 content, checked against the code on 2026-08-02.
 
 **Sites:** `src/lib/data/repository.ts` (2291 lines),
 `src/lib/data/contracts.ts:190–263` (the interface),
-`src/lib/data/repository.test.ts:79,266,313` (the assertions that reach past it).
+`src/lib/data/repository.test.ts` (21 assertions reach past it — see Errata #1;
+this originally read `:79,266,313`).
 
 **Problem as stated.** The interface mirrors the 18-table Dexie schema, so a
 handful of genuinely deep aggregate methods sit hidden among many thin table
@@ -63,9 +90,10 @@ forty-odd, the deep methods become findable, and the read path gains validation.
   `src/lib/data/repository.ts`. Do not weaken it. Absorbing table reads into
   aggregate verbs changes which lines exist, so check coverage early and often
   rather than at the end.
-- The three `repository.test.ts` assertions that go through `repository.database`
+- The **21** `repository.test.ts` assertions that go through `repository.database`
   are the concrete blocker for making the handle internal. Decide what replaces
   them — an exported read verb, or a test-only accessor — before moving code.
+  [corrected 2026-08-03: said "three"; see Errata #1]
 - `src/lib/data/hooks.ts` re-runs queries off the revision bumped in
   `invalidation.ts`. Any method you absorb must still bump it.
 
@@ -113,9 +141,11 @@ forty-odd, the deep methods become findable, and the read path gains validation.
 
 ## Loose ends
 
-- `docs/agents/domain.md` describes a single-context layout. `CONTEXT.md` and
+- ~~`docs/agents/domain.md` describes a single-context layout. `CONTEXT.md` and
   `docs/adr/` now exist; `docs/handoffs/` (this file) does not appear in its
-  example tree. Add it there if handoffs become a habit.
+  example tree. Add it there if handoffs become a habit.~~
+  [corrected 2026-08-03: already closed when written — `docs/handoffs/` is at
+  `docs/agents/domain.md:27`. See Errata #2. No action needed.]
 - `HANDOFF.md` at the demo root is a **different document** — authoritative
   point-in-time *release* status, per `CLAUDE.md`. Do not merge this into it.
 
@@ -137,9 +167,12 @@ forty-odd, the deep methods become findable, and the read path gains validation.
 `AGENTS.md`, `README.md`, and `CLAUDE.md` are authoritative; this is the short
 list, not a substitute.
 
-- Changes stay inside `calricula_pwa_demo/`.
+- Changes stay inside `calricula_pwa_demo/`. **From the repository root**
+  (`/Users/laccd/code/calricula`),
   `git diff --name-only main...HEAD -- . ':(exclude)calricula_pwa_demo/**'`
-  must be empty.
+  must be empty. [corrected 2026-08-03: the working root for this file is
+  `calricula_pwa_demo/`, where this command is cwd-relative and misreports.
+  See Errata #3]
 - Commit trailer, exactly:
   `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`
 - Never put a real personal or maintainer email in code, docs, commits, or
@@ -171,11 +204,16 @@ No secrets or credentials appear in this document or in the commits it lists.
 
 ## First action
 
-```
-npm run verify        # ~8 min idle; confirms the branch is still green
-```
+**Superseded 2026-08-03 — C5 is complete.** It was executed across `6834d95`,
+`b05d737`, `3b97f13`, `6e94f9f`, `c83084f`, and **not** in the shape this
+document proposes: a call-site census killed the six-verb collapse. The
+interface went 47 → 33 methods. Read
+[ADR-0002](../adr/0002-repository-interface-roles-and-test-seam.md) before acting
+on anything in the "C5" section above; do not re-derive the decision.
 
-Then open `src/lib/data/contracts.ts:190` and decide which of the 47 methods are
-aggregate verbs and which are table reads to absorb. Settle the
-`repository.database` question (`repository.test.ts:79,266,313`) before moving
-any code.
+The original instruction, kept for the record:
+
+> Run `npm run verify`, then open `src/lib/data/contracts.ts:190` and decide
+> which of the 47 methods are aggregate verbs and which are table reads to
+> absorb. Settle the `repository.database` question (21 assertions — Errata #1)
+> before moving any code.

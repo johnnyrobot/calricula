@@ -10,7 +10,12 @@ product domain and visual language with the parent app but **none of its stack**
 root `CLAUDE.md` describes a Next.js + FastAPI + PostgreSQL + Firebase + Gemini system
 that does not apply here. There is no login, no server database, and no Docker.
 
-- Make changes only inside `calricula_pwa_demo/`. `git diff --name-only main...HEAD -- . ':(exclude)calricula_pwa_demo/**'` must stay empty.
+- Make changes only inside `calricula_pwa_demo/`. Check it **from the repository root**
+  (`/Users/laccd/code/calricula`), where
+  `git diff --name-only main...HEAD -- . ':(exclude)calricula_pwa_demo/**'` must stay
+  empty. Both pathspecs are cwd-relative, so running it from `calricula_pwa_demo/` makes
+  the exclude match nothing and lists every demo file — that output is an artefact of the
+  wrong cwd, not a boundary violation.
 - Do not add Firebase, FastAPI, PostgreSQL, Gemini, cloud storage, or auth to this demo.
 - `AGENTS.md` (release/security/privacy invariants) and `HANDOFF.md` (authoritative
   point-in-time release status) take precedence over this file for release work.
