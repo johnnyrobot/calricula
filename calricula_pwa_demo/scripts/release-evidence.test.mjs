@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { EVAL_FIXTURES } from './ai-eval-fixtures.mjs';
 import {
   ReleaseEvidenceError,
   aiCheckEnvironment,
@@ -9,6 +10,11 @@ import {
 } from './release-evidence.mjs';
 
 const MODELS = ['provider/alpha:free', 'provider/beta:free'];
+const EVAL_TASKS = EVAL_FIXTURES.map((fixture) => fixture.task);
+
+function passingByTask() {
+  return Object.fromEntries(EVAL_TASKS.map((task) => [task, true]));
+}
 const FINGERPRINT = 'sha256:release-source';
 const CREDENTIAL_FINGERPRINT = `sha256:${'c'.repeat(64)}`;
 const NOW = Date.parse('2026-07-30T06:00:00.000Z');
@@ -64,8 +70,17 @@ function records() {
       'evaluate',
       MODELS.map((model) => ({
         model,
-        pass: { plain: true, structured: true, rate: 1 },
-        latencyMs: { plain: 100, structured: 200 },
+        pass: { rate: 1, byTask: passingByTask() },
+        checks: Object.fromEntries(
+          EVAL_TASKS.map((task) => [
+            task,
+            [{ id: 'exact-keys', workerEnforced: true, passed: true }],
+          ]),
+        ),
+        latencyMs: {
+          byTask: Object.fromEntries(EVAL_TASKS.map((task) => [task, 100])),
+          mean: 100,
+        },
       })),
     ),
     canary: envelope('canary', {
@@ -192,6 +207,53 @@ describe('release AI evidence', () => {
         expectedCredentialFingerprint: `sha256:${'e'.repeat(64)}`,
       }),
     ).toThrow('deployed OpenRouter credential');
+  });
+
+  it('requires every AI task route to pass for every configured model', () => {
+    // A model that fails one route reaches users as UPSTREAM_INVALID_RESPONSE
+    // on that feature, so the gate must not accept a partial pass.
+    for (const task of EVAL_TASKS) {
+      const oneRouteFailing = records();
+      oneRouteFailing.evaluate.result[0].pass.byTask[task] = false;
+      oneRouteFailing.evaluate.result[0].pass.rate = 6 / 7;
+      expect(() =>
+        verifyReleaseEvidence(verifyOptions('predeploy', oneRouteFailing)),
+      ).toThrow('does not fully pass');
+    }
+
+    const ratePadded = records();
+    ratePadded.evaluate.result[0].pass.byTask['top-code'] = false;
+    // A rate of 1 must not rescue a byTask verdict that says otherwise.
+    expect(() =>
+      verifyReleaseEvidence(verifyOptions('predeploy', ratePadded)),
+    ).toThrow('does not fully pass');
+  });
+
+  it('rejects evaluation evidence that omits a task route', () => {
+    const missingRoute = records();
+    delete missingRoute.evaluate.result[0].pass.byTask['compliance-explanation'];
+    expect(() =>
+      verifyReleaseEvidence(verifyOptions('predeploy', missingRoute)),
+    ).toThrow(ReleaseEvidenceError);
+
+    const supersededShape = records();
+    supersededShape.evaluate.result[0].pass = {
+      plain: true,
+      structured: true,
+      rate: 1,
+    };
+    expect(() =>
+      verifyReleaseEvidence(verifyOptions('predeploy', supersededShape)),
+    ).toThrow('invalid shape');
+  });
+
+  it('records no model-generated content in evaluation evidence', () => {
+    const serialized = JSON.stringify(records().evaluate);
+    // Only task names, check IDs, booleans, latencies, and model IDs.
+    for (const task of EVAL_TASKS) {
+      expect(serialized).toContain(task);
+    }
+    expect(serialized).not.toMatch(/[.!?]\s|\bthe\b/i);
   });
 
   it('requires safe authenticated key-tier evidence from discovery', () => {

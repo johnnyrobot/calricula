@@ -11,10 +11,26 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
+import { EVAL_FIXTURES } from './ai-eval-fixtures.mjs';
 import { childEnvironment } from './child-environment.mjs';
 import { normalizeProductionOrigin } from './verify-production.mjs';
 import { parseWranglerJsonc } from './wrangler-config.mjs';
 import { collectReleaseInputFiles } from './release-inputs.mjs';
+
+/**
+ * Every AI task route a user can reach. Evaluation evidence must carry a
+ * verdict for each one, and each verdict must be true, before a release may
+ * proceed — a model that fails one route fails that whole feature in
+ * production.
+ */
+const EVALUATION_TASKS = EVAL_FIXTURES.map((fixture) => fixture.task);
+
+function hasEveryEvaluationTask(byTask) {
+  return (
+    isRecord(byTask) &&
+    EVALUATION_TASKS.every((task) => typeof byTask[task] === 'boolean')
+  );
+}
 
 const EVIDENCE_SCHEMA_VERSION = 2;
 const EVIDENCE_DIRECTORY = path.resolve(
@@ -269,6 +285,7 @@ export function validateRecordedResult(check, result) {
           typeof entry.model !== 'string' ||
           !isRecord(entry.pass) ||
           typeof entry.pass.rate !== 'number' ||
+          !hasEveryEvaluationTask(entry.pass.byTask) ||
           !isRecord(entry.latencyMs),
       )
     ) {
@@ -562,9 +579,8 @@ export function verifyReleaseEvidence({
     ) ||
     evaluation.some(
       (entry) =>
-        entry.pass.plain !== true ||
-        entry.pass.structured !== true ||
-        entry.pass.rate !== 1,
+        entry.pass.rate !== 1 ||
+        EVALUATION_TASKS.some((task) => entry.pass.byTask[task] !== true),
     )
   ) {
     throw new ReleaseEvidenceError(

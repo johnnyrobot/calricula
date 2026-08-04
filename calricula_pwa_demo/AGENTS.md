@@ -181,8 +181,21 @@ deployment fails closed.
   lines or print them.
 - The first AI-enabled release is two-phase: `deploy:stage`, human Turnstile
   completion, then `release:verify:deployed` with the short-lived session cookie
-  read silently into the shell. The canary performs exactly one text and one
-  structured request without retries.
+  read silently into the shell.
+- Model qualification and the production canary are separate budgets, and only
+  one of them may grow.
+- `ai:evaluate` calls OpenRouter directly with the maintainer credential and
+  qualifies each candidate on all seven task routes — one fixed request per
+  route, at most four candidates, 28 requests, no retries, paced by
+  `REQUEST_SPACING_MS` to respect free-tier limits. A candidate is eligible only
+  when `pass.rate` is 1. Its rubric is pinned to the Worker's own output
+  validators by `tests/worker/ai-eval-parity.test.ts`; on disagreement the
+  rubric is wrong, because the Worker is the contract.
+- The deployed canary is unchanged and must stay unchanged: exactly one text and
+  one structured request without retries. The Worker enforces
+  `MAX_DAILY_ATTEMPTS = 5` per install per UTC day (`worker/quota-protocol.ts`),
+  so a canary covering every route is not possible and must not be attempted by
+  rotating sessions.
 
 Authoritative release commands and recovery rules are documented in
 `README.md`. If a publish becomes uncertain, preserve the pending record and

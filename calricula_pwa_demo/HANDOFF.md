@@ -42,6 +42,7 @@ release-gate attempts at step 5 of 14.
 | `.release-evidence/local-gate.json` | Missing | No bootstrap or full release seal exists |
 | Cloudflare bootstrap/deployment | Not performed | No release-owned hostname, version, deployment, or rollback receipt |
 | Turnstile/OpenRouter configuration | Missing | No site key, secret, HMAC secret, provider key, or evaluated model chain supplied |
+| Live model qualification | Implemented, not yet run against a live model | `ai:evaluate` qualifies each candidate on all seven task routes — chat, catalog-description, slos, content-outline, top-code, program-narrative, compliance-explanation — at one request per route, 28 requests maximum, no retries. The rubric is pinned to the Worker validators by `tests/worker/ai-eval-parity.test.ts`; `release-evidence` refuses evidence unless every route passes. Running it needs `OPENROUTER_API_KEY` |
 | Production E2E/Lighthouse/offline | Not run | Requires exact deployed origin |
 | Live AI canaries | Not run | Requires staged release and one human-completed Turnstile session |
 
