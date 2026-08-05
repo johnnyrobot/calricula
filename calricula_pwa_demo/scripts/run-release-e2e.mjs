@@ -4,6 +4,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
+import { childEnvironment } from './child-environment.mjs';
+
 /**
  * Worker count for the browser project groups.
  *
@@ -38,7 +40,11 @@ export function releaseE2eEnvironment(
   source = process.env,
   server = 'wrangler',
 ) {
-  const environment = { ...source };
+  // Browsers and `wrangler dev` are third-party children. They never need a
+  // provider or Cloudflare credential, so the shared scrubber builds their
+  // environment; a raw copy of process.env would forward whatever the operator
+  // happened to have exported.
+  const environment = childEnvironment(source);
   delete environment.PLAYWRIGHT_BASE_URL;
   delete environment.PLAYWRIGHT_REUSE_SERVER;
   environment.CALRICULA_E2E_SERVER = server;

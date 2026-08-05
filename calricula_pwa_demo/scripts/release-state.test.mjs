@@ -19,6 +19,7 @@ import {
   resolveReleaseSecretsFile,
   sealPublicationPackage,
   sealReleaseSecretsFile,
+  withSealedReleaseSecrets,
   siteKeyDigest,
   validateReleaseSecrets,
   verifySealedPublicationPackage,
@@ -225,5 +226,59 @@ describe('release artifact state', () => {
     await expect(
       sealReleaseSecretsFile(metadata, { cwd }),
     ).rejects.toThrow('changed after preflight');
+  });
+
+  it('removes the sealed secrets copy even when the caller throws', async () => {
+    // The sealed copy is a plaintext file holding all three Worker secrets.
+    // Callers used to seal it and only later open the try/finally that removed
+    // it, so anything throwing in between left it on disk. Scoping cleanup to
+    // a callback makes that ordering mistake unrepresentable.
+    const cwd = await fixture();
+    const secretDirectory = await mkdtemp(
+      path.join(os.tmpdir(), 'calricula-secrets-scope-'),
+    );
+    temporaryDirectories.push(secretDirectory);
+    const secretPath = path.join(secretDirectory, 'release.env');
+    const content = [
+      `OPENROUTER_API_KEY=sk-or-v1-${'a'.repeat(20)}`,
+      'TURNSTILE_SECRET_KEY=0x4AAAAAABbCcDdEeFfGgHhIi',
+      `AI_SESSION_HMAC_SECRET=${HMAC_SECRET}`,
+    ].join('\n');
+    await writeFile(secretPath, content, { mode: 0o600 });
+    await chmod(secretPath, 0o600);
+    const metadata = await resolveReleaseSecretsFile(
+      { CALRICULA_SECRETS_FILE: secretPath },
+      { cwd },
+    );
+
+    let sealedPath;
+    await expect(
+      withSealedReleaseSecrets(metadata, { cwd }, async (sealed) => {
+        sealedPath = sealed.path;
+        const { readFile } = await import('node:fs/promises');
+        expect(await readFile(sealed.path, 'utf8')).toBe(content);
+        throw new Error('publish failed before cleanup');
+      }),
+    ).rejects.toThrow('publish failed before cleanup');
+
+    expect(sealedPath).toBeTruthy();
+    const { access } = await import('node:fs/promises');
+    await expect(access(sealedPath)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('passes undefined through when there are no release secrets', async () => {
+    const seen = [];
+    const result = await withSealedReleaseSecrets(
+      undefined,
+      {},
+      async (sealed) => {
+        seen.push(sealed);
+        return 'ran';
+      },
+    );
+    expect(result).toBe('ran');
+    expect(seen).toEqual([undefined]);
   });
 });

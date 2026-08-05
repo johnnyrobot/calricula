@@ -58,7 +58,7 @@ import {
   requireCleanGitReleaseState,
   resolveReleaseSecretsFile,
   resolveTurnstileSiteKey,
-  sealReleaseSecretsFile,
+  withSealedReleaseSecrets,
   siteKeyDigest,
   verifySealedPublicationPackage,
 } from './release-state.mjs';
@@ -1453,59 +1453,63 @@ async function runReleaseDeploymentWithLease(
         gitCommit: localGate.git.commit,
       });
       const outputPath = await createWranglerOutputPath();
-      const sealedSecrets = releaseSecrets
-        ? await sealReleaseSecretsFile(releaseSecrets)
-        : undefined;
-      if (!bootstrap) {
-        // Invalidate prior result markers before the sole mutating command.
-        // An uncertain publish must never leave an older release marked
-        // complete.
-        await assertReleaseLifecycleLease(lifecycleLease);
-        await removeReleaseResultEvidence(COMPLETE_EVIDENCE_PATH);
-        await removeReleaseResultEvidence(STAGED_EVIDENCE_PATH);
-      }
-      const publishStartedAt = new Date();
-      publishedAt = publishStartedAt.toISOString();
-      const attempt = await ReleaseAttempt.open({
-        mode: bootstrap ? 'bootstrap' : 'full',
-        attemptId,
-        startedAt: publishStartedAt,
-        target: targetBefore,
-        origin: configuration.baseOrigin,
-        outputPath,
-        message,
-        gate: localGate,
-        openRouterCredentialFingerprint:
-          releaseSecrets?.openRouterCredentialFingerprint ?? null,
-      });
+      let attempt;
       let publicationReceipt;
-      try {
-        publishAttempted = true;
-        publicationReceipt = await publishWorker({
-          attemptId,
-          lifecycleLease,
-          message,
-          onUploaded: async (uploaded) => {
-            if (
-              configuration.baseOrigin &&
-              configuration.baseOrigin !== uploaded.origin
-            ) {
-              throw new ReleaseDeploymentError(
-                'Wrangler uploaded to a different origin than CALRICULA_RELEASE_BASE_URL.',
-              );
-            }
-            await attempt.recordUpload({
-              origin: configuration.baseOrigin || uploaded.origin,
-              versionId: uploaded.versionId,
-            });
-          },
-          outputPath,
-          sealedPublication: localGate.sealedPublication,
-          secretsFile: sealedSecrets?.path,
-        });
-      } finally {
-        await sealedSecrets?.cleanup();
-      }
+      // The sealed secrets copy is plaintext. Its lifetime is scoped to this
+      // callback so every step below it -- lease, evidence invalidation,
+      // attempt open, publish -- is covered by the cleanup, whether it
+      // succeeds or throws.
+      await withSealedReleaseSecrets(
+        releaseSecrets,
+        {},
+        async (sealedSecrets) => {
+          if (!bootstrap) {
+            // Invalidate prior result markers before the sole mutating
+            // command. An uncertain publish must never leave an older release
+            // marked complete.
+            await assertReleaseLifecycleLease(lifecycleLease);
+            await removeReleaseResultEvidence(COMPLETE_EVIDENCE_PATH);
+            await removeReleaseResultEvidence(STAGED_EVIDENCE_PATH);
+          }
+          const publishStartedAt = new Date();
+          publishedAt = publishStartedAt.toISOString();
+          attempt = await ReleaseAttempt.open({
+            mode: bootstrap ? 'bootstrap' : 'full',
+            attemptId,
+            startedAt: publishStartedAt,
+            target: targetBefore,
+            origin: configuration.baseOrigin,
+            outputPath,
+            message,
+            gate: localGate,
+            openRouterCredentialFingerprint:
+              releaseSecrets?.openRouterCredentialFingerprint ?? null,
+          });
+          publishAttempted = true;
+          publicationReceipt = await publishWorker({
+            attemptId,
+            lifecycleLease,
+            message,
+            onUploaded: async (uploaded) => {
+              if (
+                configuration.baseOrigin &&
+                configuration.baseOrigin !== uploaded.origin
+              ) {
+                throw new ReleaseDeploymentError(
+                  'Wrangler uploaded to a different origin than CALRICULA_RELEASE_BASE_URL.',
+                );
+              }
+              await attempt.recordUpload({
+                origin: configuration.baseOrigin || uploaded.origin,
+                versionId: uploaded.versionId,
+              });
+            },
+            outputPath,
+            sealedPublication: localGate.sealedPublication,
+            secretsFile: sealedSecrets?.path,
+          });
+        },
+      );
       published = true;
       releaseOrigin =
         configuration.baseOrigin || publicationReceipt.origin;

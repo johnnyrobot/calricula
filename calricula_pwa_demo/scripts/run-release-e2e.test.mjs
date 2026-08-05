@@ -99,4 +99,31 @@ describe('local release E2E topology', () => {
       releaseE2eArguments(WRANGLER_PROJECTS, { workers: 1 }),
     ).toContain('--workers=1');
   });
+
+  it('denies release secrets to browser and server children', () => {
+    // These children run third-party code (browsers, wrangler, npm). The
+    // release invariant is that no spawn site forwards a provider or
+    // Cloudflare credential, so this environment is built from the shared
+    // scrubber rather than a raw copy of process.env.
+    const scrubbed = releaseE2eEnvironment({
+      OPENROUTER_API_KEY: 'sk-or-v1-must-not-reach-a-browser',
+      TURNSTILE_SECRET_KEY: 'turnstile-secret',
+      AI_SESSION_HMAC_SECRET: 'hmac-secret',
+      CLOUDFLARE_API_TOKEN: 'cloudflare-token',
+      CALRICULA_SECRETS_FILE: '/tmp/secrets',
+      PATH: '/usr/bin',
+    });
+    for (const key of [
+      'OPENROUTER_API_KEY',
+      'TURNSTILE_SECRET_KEY',
+      'AI_SESSION_HMAC_SECRET',
+      'CLOUDFLARE_API_TOKEN',
+      'CALRICULA_SECRETS_FILE',
+    ]) {
+      expect(scrubbed).not.toHaveProperty(key);
+    }
+    // The child still needs an ordinary working environment.
+    expect(scrubbed.PATH).toBe('/usr/bin');
+    expect(scrubbed.CALRICULA_E2E_SERVER).toBe('wrangler');
+  });
 });

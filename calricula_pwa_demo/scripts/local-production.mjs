@@ -2,6 +2,8 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import process from 'node:process';
 
+import { childEnvironment } from './child-environment.mjs';
+
 const DEFAULT_PORT = 4197;
 const START_TIMEOUT_MS = 45_000;
 
@@ -90,7 +92,7 @@ export async function withLocalProduction(callback, options = {}) {
     ],
     {
       cwd: process.cwd(),
-      env: process.env,
+      env: childEnvironment(),
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   );

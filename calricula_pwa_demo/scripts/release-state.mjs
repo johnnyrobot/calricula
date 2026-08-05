@@ -563,6 +563,27 @@ export async function resolveReleaseSecretsFile(
   };
 }
 
+/**
+ * Seals the release secrets file, runs `body` with it, and always removes the
+ * sealed copy.
+ *
+ * The sealed copy is plaintext and holds all three Worker secrets. Sealing it
+ * and opening the cleanup scope later is an ordering the caller can get wrong —
+ * and did: anything that threw in between left the file on disk. Binding the
+ * lifetime to a callback makes that mistake unrepresentable rather than merely
+ * fixed. A `null`/`undefined` `expected` is passed straight through, so callers
+ * with no configured secrets need no special case.
+ */
+export async function withSealedReleaseSecrets(expected, options, body) {
+  if (!expected) return body(undefined);
+  const sealed = await sealReleaseSecretsFile(expected, options);
+  try {
+    return await body(sealed);
+  } finally {
+    await sealed.cleanup();
+  }
+}
+
 export async function sealReleaseSecretsFile(
   expected,
   options = {},

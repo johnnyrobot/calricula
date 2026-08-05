@@ -12,6 +12,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import process from 'node:process';
 
+import { childEnvironment } from './child-environment.mjs';
 import { computeReleaseFingerprint } from './release-evidence.mjs';
 import {
   computeArtifactFingerprint,
@@ -25,7 +26,7 @@ import {
 function run(command, args, options = {}) {
   const child = spawn(command, args, {
     cwd: options.cwd ?? process.cwd(),
-    env: options.env ?? process.env,
+    env: options.env ?? childEnvironment(),
     stdio: options.stdio ?? 'inherit',
   });
   return new Promise((resolve, reject) => {
@@ -40,7 +41,7 @@ function run(command, args, options = {}) {
 function captureGit(args) {
   const child = spawn('git', args, {
     cwd: process.cwd(),
-    env: process.env,
+    env: childEnvironment(),
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stdout = '';
@@ -72,7 +73,7 @@ async function extractRecordedTree(destination, repositoryRoot, prefix) {
   if (pathspec) archiveArgs.push('--', pathspec);
   const archive = spawn('git', archiveArgs, {
     cwd: repositoryRoot,
-    env: process.env,
+    env: childEnvironment(),
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   const segments = pathspec ? pathspec.split('/').filter(Boolean).length : 0;
@@ -81,7 +82,7 @@ async function extractRecordedTree(destination, repositoryRoot, prefix) {
     extractArgs.push('--strip-components', String(segments));
   }
   const extract = spawn('tar', extractArgs, {
-    env: process.env,
+    env: childEnvironment(),
     stdio: [archive.stdout, 'inherit', 'inherit'],
   });
   const results = await Promise.all([
