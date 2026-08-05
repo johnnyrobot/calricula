@@ -8,6 +8,13 @@ import {
 } from "../../scripts/ai-eval-fixtures.mjs";
 import { EVAL_SAMPLES } from "../../scripts/ai-eval-samples.mjs";
 
+import {
+  validateAISessionData,
+  validateAITaskOutput,
+  type AITaskOutputMap,
+} from "../../src/lib/ai/schemas";
+import type { AITask } from "../../src/lib/ai/types";
+
 import { createSession, envelope, openRouterSuccess, runAi } from "./helpers";
 
 /**
@@ -182,4 +189,53 @@ describe("evaluation catalog / Worker catalog parity", () => {
       checksum: expected.checksum,
     });
   });
+});
+
+/**
+ * The Worker accepting a response is only half the contract. The browser
+ * re-validates the same payload with Zod (`validateAITaskOutput`,
+ * `validateAISessionData`) before anything reaches the UI, so a field the
+ * Worker returns but the browser schema does not allow fails *every* request
+ * with `AI_OUTPUT_REJECTED` — or, for the session, prevents any AI feature from
+ * starting at all.
+ *
+ * That is not hypothetical: `AISessionDataSchema` omitted the Worker's
+ * `remainingDailyAttempts`, and nothing caught it. The Worker suite asserted
+ * the response shape without running the browser validator on it, and the E2E
+ * suite forces `AI_ENABLED=false`. This pins both halves together.
+ */
+describe("Worker response / browser validator parity", () => {
+  it("accepts the real session response with the browser validator", async () => {
+    const session = await createSession();
+    const body = await envelope<unknown>(session.response);
+    expect(session.response.status).toBe(200);
+    expect(() => validateAISessionData(body.data)).not.toThrow();
+  });
+
+  it.each(EVAL_FIXTURES.map((fixture) => fixture.task))(
+    "accepts the real %s response with the browser validator",
+    async (task) => {
+      const session = await createSession();
+      const input = TASK_BODIES[task]
+        ? (TASK_BODIES[task] as { input: unknown }).input
+        : undefined;
+      const { response } = await runAi({
+        cookie: session.cookie,
+        env: session.env,
+        path: `/api/ai/${task}`,
+        ...(TASK_BODIES[task] ? { body: TASK_BODIES[task] } : {}),
+        upstream: openRouterSuccess(EVAL_SAMPLES[task].good),
+      });
+      expect(response.status).toBe(200);
+
+      const body = await envelope<unknown>(response);
+      expect(() =>
+        validateAITaskOutput(
+          task as AITask,
+          body.data as AITaskOutputMap[AITask],
+          { input },
+        ),
+      ).not.toThrow();
+    },
+  );
 });

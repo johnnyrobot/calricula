@@ -412,11 +412,22 @@ Pending remediation diff scan:
   only demo changes.
 - Base: `b446c760f89f4e5efd13f2db1540984f8cfa59bc`
 - Head **as configured on 2026-07-31**: `274d42813447b719d7f3dc82ab968d24349ea3a2`
-- **This range is stale as of 2026-08-03.** The branch head is now `c83084f`,
-  22 commits later. Re-target the pending scan at
-  `b446c76..c83084f` (or the head at the time you run it) before pressing
-  **Start scan**; a scan of the old range would leave the entire architecture
-  review unreviewed.
+- **That configured range is stale.** Re-target the pending scan at
+  **`b446c76..4751437`** — 41 commits — before pressing **Start scan**. Scanning
+  the configured range would leave the architecture review, the seven-route AI
+  evaluation work, the AI artifact removal, and the E2E fixes unreviewed.
+- Head at the 2026-08-04 reconcile:
+  `475143757ff92d83886d41b34ba1b81f81b7bdc2`. If further commits land before
+  the scan runs, re-target again at the head of the day; the base
+  (`b446c76`) never moves.
+- Areas added since the range was last configured, and worth naming in the
+  scan's attention list: the OpenRouter evaluation path in `scripts/` now issues
+  up to 28 live provider requests under a maintainer credential
+  (`ai-evaluate.mjs`, `ai-eval-fixtures.mjs`, `ai-eval-samples.mjs`); the AI
+  artifact write path was removed from the repository and contracts; and the AI
+  error surface now renders an error code and request ID to the user
+  (`src/components/ai/ErrorDiagnostics.tsx`) — confirm it leaks no upstream
+  message, prompt, or model output.
 - Setup validated, but `await_codex_security_scan_start` timed out after 840
   seconds because **Start scan** was not pressed.
 - No scan ID, artifact directory, preflight, goal, phase progress, canonical

@@ -193,6 +193,11 @@ export const ComplianceExplanationOutputSchema = z
 export const AISessionDataSchema = z
   .object({
     expiresAt: z.iso.datetime().optional(),
+    // The Worker reports how many of the five daily attempts are left
+    // (`MAX_DAILY_ATTEMPTS`, worker/quota-protocol.ts). Optional so an older
+    // deployed Worker that omits it still validates; the bound matches the
+    // quota protocol's own invariant.
+    remainingDailyAttempts: z.number().int().min(0).max(5).optional(),
   })
   .strict();
 

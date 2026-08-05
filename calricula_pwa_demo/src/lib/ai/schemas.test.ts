@@ -259,6 +259,30 @@ describe("AI browser output schemas", () => {
     ).not.toThrow();
   });
 
+  // The Worker's session response carries the remaining daily attempts
+  // alongside the expiry (worker/index.ts, handleSession). The schema is
+  // strict, so omitting the field here rejects every real session response and
+  // no AI feature can ever start. Nothing else caught it: the Worker tests
+  // never run the browser validator, and the E2E suite forces AI_ENABLED=false.
+  it("accepts the exact session payload the Worker returns", () => {
+    const workerResponse = {
+      expiresAt: "2026-07-31T01:02:03.000Z",
+      remainingDailyAttempts: 5,
+    };
+    expect(validateAISessionData(workerResponse)).toEqual(workerResponse);
+  });
+
+  it("still rejects an unknown session field", () => {
+    expect(() =>
+      validateAISessionData({
+        expiresAt: "2026-07-31T01:02:03.000Z",
+        unexpected: "value",
+      }),
+    ).toThrowError(
+      expect.objectContaining({ task: "session", reason: "schema" }),
+    );
+  });
+
   it("validates session output independently of drafting tasks", () => {
     expect(
       validateAISessionData({ expiresAt: "2026-07-31T01:02:03.000Z" }),
