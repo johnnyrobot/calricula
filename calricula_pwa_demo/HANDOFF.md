@@ -11,9 +11,11 @@ verified in production.
 
 The demo implementation and the six known security remediations are committed
 on a clean release branch. The application is **not ready to be declared
-deployed or production-verified**. The mandatory security diff scan did not
-start because the Codex Security setup window timed out waiting for a human to
-press **Start scan**. A new full standard scan, clean release evidence,
+deployed or production-verified**. The mandatory security diff scan is
+**running as of 2026-08-04** over `b446c76..f0c5854`; it had previously failed
+to start when the Codex Security setup window timed out waiting for a human to
+press **Start scan**. Its result is not yet recorded. A new full standard scan,
+clean release evidence,
 Cloudflare bootstrap, Turnstile configuration, live model qualification,
 AI-enabled deployment, production browser checks, Lighthouse, offline checks,
 and the two live AI canaries are still outstanding.
@@ -24,8 +26,9 @@ closed — see `docs/handoffs/2026-08-02-architecture-deepening.md` and
 `docs/adr/`). It changed no release fact: every row in the table below has the
 same status it had on 2026-07-31. What it did change is the evidence figures and
 the Git range, both updated throughout this document. Two new risks are recorded
-that were not present on 2026-07-31: the security-scan range below is now stale
-(see "Security scan state"), and a long-standing `AppShell` test failure was
+that were not present on 2026-07-31: the security-scan range was stale and has
+since been re-targeted at `b446c76..f0c5854` (see "Security scan state"), and a
+long-standing `AppShell` test failure was
 diagnosed as a marginal-timeout defect and fixed on 2026-08-04 (see "Resolved
 local instability"); before that fix it would have failed a substantial share of
 release-gate attempts at step 5 of 14.
@@ -37,7 +40,7 @@ release-gate attempts at step 5 of 14.
 | `src/lib/**` provenance | Fixed | 45 files tracked (46 at `c83084f`; 44 at `274d428`; `ai/session-readiness.ts` and its test added by `5c0de4c`, `ai/eval-catalog-parity.test.ts` by the seven-route evaluation work, `ai/persistence.ts` and its test removed with the write-only artifact path); fresh-checkout package reproduction passed at `274d428` and not rerun since |
 | Aggregate local verification | Passed at `c83084f` | `npm run verify` exit 0 on 2026-08-03: 554 UI/repository tests in 75 files, 174 Worker tests, 7 Chromium smoke tests. Not a substitute for the release gate |
 | Local test stability | Restored | The long-standing `AppShell` "flake" was a marginal-timeout defect, diagnosed and fixed 2026-08-04; 0 failures in 10 consecutive coverage runs. See "Resolved local instability" |
-| Security diff scan | Blocked before start, and its range is now stale | Setup wait timed out; no new scan artifacts. Head has since moved `274d428` → `c83084f` |
+| Security diff scan | **Started 2026-08-04**, result not yet recorded | Running over `b446c76..f0c5854` (43 commits). The originally configured `b446c76..274d428` range was stale and was re-targeted before start. An automated review of the same range found no security findings and is summarised under "Automated pre-scan review" |
 | New complete standard scan | Not run | Required because historical scan omitted `src/lib/**` |
 | `.release-evidence/local-gate.json` | Missing | No bootstrap or full release seal exists |
 | Cloudflare bootstrap/deployment | Not performed | No release-owned hostname, version, deployment, or rollback receipt |
@@ -391,6 +394,36 @@ defect rather than against one. Nothing here indicated a production fault — th
 lazy boundary is deliberate architecture and the Chromium smoke suite never
 reproduced it.
 
+## Automated pre-scan review — 2026-08-04
+
+An automated security review was run over the same range immediately before the
+diff scan started. It **does not substitute** for the Codex Security scan and
+closes no finding; it is recorded so the scan has a prior, and so a discrepancy
+between the two is visible rather than silent.
+
+**Result: no security findings.** Verified negatives worth re-checking rather
+than re-deriving: the single `dangerouslySetInnerHTML` in the tree is a static
+literal (`src/app/page.tsx:21`); `rehype-raw` is absent from both `package.json`
+and `node_modules`, so model output rendered through `ReactMarkdown` is not an
+XSS sink; `worker/` contains no `console.*` at all; every `ApiError` message is
+a literal and `OutputValidationError` is replaced by a fixed string
+(`worker/index.ts:1936`); the built `out/sw.js` contains `connectivity` zero
+times and no `/api/**` precache entry.
+
+Three defects were found and fixed in the range now under scan:
+
+| Fix | Commit | Why it mattered |
+| --- | --- | --- |
+| Browser session validator rejected the Worker's own session payload | `a93b1f0` | Release blocker, not a security hole. `validateAISessionData` threw on every session response, so **no AI feature could start** in a real deployment. Fails closed. Nothing caught it: the Worker suite never ran the browser validator, and E2E forces `AI_ENABLED=false` |
+| Three spawn sites forwarded raw `process.env` to third-party children | `f0c5854` | Defence in depth. Not exploitable in the guarded path, but contradicted the stated `childEnvironment()` invariant |
+| Sealed plaintext secrets could outlive a throw | `f0c5854` | Defence in depth. Now lifetime-scoped by `withSealedReleaseSecrets` so the ordering mistake is unrepresentable |
+
+Two sub-threshold observations were deliberately **not** filed and remain open
+by choice: `script-src 'unsafe-inline'` in `public/_headers` (needed for the one
+inline service-worker registration; no injection sink exists), and
+`secret-scan.mjs` detecting only `NAME="value"` assignments and `sk-or-v1-`
+keys. Both are hardening, and the scan may reasonably disagree.
+
 ## Security scan state
 
 Historical completed scan:
@@ -412,14 +445,18 @@ Pending remediation diff scan:
   only demo changes.
 - Base: `b446c760f89f4e5efd13f2db1540984f8cfa59bc`
 - Head **as configured on 2026-07-31**: `274d42813447b719d7f3dc82ab968d24349ea3a2`
-- **That configured range is stale.** Re-target the pending scan at
-  **`b446c76..4751437`** — 41 commits — before pressing **Start scan**. Scanning
-  the configured range would leave the architecture review, the seven-route AI
-  evaluation work, the AI artifact removal, and the E2E fixes unreviewed.
-- Head at the 2026-08-04 reconcile:
-  `475143757ff92d83886d41b34ba1b81f81b7bdc2`. If further commits land before
-  the scan runs, re-target again at the head of the day; the base
+- **That configured range is stale.** The range under scan is
+  **`b446c76..f0c5854`** — 43 commits. Scanning the originally configured range
+  would have left the architecture review, the seven-route AI evaluation work,
+  the AI artifact removal, and the E2E fixes unreviewed.
+- Head of the scanned range:
+  `f0c5854` (`harden: scrub every spawned child's environment and scope sealed
+  secrets`), the last commit carrying code as of 2026-08-04. Any commit after it
+  is documentation only and changes no scanned behaviour; if further **code**
+  lands before the scan finishes, re-target at the head of the day. The base
   (`b446c76`) never moves.
+- **Scan started 2026-08-04.** Result not yet recorded here — this row stays
+  open until the report exists.
 - Areas added since the range was last configured, and worth naming in the
   scan's attention list: the OpenRouter evaluation path in `scripts/` now issues
   up to 28 live provider requests under a maintainer credential
@@ -427,7 +464,11 @@ Pending remediation diff scan:
   artifact write path was removed from the repository and contracts; and the AI
   error surface now renders an error code and request ID to the user
   (`src/components/ai/ErrorDiagnostics.tsx`) — confirm it leaks no upstream
-  message, prompt, or model output.
+  message, prompt, or model output. Newest in the range: every spawned child's
+  environment now goes through `childEnvironment()` (no `env: process.env`
+  spawn site remains), and the plaintext sealed-secrets copy in
+  `release-deploy.mjs` is lifetime-scoped by `withSealedReleaseSecrets` so a
+  throw cannot leave it on disk.
 - Setup validated, but `await_codex_security_scan_start` timed out after 840
   seconds because **Start scan** was not pressed.
 - No scan ID, artifact directory, preflight, goal, phase progress, canonical
