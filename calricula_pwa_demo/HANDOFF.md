@@ -798,6 +798,7 @@ the exact final URL and Cloudflare version:
 | Architecture and operator workflow | `README.md`, `AGENTS.md`, this handoff |
 | Design decisions | `docs/adr/` (0001 AI session readiness, 0002 repository roles and test seam + its 2026-08-07 amendment, 0003 conventional hours), `CONTEXT.md` |
 | Prior handoffs | `docs/handoffs/` — 2026-08-02 nine-candidate architecture review, 2026-08-07 eight-candidate review |
+| Forward handoff | `docs/handoffs/2026-08-07-release-key-provisioning.md` — where every key goes and the dependency order the credentialed release must follow. Records the decision to drop the Codex Security scans, which supersedes the two scan rows in "Executive status" above; those rows are **not yet restated** |
 | Forward plan | `docs/plans/2026-08-04-public-beta-readiness.md` — the seven-route evaluation work; written before that work landed, so read its line references as of its own date |
 | Operational runbook | `docs/runbooks/ai-triage.md` — triaging AI-path failures once a deployment exists |
 | Static/export/PWA configuration | `next.config.ts`, `src/app/manifest.ts`, `scripts/build-pwa.mjs`, `scripts/validate-build.mjs`, `public/_headers` |
