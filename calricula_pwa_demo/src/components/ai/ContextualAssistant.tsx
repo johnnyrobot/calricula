@@ -9,16 +9,17 @@ import {
 
 import {
   curriculumRepository,
-  type CurriculumRepository,
+  type CurriculumReads,
 } from "../../lib/data";
 import type { EntityType } from "../../lib/domain";
 
 import { AIChatPanel } from "./AIChatPanel";
 
-type ContextRepository = Pick<
-  CurriculumRepository,
-  "getCourse" | "getProgram"
->;
+// Narrowed from the role rather than the 34-method union: both verbs are
+// reads, and naming the role is what ADR-0002 segmented the interface for.
+// Still one import, so this is not the split across two or three role imports
+// that ADR-0002's Alternative 6 rejected.
+type ContextRepository = Pick<CurriculumReads, "getCourse" | "getProgram">;
 
 export interface ContextualAIContext {
   context: Record<string, unknown>;

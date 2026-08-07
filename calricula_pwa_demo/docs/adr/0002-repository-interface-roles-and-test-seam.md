@@ -99,6 +99,46 @@ What the census did support, and what was done instead:
   `hooks.ts` invokes them as `curriculumRepository.subscribe.bind(...)`, with no paren
   after the name. Grep for the bare member, not the call.
 
+## Amendment — 2026-08-07
+
+The decision stands. This records where the text above stopped matching the code,
+and settles a question it left open.
+
+**Roles are a map, not a promise of adoption.** Five of the six have no importer
+outside `contracts.ts`; only `AIConversationPersistence` has one
+(`src/lib/ai/chat-persistence.ts`, which hand-rolled its own `Pick` before the
+roles existed). That is not a failure of the decision, but the decision as
+written invites the reading that adoption was expected. It was not. The stated
+benefit — *"callers learn the role they need, not 33 names"* — is delivered by
+reading `contracts.ts`, which a segmented interface makes possible and a flat
+34-method union does not. A role with no importer still earns its place by
+telling a reader which verbs belong together and which caller they are for.
+They were not deleted for that reason.
+
+**Alternative 6 is about arity, not vocabulary.** It rejected splitting a screen
+across *two or three* role imports, fragmenting the call site. It does not
+forbid a caller naming one role. `ContextualAssistant.tsx` was narrowing
+`Pick<CurriculumRepository, "getCourse" | "getProgram">` from the whole union;
+it now narrows from `CurriculumReads`, where both verbs live. Still one import,
+so the objection does not reach it.
+
+**Corrections to the text above.**
+
+- *"33 methods"* (§ Decision 1, § Consequences) was 32 by the time it was
+  checked, and is **34** now: `2e7809f` added `listAllCourses` and
+  `listAllPrograms`. The count was never load-bearing; the shape was. Treat the
+  numbers above as the census of that day, not a current figure.
+- *`AIArtifactPersistence`* (§ Decision 2) never shipped. `0c3972c` settled it:
+  the role is `AIConversationPersistence`, and `AIPersistence` survives only as
+  an alias for it with no reference anywhere.
+- *"`saveAIArtifact` is now write-only … worth an explicit decision"*
+  (§ Consequences) has been decided in the direction that entry pointed at.
+  There is no artifact read, write, or delete verb; `repository.test.ts` asserts
+  all three are absent. The `aiArtifacts` Dexie table remains declared, and is
+  still swept, backed up and cleared by `repository.ts`, because dropping it is a
+  schema migration and existing installs may hold rows —
+  `contracts.ts` carries that reasoning next to the interface.
+
 ## References
 
 - `src/lib/data/contracts.ts` — the six roles and the union
