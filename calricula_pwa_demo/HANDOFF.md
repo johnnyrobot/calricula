@@ -11,14 +11,20 @@ verified in production.
 
 The demo implementation and the six known security remediations are committed
 on a clean release branch. The application is **not ready to be declared
-deployed or production-verified**. The mandatory security diff scan is
-**running as of 2026-08-04** over `b446c76..f0c5854`; it had previously failed
-to start when the Codex Security setup window timed out waiting for a human to
-press **Start scan**. Its result is not yet recorded. A new full standard scan,
-clean release evidence,
+deployed or production-verified**. The mandatory security diff scan over
+`b446c76..f0c5854` **reported clean**. Code has landed since that head, so a
+further diff scan over `f0c5854..HEAD` is owed before release. A new full
+standard scan, clean release evidence,
 Cloudflare bootstrap, Turnstile configuration, live model qualification,
 AI-enabled deployment, production browser checks, Lighthouse, offline checks,
 and the two live AI canaries are still outstanding.
+
+**What the clean scan does not establish.** It covered a range in which two of
+fourteen spawn sites passed the unscrubbed parent environment to a child, and
+did not report them — `run-lighthouse.mjs` to headless Chrome and
+`release-inputs.mjs` to `git`. Both are fixed by `e683986`. A clean diff scan
+is therefore evidence about the findings it looked for, not proof that a stated
+invariant holds; check invariants against the code.
 
 **Reconcile note, 2026-08-03.** Since the 2026-07-31 handoff, 22 commits of
 internal architecture work landed on this branch (a nine-candidate review, now
@@ -40,7 +46,8 @@ release-gate attempts at step 5 of 14.
 | `src/lib/**` provenance | Fixed | 45 files tracked (46 at `c83084f`; 44 at `274d428`; `ai/session-readiness.ts` and its test added by `5c0de4c`, `ai/eval-catalog-parity.test.ts` by the seven-route evaluation work, `ai/persistence.ts` and its test removed with the write-only artifact path); fresh-checkout package reproduction passed at `274d428` and not rerun since |
 | Aggregate local verification | Passed at `c83084f` | `npm run verify` exit 0 on 2026-08-03: 554 UI/repository tests in 75 files, 174 Worker tests, 7 Chromium smoke tests. Not a substitute for the release gate |
 | Local test stability | Restored | The long-standing `AppShell` "flake" was a marginal-timeout defect, diagnosed and fixed 2026-08-04; 0 failures in 10 consecutive coverage runs. See "Resolved local instability" |
-| Security diff scan | **Started 2026-08-04**, result not yet recorded | Running over `b446c76..f0c5854` (43 commits). The originally configured `b446c76..274d428` range was stale and was re-targeted before start. An automated review of the same range found no security findings and is summarised under "Automated pre-scan review" |
+| Security diff scan | **Reported clean** over `b446c76..f0c5854` | 43 commits. The originally configured `b446c76..274d428` range was stale and was re-targeted before start. It did **not** catch the two unscrubbed spawn sites fixed by `e683986` — see "What the clean scan does not establish" |
+| Diff scan of work after `f0c5854` | **Owed** | `460aeeb`, `4837dce`, `e683986` and later architecture work are unscanned. One batch scan at a stable head, per the re-target procedure below |
 | New complete standard scan | Not run | Required because historical scan omitted `src/lib/**` |
 | `.release-evidence/local-gate.json` | Missing | No bootstrap or full release seal exists |
 | Cloudflare bootstrap/deployment | Not performed | No release-owned hostname, version, deployment, or rollback receipt |
@@ -455,26 +462,36 @@ Pending remediation diff scan:
   is documentation only and changes no scanned behaviour; if further **code**
   lands before the scan finishes, re-target at the head of the day. The base
   (`b446c76`) never moves.
-- **Scan started 2026-08-04.** Result not yet recorded here — this row stays
-  open until the report exists.
-- Areas added since the range was last configured, and worth naming in the
-  scan's attention list: the OpenRouter evaluation path in `scripts/` now issues
+- **Scan reported clean.** It closes the six historical findings, subject to the
+  limit recorded below.
+- Areas named in that scan's attention list: the OpenRouter evaluation path in
+  `scripts/` issues
   up to 28 live provider requests under a maintainer credential
   (`ai-evaluate.mjs`, `ai-eval-fixtures.mjs`, `ai-eval-samples.mjs`); the AI
   artifact write path was removed from the repository and contracts; and the AI
-  error surface now renders an error code and request ID to the user
+  error surface renders an error code and request ID to the user
   (`src/components/ai/ErrorDiagnostics.tsx`) — confirm it leaks no upstream
-  message, prompt, or model output. Newest in the range: every spawned child's
-  environment now goes through `childEnvironment()` (no `env: process.env`
-  spawn site remains), and the plaintext sealed-secrets copy in
-  `release-deploy.mjs` is lifetime-scoped by `withSealedReleaseSecrets` so a
-  throw cannot leave it on disk.
-- Setup validated, but `await_codex_security_scan_start` timed out after 840
-  seconds because **Start scan** was not pressed.
-- No scan ID, artifact directory, preflight, goal, phase progress, canonical
-  artifacts, or completion receipt exists for this pending scan.
+  message, prompt, or model output.
+- **Correction, 2026-08-07.** This section previously stated that every spawned
+  child's environment goes through `childEnvironment()` and that no
+  `env: process.env` spawn site remained. That was false when written and
+  remained false through `f0c5854`. `run-lighthouse.mjs` spread the raw parent
+  environment into the Lighthouse child that launches headless Chrome, and
+  `release-inputs.mjs` called `execFile('git', …)` with no `env` key at all,
+  inheriting everything. The clean scan did not report either. Both are fixed
+  and unit-tested by `e683986`; the claim is true as of that commit and is now
+  asserted by tests rather than by prose.
 
-Resume by reopening that workspace, pressing **Start scan**, loading the
+The remaining diff scan, owed over `f0c5854..HEAD`:
+
+- Base: `f0c5854`. Head: the head of the day when the scan starts — architecture
+  work is landing, so re-target rather than assuming a head.
+- Attention list so far: the compliance call-site collapse (`460aeeb`) changed
+  the value persisted as `totalStudentHours`; `e683986` changed what two release
+  children receive in their environment.
+- Run one batch scan at a stable head rather than one per commit.
+
+Start it by opening the workspace, pressing **Start scan**, loading the
 authoritative scan context, running the `security_diff_scan` capability
 preflight, and following the `codex-security:security-diff-scan` workflow
 through threat model, discovery, validation, attack-path analysis, reporting,
