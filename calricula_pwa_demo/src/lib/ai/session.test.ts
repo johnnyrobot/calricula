@@ -1,8 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const INSTALLATION_ID_KEY = "calricula.installation-id.v1";
-const SESSION_READY_KEY = "calricula.ai-session-ready.v1";
-const DISCLOSURE_ACKNOWLEDGED_KEY = "calricula.ai-disclosure.v1";
+import { unsafeSessionStorageKeysForTests } from "./session";
+
+// Read from the module rather than re-declared here. Three copied literals
+// asserted on raw window storage with nothing to grep for; this is the same
+// bypass, named — see ADR-0002 on `unsafeDatabaseForTests()`.
+const {
+  installationId: INSTALLATION_ID_KEY,
+  sessionReady: SESSION_READY_KEY,
+  disclosureAcknowledged: DISCLOSURE_ACKNOWLEDGED_KEY,
+} = unsafeSessionStorageKeysForTests;
 
 type SessionModule = typeof import("./session");
 type StorageName = "localStorage" | "sessionStorage";

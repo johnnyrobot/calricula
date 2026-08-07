@@ -28,12 +28,10 @@ import {
   type AIOutputIssue,
   type AIResult,
   type AITask,
-} from "../../lib/ai";
-import {
   readSessionReadiness,
   resyncSessionReadiness,
   subscribeSessionReadiness,
-} from "../../lib/ai/session-readiness";
+} from "../../lib/ai";
 
 import { AIConsentGate } from "./AIConsentGate";
 import { ErrorDiagnostics } from "./ErrorDiagnostics";

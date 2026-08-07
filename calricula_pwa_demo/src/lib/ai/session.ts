@@ -122,3 +122,16 @@ export async function establishAISession(
   markAISessionReady();
   return result;
 }
+
+/**
+ * The storage keys this module owns, for tests that assert on raw `window`
+ * storage. Named the way `unsafeDatabaseForTests()` is named in ADR-0002: the
+ * name is the decision — reaching past the module is possible, marked and
+ * greppable. `session.test.ts` used to re-declare these three literals, which
+ * is the same bypass with nothing to grep for.
+ */
+export const unsafeSessionStorageKeysForTests = Object.freeze({
+  installationId: INSTALLATION_ID_KEY,
+  sessionReady: SESSION_READY_KEY,
+  disclosureAcknowledged: DISCLOSURE_ACKNOWLEDGED_KEY,
+});

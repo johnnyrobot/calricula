@@ -19,12 +19,10 @@ import {
   type AIChatPersistence,
   type AIChatScope,
   type AIHistoryMessage,
-} from "../../lib/ai";
-import {
   readSessionReadiness,
   resyncSessionReadiness,
   subscribeSessionReadiness,
-} from "../../lib/ai/session-readiness";
+} from "../../lib/ai";
 import type { EntityType } from "../../lib/domain";
 
 import { AIConsentGate } from "./AIConsentGate";

@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   AI_COMPLIANCE_SOURCE_PACK,
-  markAISessionReady,
 } from "../../lib/ai";
+// Deep import on purpose: the raw session marker is not part of the
+// package surface, so reaching it is visible here and greppable.
+import { markAISessionReady } from "../../lib/ai/session";
 
 import {
   buildCourseAITaskInput,

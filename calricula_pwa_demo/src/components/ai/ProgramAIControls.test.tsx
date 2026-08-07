@@ -6,7 +6,9 @@ import {
   normalizeProgramNarrative,
   ProgramAIControls,
 } from "./ProgramAIControls";
-import { markAISessionReady } from "../../lib/ai";
+// Deep import on purpose: the raw session marker is not part of the
+// package surface, so reaching it is visible here and greppable.
+import { markAISessionReady } from "../../lib/ai/session";
 
 const aiUiState = vi.hoisted(() => ({ online: true }));
 

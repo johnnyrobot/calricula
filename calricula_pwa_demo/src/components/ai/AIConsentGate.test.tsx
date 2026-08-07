@@ -28,22 +28,16 @@ vi.mock("../../lib/ai", () => {
       aiState.acknowledgeAIDisclosure();
       aiState.listeners.forEach((listener) => listener());
     },
-    hasAcknowledgedAIDisclosure: () => aiState.acknowledged,
-    subscribeAIDisclosureStatus: (listener: () => void) => {
+    // Readiness reaches the component through the same barrel now, so this is
+    // one mock instead of two.
+    readSessionReadiness: () =>
+      aiState.acknowledged ? "needs-challenge" : "needs-disclosure",
+    subscribeSessionReadiness: (listener: () => void) => {
       aiState.listeners.add(listener);
       return () => aiState.listeners.delete(listener);
     },
   };
 });
-
-vi.mock("../../lib/ai/session-readiness", () => ({
-  readSessionReadiness: () =>
-    aiState.acknowledged ? "needs-challenge" : "needs-disclosure",
-  subscribeSessionReadiness: (listener: () => void) => {
-    aiState.listeners.add(listener);
-    return () => aiState.listeners.delete(listener);
-  },
-}));
 
 vi.mock("./useOnlineStatus", () => ({
   useOnlineStatus: () => connection.online,

@@ -12,11 +12,9 @@ import {
   acknowledgeAIDisclosure,
   AIRequestError,
   establishAISession,
-} from "../../lib/ai";
-import {
   readSessionReadiness,
   subscribeSessionReadiness,
-} from "../../lib/ai/session-readiness";
+} from "../../lib/ai";
 
 import { TurnstileWidget } from "./TurnstileWidget";
 import { useOnlineStatus } from "./useOnlineStatus";

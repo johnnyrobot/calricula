@@ -2,9 +2,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
-  clearAISessionMarker,
-  markAISessionReady,
 } from "../../lib/ai";
+// Deep import on purpose: the raw session marker is not part of the
+// package surface, so reaching it is visible here and greppable.
+import { clearAISessionMarker, markAISessionReady } from "../../lib/ai/session";
 import type { AIChatPersistence } from "../../lib/ai";
 
 import { AIChatPanel } from "./AIChatPanel";
