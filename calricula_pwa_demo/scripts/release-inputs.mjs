@@ -33,6 +33,7 @@ export const RELEASE_INPUT_DIRECTORIES = [
   'e2e',
   'public',
   'scripts',
+  'shared',
   'src',
   'worker',
 ];

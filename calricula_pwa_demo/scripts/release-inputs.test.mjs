@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import {
   mkdir,
+  readdir,
   mkdtemp,
   rename,
   rm,
@@ -16,6 +17,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { CHILD_SECRET_KEYS } from './child-environment.mjs';
 import {
   ReleaseInputError,
+  RELEASE_INPUT_DIRECTORIES,
   RELEASE_INPUT_ROOT_FILES,
   assertTrackedReleaseInputs,
   collectReleaseInputFiles,
@@ -28,6 +30,43 @@ async function git(cwd, ...args) {
   await execute('git', args, { cwd });
 }
 
+/**
+ * Directories at the demo root that deliberately are not release inputs.
+ * Everything else holding source has to be enumerated, so adding a new one —
+ * `shared/` was added and missed, which would have made
+ * `verify-fresh-checkout` rebuild a tree with unresolved imports — fails here
+ * instead of at release time.
+ *
+ * `tests/` is excluded because Worker unit tests are not a build input. That is
+ * a deliberate exclusion, not an oversight: it does mean a change under
+ * `tests/` leaves the source fingerprint unchanged.
+ */
+const NON_INPUT_DIRECTORIES = new Set([
+  'coverage',
+  'docs',
+  'node_modules',
+  'out',
+  'playwright-report',
+  'test-results',
+  'tests',
+]);
+
+const SOURCE_EXTENSIONS = new Set(['.ts', '.tsx', '.mjs', '.js']);
+
+async function holdsSource(directory) {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) continue;
+    const absolutePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (await holdsSource(absolutePath)) return true;
+    } else if (SOURCE_EXTENSIONS.has(path.extname(entry.name))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 async function createProject({ nested = true } = {}) {
   const root = await mkdtemp(
     path.join(os.tmpdir(), 'calricula-release-inputs-'),
@@ -35,7 +74,14 @@ async function createProject({ nested = true } = {}) {
   directories.push(root);
   const cwd = nested ? path.join(root, 'demo') : root;
   await mkdir(cwd, { recursive: true });
-  for (const directory of ['e2e', 'public', 'scripts', 'src/lib', 'worker']) {
+  for (const directory of [
+    'e2e',
+    'public',
+    'scripts',
+    'shared',
+    'src/lib',
+    'worker',
+  ]) {
     await mkdir(path.join(cwd, directory), { recursive: true });
     await writeFile(path.join(cwd, directory, '.keep'), directory);
   }
@@ -156,5 +202,27 @@ describe('release input provenance', () => {
     await expect(assertTrackedReleaseInputs({ cwd })).rejects.toThrow(
       'worker/.KEEP',
     );
+  });
+});
+
+describe('release input directory coverage', () => {
+  it('enumerates every directory at the demo root that ships source', async () => {
+    const demoRoot = path.resolve(import.meta.dirname, '..');
+    const entries = await readdir(demoRoot, { withFileTypes: true });
+    const shipsSource = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      if (entry.name.startsWith('.')) continue;
+      if (NON_INPUT_DIRECTORIES.has(entry.name)) continue;
+      if (await holdsSource(path.join(demoRoot, entry.name))) {
+        shipsSource.push(entry.name);
+      }
+    }
+    // A subset check, not equality: `public/` is a release input that ships
+    // static assets and no source, so it legitimately never appears here.
+    const unenumerated = shipsSource.filter(
+      (name) => !RELEASE_INPUT_DIRECTORIES.includes(name),
+    );
+    expect(unenumerated).toEqual([]);
   });
 });
