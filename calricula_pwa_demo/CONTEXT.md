@@ -23,6 +23,9 @@ not a generic synonym.
 - **54-Hour Rule** (Title 5 §55002.5). One unit is 48 minimum / 54 conventional hours of
   student work across an 18-week semester. `src/lib/compliance/hours.ts` is the only
   implementation; `golden-parity.test.ts` pins it to the parent Python service.
+  Compliance is evaluated against the **48-hour minimum only**. The 54 is a district
+  convention for an 18-week term: it may be displayed, but it is never a pass/fail
+  comparison, and UI code never re-derives any of it. See [ADR-0003](docs/adr/0003-conventional-hours-are-a-reference-not-a-verdict.md).
 - **TOP code** — Taxonomy of Programs code, the statewide discipline classifier.
   **CB code** — the 27 Title 5/PCAH data-element codes (CB00–CB26) attached to a course.
   They are distinct code systems; don't blur them into "codes".
