@@ -10,6 +10,7 @@ import {
   AI_COMPLIANCE_SOURCE_PACK,
   AI_TOP_CODE_CATALOG,
 } from "../../../shared/ai-catalog";
+import { AI_OUTPUT_LIMITS } from "../../../shared/ai-limits";
 
 import type { AITask } from "./types";
 
@@ -35,31 +36,35 @@ export const AI_HISTORY_CONTEXT_LIMIT = 10;
 const complianceSourceIds = AI_COMPLIANCE_SOURCE_IDS;
 
 export const ChatOutputSchema = z
-  .object({ message: trimmedText(12_000) })
+  .object({ message: trimmedText(AI_OUTPUT_LIMITS.chat.message) })
   .strict();
 
 export const CatalogDescriptionOutputSchema = z
-  .object({ description: trimmedText(1_600) })
+  .object({ description: trimmedText(AI_OUTPUT_LIMITS["catalog-description"].description) })
   .strict();
 
 export const SLOOutputSchema = z
   .object({
     slos: z
-      .array(trimmedText(350))
-      .min(1)
-      .max(6)
+      .array(trimmedText(AI_OUTPUT_LIMITS.slos.slo))
+      .min(AI_OUTPUT_LIMITS.slos.min)
+      .max(AI_OUTPUT_LIMITS.slos.max)
       .refine(uniqueStrings, "Student learning outcomes must be unique."),
   })
   .strict();
 
 export const ContentOutlineTopicSchema = z
   .object({
-    sequence: z.number().int().min(1).max(20),
-    topic: trimmedText(500),
-    contactHours: z.number().finite().positive().max(500),
+    sequence: z.number().int().min(1).max(AI_OUTPUT_LIMITS["content-outline"].maxTopics),
+    topic: trimmedText(AI_OUTPUT_LIMITS["content-outline"].topic),
+    contactHours: z
+      .number()
+      .finite()
+      .positive()
+      .max(AI_OUTPUT_LIMITS["content-outline"].contactHours),
     relatedSloNumbers: z
-      .array(z.number().int().min(1).max(6))
-      .max(6)
+      .array(z.number().int().min(1).max(AI_OUTPUT_LIMITS["content-outline"].maxSloNumber))
+      .max(AI_OUTPUT_LIMITS["content-outline"].maxRelatedSlos)
       .refine(uniqueNumbers, "Related SLO numbers must be unique."),
   })
   .strict();
@@ -69,7 +74,7 @@ export const ContentOutlineOutputSchema = z
     topics: z
       .array(ContentOutlineTopicSchema)
       .min(1)
-      .max(20)
+      .max(AI_OUTPUT_LIMITS["content-outline"].maxTopics)
       .superRefine((topics, context) => {
         topics.forEach((topic, index) => {
           if (topic.sequence !== index + 1) {
@@ -88,8 +93,8 @@ export const ContentOutlineOutputSchema = z
 const TopCodeSuggestionSchema = z
   .object({
     code: z.string().regex(/^\d{4}\.\d{2}$/),
-    title: trimmedText(200),
-    rationale: trimmedText(700),
+    title: trimmedText(AI_OUTPUT_LIMITS["top-code"].title),
+    rationale: trimmedText(AI_OUTPUT_LIMITS["top-code"].rationale),
     confidence: z.number().finite().min(0).max(1),
   })
   .strict();
@@ -98,8 +103,8 @@ export const TopCodeOutputSchema = z
   .object({
     suggestions: z
       .array(TopCodeSuggestionSchema)
-      .min(1)
-      .max(3)
+      .min(AI_OUTPUT_LIMITS["top-code"].min)
+      .max(AI_OUTPUT_LIMITS["top-code"].max)
       .refine(
         (suggestions) =>
           uniqueStrings(suggestions.map((suggestion) => suggestion.code)),
@@ -110,10 +115,15 @@ export const TopCodeOutputSchema = z
 
 export const ProgramNarrativeOutputSchema = z
   .object({
-    goalsAndObjectives: trimmedText(3_000),
-    catalogDescription: trimmedText(2_000),
-    requirementsJustification: trimmedText(3_000),
-    laborMarketAnalysis: z.string().trim().max(3_000),
+    goalsAndObjectives: trimmedText(AI_OUTPUT_LIMITS["program-narrative"].goalsAndObjectives),
+    catalogDescription: trimmedText(AI_OUTPUT_LIMITS["program-narrative"].catalogDescription),
+    requirementsJustification: trimmedText(
+      AI_OUTPUT_LIMITS["program-narrative"].requirementsJustification,
+    ),
+    laborMarketAnalysis: z
+      .string()
+      .trim()
+      .max(AI_OUTPUT_LIMITS["program-narrative"].laborMarketAnalysis),
   })
   .strict();
 
@@ -127,15 +137,21 @@ const ComplianceCitationSchema = z
       message: "Compliance source URLs must use HTTPS.",
     }),
     checksum: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-    supports: trimmedText(500),
+    supports: trimmedText(AI_OUTPUT_LIMITS["compliance-explanation"].supports),
   })
   .strict();
 
 export const ComplianceExplanationOutputSchema = z
   .object({
-    explanation: trimmedText(3_000),
-    recommendations: z.array(trimmedText(600)).min(1).max(8),
-    citations: z.array(ComplianceCitationSchema).min(1).max(8),
+    explanation: trimmedText(AI_OUTPUT_LIMITS["compliance-explanation"].explanation),
+    recommendations: z
+      .array(trimmedText(AI_OUTPUT_LIMITS["compliance-explanation"].recommendation))
+      .min(AI_OUTPUT_LIMITS["compliance-explanation"].min)
+      .max(AI_OUTPUT_LIMITS["compliance-explanation"].max),
+    citations: z
+      .array(ComplianceCitationSchema)
+      .min(AI_OUTPUT_LIMITS["compliance-explanation"].min)
+      .max(AI_OUTPUT_LIMITS["compliance-explanation"].max),
     humanReviewRequired: z.literal(true),
   })
   .strict();

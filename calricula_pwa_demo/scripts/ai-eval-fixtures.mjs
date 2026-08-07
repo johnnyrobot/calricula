@@ -25,6 +25,42 @@
  * `src/lib/ai/eval-catalog-parity.test.ts` fails if they drift apart.
  */
 
+/**
+ * The output bounds the rubric holds a candidate model to.
+ *
+ * This duplicates `shared/ai-limits.ts` for the same reason the catalogs
+ * below duplicate `shared/ai-catalog.ts`: `ai:evaluate` runs this file under
+ * plain Node, which cannot import TypeScript.
+ * `src/lib/ai/eval-catalog-parity.test.ts` fails if the two drift apart, so
+ * a rubric that would qualify a model the Worker then rejects cannot ship.
+ */
+export const EVAL_OUTPUT_LIMITS = Object.freeze({
+  chat: { message: 12_000 },
+  'catalog-description': { description: 1600 },
+  slos: { slo: 350, min: 1, max: 6 },
+  'content-outline': {
+    topic: 500,
+    contactHours: 500,
+    maxTopics: 20,
+    maxRelatedSlos: 6,
+    maxSloNumber: 6,
+  },
+  'top-code': { min: 1, max: 3, title: 200, rationale: 700 },
+  'program-narrative': {
+    goalsAndObjectives: 3000,
+    catalogDescription: 2000,
+    requirementsJustification: 3000,
+    laborMarketAnalysis: 3000,
+  },
+  'compliance-explanation': {
+    explanation: 3000,
+    recommendation: 600,
+    supports: 500,
+    min: 1,
+    max: 8,
+  },
+});
+
 export const EVAL_TOP_CODE_CATALOG = Object.freeze({
   '1701.00': 'Mathematics, General',
   '1501.00': 'English',
@@ -198,7 +234,7 @@ const CHAT_FIXTURE = {
       id: 'non-empty',
       workerEnforced: true,
       run(value) {
-        return isBoundedString(value, 12_000);
+        return isBoundedString(value, EVAL_OUTPUT_LIMITS.chat.message);
       },
     },
     {
@@ -250,7 +286,7 @@ const CATALOG_DESCRIPTION_FIXTURE = {
       description: {
         type: 'string',
         minLength: 1,
-        maxLength: 1600,
+        maxLength: EVAL_OUTPUT_LIMITS['catalog-description'].description,
       },
     },
     required: ['description'],
@@ -262,15 +298,15 @@ const CATALOG_DESCRIPTION_FIXTURE = {
       run(value) {
         return (
           hasExactKeys(value, ['description']) &&
-          isBoundedString(value.description, 1600)
+          isBoundedString(value.description, EVAL_OUTPUT_LIMITS['catalog-description'].description)
         );
       },
     },
     {
-      id: 'length-within-1600',
+      id: `length-within-${EVAL_OUTPUT_LIMITS['catalog-description'].description}`,
       workerEnforced: true,
       run(value) {
-        return isBoundedString(value.description, 1600);
+        return isBoundedString(value.description, EVAL_OUTPUT_LIMITS['catalog-description'].description);
       },
     },
     {
@@ -313,12 +349,12 @@ const SLOS_FIXTURE = {
     properties: {
       slos: {
         type: 'array',
-        minItems: 1,
-        maxItems: 6,
+        minItems: EVAL_OUTPUT_LIMITS.slos.min,
+        maxItems: EVAL_OUTPUT_LIMITS.slos.max,
         items: {
           type: 'string',
           minLength: 1,
-          maxLength: 350,
+          maxLength: EVAL_OUTPUT_LIMITS.slos.slo,
           pattern: ACTION_VERB_PATTERN,
         },
       },
@@ -341,10 +377,10 @@ const SLOS_FIXTURE = {
       },
     },
     {
-      id: 'length-within-350',
+      id: `length-within-${EVAL_OUTPUT_LIMITS.slos.slo}`,
       workerEnforced: true,
       run(value) {
-        return value.slos.every((slo) => isBoundedString(slo, 350));
+        return value.slos.every((slo) => isBoundedString(slo, EVAL_OUTPUT_LIMITS.slos.slo));
       },
     },
     {
@@ -392,7 +428,7 @@ const CONTENT_OUTLINE_FIXTURE = {
       topics: {
         type: 'array',
         minItems: 1,
-        maxItems: 20,
+        maxItems: EVAL_OUTPUT_LIMITS['content-outline'].maxTopics,
         items: {
           type: 'object',
           additionalProperties: false,
@@ -400,26 +436,26 @@ const CONTENT_OUTLINE_FIXTURE = {
             sequence: {
               type: 'integer',
               minimum: 1,
-              maximum: 20,
+              maximum: EVAL_OUTPUT_LIMITS['content-outline'].maxTopics,
             },
             topic: {
               type: 'string',
               minLength: 1,
-              maxLength: 500,
+              maxLength: EVAL_OUTPUT_LIMITS['content-outline'].topic,
             },
             contactHours: {
               type: 'number',
               exclusiveMinimum: 0,
-              maximum: 500,
+              maximum: EVAL_OUTPUT_LIMITS['content-outline'].contactHours,
             },
             relatedSloNumbers: {
               type: 'array',
-              maxItems: 6,
+              maxItems: EVAL_OUTPUT_LIMITS['content-outline'].maxRelatedSlos,
               uniqueItems: true,
               items: {
                 type: 'integer',
                 minimum: 1,
-                maximum: 6,
+                maximum: EVAL_OUTPUT_LIMITS['content-outline'].maxSloNumber,
               },
             },
           },
@@ -458,7 +494,7 @@ const CONTENT_OUTLINE_FIXTURE = {
               'topic',
               'contactHours',
               'relatedSloNumbers',
-            ]) && isBoundedString(topic.topic, 500),
+            ]) && isBoundedString(topic.topic, EVAL_OUTPUT_LIMITS['content-outline'].topic),
         );
       },
     },
@@ -483,7 +519,7 @@ const CONTENT_OUTLINE_FIXTURE = {
             typeof topic.contactHours === 'number' &&
             Number.isFinite(topic.contactHours) &&
             topic.contactHours > 0 &&
-            topic.contactHours <= 500,
+            topic.contactHours <= EVAL_OUTPUT_LIMITS['content-outline'].contactHours,
         );
       },
     },
@@ -568,8 +604,8 @@ const TOP_CODE_FIXTURE = {
     properties: {
       suggestions: {
         type: 'array',
-        minItems: 1,
-        maxItems: 3,
+        minItems: EVAL_OUTPUT_LIMITS['top-code'].min,
+        maxItems: EVAL_OUTPUT_LIMITS['top-code'].max,
         items: {
           type: 'object',
           additionalProperties: false,
@@ -581,12 +617,12 @@ const TOP_CODE_FIXTURE = {
             title: {
               type: 'string',
               minLength: 1,
-              maxLength: 200,
+              maxLength: EVAL_OUTPUT_LIMITS['top-code'].title,
             },
             rationale: {
               type: 'string',
               minLength: 1,
-              maxLength: 700,
+              maxLength: EVAL_OUTPUT_LIMITS['top-code'].rationale,
             },
             confidence: {
               type: 'number',
@@ -633,8 +669,8 @@ const TOP_CODE_FIXTURE = {
               'confidence',
             ]) &&
             isBoundedString(suggestion.code, 7) &&
-            isBoundedString(suggestion.title, 200) &&
-            isBoundedString(suggestion.rationale, 700),
+            isBoundedString(suggestion.title, EVAL_OUTPUT_LIMITS['top-code'].title) &&
+            isBoundedString(suggestion.rationale, EVAL_OUTPUT_LIMITS['top-code'].rationale),
         );
       },
     },
@@ -731,21 +767,21 @@ const PROGRAM_NARRATIVE_FIXTURE = {
       goalsAndObjectives: {
         type: 'string',
         minLength: 1,
-        maxLength: 3000,
+        maxLength: EVAL_OUTPUT_LIMITS['program-narrative'].goalsAndObjectives,
       },
       catalogDescription: {
         type: 'string',
         minLength: 1,
-        maxLength: 2000,
+        maxLength: EVAL_OUTPUT_LIMITS['program-narrative'].catalogDescription,
       },
       requirementsJustification: {
         type: 'string',
         minLength: 1,
-        maxLength: 3000,
+        maxLength: EVAL_OUTPUT_LIMITS['program-narrative'].requirementsJustification,
       },
       laborMarketAnalysis: {
         type: 'string',
-        maxLength: 3000,
+        maxLength: EVAL_OUTPUT_LIMITS['program-narrative'].laborMarketAnalysis,
       },
     },
     required: [
@@ -767,10 +803,10 @@ const PROGRAM_NARRATIVE_FIXTURE = {
             'requirementsJustification',
             'laborMarketAnalysis',
           ]) &&
-          isBoundedString(value.goalsAndObjectives, 3000) &&
-          isBoundedString(value.catalogDescription, 2000) &&
-          isBoundedString(value.requirementsJustification, 3000) &&
-          isBoundedString(value.laborMarketAnalysis, 3000, true)
+          isBoundedString(value.goalsAndObjectives, EVAL_OUTPUT_LIMITS['program-narrative'].goalsAndObjectives) &&
+          isBoundedString(value.catalogDescription, EVAL_OUTPUT_LIMITS['program-narrative'].catalogDescription) &&
+          isBoundedString(value.requirementsJustification, EVAL_OUTPUT_LIMITS['program-narrative'].requirementsJustification) &&
+          isBoundedString(value.laborMarketAnalysis, EVAL_OUTPUT_LIMITS['program-narrative'].laborMarketAnalysis, true)
         );
       },
     },
@@ -825,22 +861,22 @@ const COMPLIANCE_EXPLANATION_FIXTURE = {
       explanation: {
         type: 'string',
         minLength: 1,
-        maxLength: 3000,
+        maxLength: EVAL_OUTPUT_LIMITS['compliance-explanation'].explanation,
       },
       recommendations: {
         type: 'array',
-        minItems: 1,
-        maxItems: 8,
+        minItems: EVAL_OUTPUT_LIMITS['compliance-explanation'].min,
+        maxItems: EVAL_OUTPUT_LIMITS['compliance-explanation'].max,
         items: {
           type: 'string',
           minLength: 1,
-          maxLength: 600,
+          maxLength: EVAL_OUTPUT_LIMITS['compliance-explanation'].recommendation,
         },
       },
       citations: {
         type: 'array',
-        minItems: 1,
-        maxItems: 8,
+        minItems: EVAL_OUTPUT_LIMITS['compliance-explanation'].min,
+        maxItems: EVAL_OUTPUT_LIMITS['compliance-explanation'].max,
         items: {
           type: 'object',
           additionalProperties: false,
@@ -852,7 +888,7 @@ const COMPLIANCE_EXPLANATION_FIXTURE = {
             supports: {
               type: 'string',
               minLength: 1,
-              maxLength: 500,
+              maxLength: EVAL_OUTPUT_LIMITS['compliance-explanation'].supports,
             },
           },
           required: ['sourceId', 'supports'],
@@ -894,7 +930,7 @@ const COMPLIANCE_EXPLANATION_FIXTURE = {
       id: 'explanation-non-empty',
       workerEnforced: true,
       run(value) {
-        return isBoundedString(value.explanation, 3000);
+        return isBoundedString(value.explanation, EVAL_OUTPUT_LIMITS['compliance-explanation'].explanation);
       },
     },
     {
@@ -905,7 +941,7 @@ const COMPLIANCE_EXPLANATION_FIXTURE = {
           Array.isArray(value.recommendations) &&
           value.recommendations.length >= 1 &&
           value.recommendations.length <= 8 &&
-          value.recommendations.every((entry) => isBoundedString(entry, 600))
+          value.recommendations.every((entry) => isBoundedString(entry, EVAL_OUTPUT_LIMITS['compliance-explanation'].recommendation))
         );
       },
     },
@@ -928,7 +964,7 @@ const COMPLIANCE_EXPLANATION_FIXTURE = {
           (citation) =>
             hasExactKeys(citation, ['sourceId', 'supports']) &&
             isBoundedString(citation.sourceId, 80) &&
-            isBoundedString(citation.supports, 500),
+            isBoundedString(citation.supports, EVAL_OUTPUT_LIMITS['compliance-explanation'].supports),
         );
       },
     },

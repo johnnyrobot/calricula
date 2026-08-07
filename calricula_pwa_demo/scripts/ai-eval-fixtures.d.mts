@@ -55,6 +55,16 @@ export const EVAL_COMPLIANCE_SOURCE_PACK: Readonly<
   >
 >;
 
+/**
+ * Deliberately typed loosely rather than mirroring `AI_OUTPUT_LIMITS`. A
+ * hand-written structural type here would be a third copy of the contract and
+ * could drift silently; `src/lib/ai/eval-catalog-parity.test.ts` compares the
+ * two objects by value instead, which is the check that matters.
+ */
+export const EVAL_OUTPUT_LIMITS: Readonly<
+  Record<EvalTaskName, Readonly<Record<string, number>>>
+>;
+
 export const ACTION_VERBS: readonly string[];
 export const ACTION_VERB_PATTERN: string;
 

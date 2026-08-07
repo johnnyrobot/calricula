@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   EVAL_COMPLIANCE_SOURCE_PACK,
+  EVAL_OUTPUT_LIMITS,
   EVAL_TOP_CODE_CATALOG,
 } from "../../../scripts/ai-eval-fixtures.mjs";
 
@@ -9,6 +10,7 @@ import {
   AI_COMPLIANCE_SOURCE_PACK,
   AI_TOP_CODE_CATALOG,
 } from "../../../shared/ai-catalog";
+import { AI_OUTPUT_LIMITS } from "../../../shared/ai-limits";
 
 /**
  * `scripts/ai-eval-fixtures.mjs` is the last remaining duplicate of these
@@ -35,6 +37,19 @@ describe("evaluation fixture / server catalog parity", () => {
   it("keeps the source pack keyed by the same source IDs, in the same order", () => {
     expect(Object.keys(EVAL_COMPLIANCE_SOURCE_PACK)).toEqual(
       Object.keys(AI_COMPLIANCE_SOURCE_PACK),
+    );
+  });
+
+  /**
+   * A bound that drifts here is the quiet failure: the rubric would qualify a
+   * model on output the Worker rejects, so the model passes `ai:evaluate` and
+   * then fails in production as `UPSTREAM_INVALID_RESPONSE`. Nothing else
+   * compares the two at boundary values — the sample-based parity in
+   * `tests/worker/ai-eval-parity.test.ts` only exercises the samples it has.
+   */
+  it("holds the rubric to the same output bounds the Worker enforces", () => {
+    expect(JSON.parse(JSON.stringify(EVAL_OUTPUT_LIMITS))).toEqual(
+      JSON.parse(JSON.stringify(AI_OUTPUT_LIMITS)),
     );
   });
 });
