@@ -15,8 +15,10 @@
  */
 
 import {
-  COMPLIANCE_SOURCES,
-  COMPLIANCE_SOURCE_IDS,
+  AI_COMPLIANCE_SOURCE_IDS,
+  AI_COMPLIANCE_SOURCE_PACK,
+} from "../shared/ai-catalog";
+import {
   TOP_CODE_VALUES,
   buildComplianceSystemPrompt,
   buildTopCodeSystemPrompt,
@@ -251,7 +253,7 @@ const complianceSchema: SchemaDefinition = {
           properties: {
             sourceId: {
               type: "string",
-              enum: COMPLIANCE_SOURCE_IDS,
+              enum: AI_COMPLIANCE_SOURCE_IDS,
             },
             supports: {
               type: "string",
@@ -541,13 +543,12 @@ export const TASKS: Record<TaskName, TaskDefinition> = {
             "Compliance output cited a source outside the server-owned pack.",
           );
         }
+        // Spread, not copied field by field: the pack already names its
+        // fields the way the wire does, so the server's own metadata replaces
+        // whatever the model claimed without a rename that could drift.
         return {
           sourceId,
-          sourceTitle: COMPLIANCE_SOURCES[sourceId].title,
-          sourceSection: COMPLIANCE_SOURCES[sourceId].section,
-          excerpt: COMPLIANCE_SOURCES[sourceId].excerpt,
-          url: COMPLIANCE_SOURCES[sourceId].url,
-          checksum: COMPLIANCE_SOURCES[sourceId].checksum,
+          ...AI_COMPLIANCE_SOURCE_PACK[sourceId],
           supports: requireString(
             citation.supports,
             `citations[${index}].supports`,

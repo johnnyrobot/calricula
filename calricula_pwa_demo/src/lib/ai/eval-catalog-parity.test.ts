@@ -5,17 +5,21 @@ import {
   EVAL_TOP_CODE_CATALOG,
 } from "../../../scripts/ai-eval-fixtures.mjs";
 
-import { AI_COMPLIANCE_SOURCE_PACK, AI_TOP_CODE_CATALOG } from "./schemas";
+import {
+  AI_COMPLIANCE_SOURCE_PACK,
+  AI_TOP_CODE_CATALOG,
+} from "../../../shared/ai-catalog";
 
 /**
- * `scripts/ai-eval-fixtures.mjs` duplicates these catalogs because a plain Node
- * script cannot import this Zod-bearing module. That duplication is the one
- * thing standing between the evaluation rubric and the server-owned truth, so
- * it is pinned here rather than left to review.
+ * `scripts/ai-eval-fixtures.mjs` is the last remaining duplicate of these
+ * catalogs, and it exists for a reason that has not gone away: `ai:evaluate`
+ * runs it under plain Node, which cannot import TypeScript. That duplication
+ * is the one thing standing between the evaluation rubric and the
+ * server-owned truth, so it is pinned here rather than left to review.
  *
- * The Worker keeps a third copy (`worker/index.ts`), which is pinned
- * behaviourally in `tests/worker/ai-eval-parity.test.ts` — it cannot be
- * imported here because it only runs under the Workers pool.
+ * The Worker no longer keeps a copy at all — `worker/catalog.ts` reads the
+ * same `shared/ai-catalog.ts` this test compares against, so the Worker is
+ * pinned by construction rather than behaviourally.
  */
 describe("evaluation fixture / server catalog parity", () => {
   it("duplicates the server-owned TOP catalog exactly", () => {

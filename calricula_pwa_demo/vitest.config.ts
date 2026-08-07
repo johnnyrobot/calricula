@@ -17,6 +17,7 @@ export default defineConfig({
     include: [
       'src/**/*.test.{ts,tsx}',
       'src/**/*.spec.{ts,tsx}',
+      'shared/**/*.test.ts',
       'scripts/**/*.test.mjs',
     ],
     exclude: [
@@ -30,11 +31,12 @@ export default defineConfig({
       provider: 'istanbul',
       reporter: ['text', 'json-summary', 'html'],
       reportsDirectory: './coverage',
-      include: ['src/**/*.{ts,tsx}'],
+      include: ['src/**/*.{ts,tsx}', 'shared/**/*.ts'],
       exclude: [
         'src/**/*.d.ts',
         'src/**/*.test.{ts,tsx}',
         'src/**/*.spec.{ts,tsx}',
+        'shared/**/*.test.ts',
         'src/app/manifest.ts',
       ],
       thresholds: {

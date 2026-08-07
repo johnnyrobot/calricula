@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  COMPLIANCE_SOURCES,
-  TOP_CODE_CATALOG,
+  AI_COMPLIANCE_SOURCE_PACK,
+  AI_TOP_CODES,
+} from "../shared/ai-catalog";
+
+import {
   buildComplianceSystemPrompt,
   buildTopCodeSystemPrompt,
   isComplianceSourceId,
@@ -10,39 +13,8 @@ import {
   topCodeTitle,
 } from "./catalog";
 
-describe("server-owned regulatory catalog", () => {
-  it("exposes the four compliance sources the AI is allowed to cite", () => {
-    expect(Object.keys(COMPLIANCE_SOURCES)).toEqual([
-      "title5-course-standards",
-      "title5-credit-hour",
-      "pcah-current-edition",
-      "ccn-current-guidance",
-    ]);
-  });
-
-  it("pins each compliance source to a title, section, url and checksum", () => {
-    const creditHour = COMPLIANCE_SOURCES["title5-credit-hour"];
-    expect(creditHour.title).toBe(
-      "California Code of Regulations, title 5, section 55002.5",
-    );
-    expect(creditHour.section).toBe("§ 55002.5(a), Credit Hour Definition");
-    expect(creditHour.url).toContain("govt.westlaw.com");
-    expect(creditHour.checksum).toBe(
-      "sha256:f8a5ef427582c25688603a32a1c537282d6337730da147672af76425bb8a6e03",
-    );
-  });
-
-  it("exposes twenty TOP codes paired with their discipline titles", () => {
-    expect(TOP_CODE_CATALOG).toHaveLength(20);
-    expect(TOP_CODE_CATALOG[0]).toEqual({
-      code: "1701.00",
-      title: "Mathematics, General",
-    });
-    expect(
-      TOP_CODE_CATALOG.find((entry) => entry.code === "0835.00")?.title,
-    ).toBe("Child Development/Early Care and Education");
-  });
-});
+// The catalog data itself is asserted in shared/ai-catalog.test.ts, where it
+// lives. What is asserted here is only what the Worker adds on top of it.
 
 describe("catalog membership predicates", () => {
   it("admits catalogued ids and rejects uncatalogued ones", () => {
@@ -69,7 +41,7 @@ describe("system prompts carrying the catalog", () => {
   it("offers every catalogued TOP code to the model", () => {
     const prompt = buildTopCodeSystemPrompt();
     expect(prompt).toContain("1701.00 — Mathematics, General");
-    for (const { code } of TOP_CODE_CATALOG) {
+    for (const { code } of AI_TOP_CODES) {
       expect(prompt).toContain(code);
     }
   });
@@ -82,7 +54,7 @@ describe("system prompts carrying the catalog", () => {
 
   it("packs every compliance source with its provenance fields", () => {
     const prompt = buildComplianceSystemPrompt();
-    for (const sourceId of Object.keys(COMPLIANCE_SOURCES)) {
+    for (const sourceId of Object.keys(AI_COMPLIANCE_SOURCE_PACK)) {
       expect(prompt).toContain(`[${sourceId}]`);
     }
     expect(prompt).toContain(
