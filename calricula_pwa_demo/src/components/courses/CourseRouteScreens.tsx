@@ -3,27 +3,19 @@
 import Link from 'next/link';
 import { useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import {
-  auditCourse,
-  findCCNMatches,
-  planCCNAdoption,
-} from '@/lib/compliance';
+import { auditCourse, findCCNMatches } from '@/lib/compliance';
 import {
   curriculumRepository,
-  RepositoryError,
   useActivePersona,
   useCourse,
   usePersonas,
   useReferences,
   useRepositoryQuery,
   type CourseAggregate,
-  type CourseContentInput,
   type CourseQuery,
-  type CourseRequisiteInput,
   type PageResult,
-  type StudentLearningOutcomeInput,
 } from '@/lib/data';
-import type { CCNStandard, Course, UpdateCourseInput } from '@/lib/domain';
+import type { CCNStandard, Course } from '@/lib/domain';
 import { getCourseSubmissionAvailability } from '@/components/approvals/workflow';
 import { CourseCompareView } from './CourseCompareView';
 import { CourseCatalogHeader } from './CourseCatalogHeader';
@@ -32,11 +24,11 @@ import { CourseDetailView } from './CourseDetailView';
 import { CourseEditor } from './CourseEditor';
 import { CourseLoading, CourseMessage } from './CoursePrimitives';
 import { CoursesList } from './CoursesList';
+import { planCourseSave } from './course-save';
 import {
   aggregateToView,
   auditToView,
   courseRecordToView,
-  editorPatchToCourseUpdate,
 } from './adapters';
 import type {
   CCNMatchView,
@@ -287,9 +279,6 @@ function makeCCNMatches(
   });
 }
 
-function childId(id: string) {
-  return id.startsWith('tmp-') ? undefined : id;
-}
 
 export function CourseEditRouteScreen() {
   const searchParams = useSearchParams();
@@ -386,136 +375,18 @@ export function CourseEditRouteScreen() {
   );
 
   const save = async (view: CourseViewModel) => {
-    if (
-      view.ccnDisposition === 'non-match' &&
-      view.ccnJustification.trim().length < 40
-    ) {
-      throw new RepositoryError(
-        'validation',
-        'The CCN non-match justification must contain at least 40 characters.',
-      );
-    }
-    if (
-      view.ccnDisposition === 'non-match' &&
-      !view.ccnCandidateCode.trim()
-    ) {
-      throw new RepositoryError(
-        'validation',
-        'Select the CCN standard this course does not match before saving the justification.',
-      );
-    }
-    const normalizedTopCode = view.topCode.trim();
-    const localTopCodes = new Set(
-      referenceData.topCodes.map(({ code }) => code),
-    );
-    if (normalizedTopCode && !localTopCodes.has(normalizedTopCode)) {
-      throw new RepositoryError(
-        'validation',
-        `Select a TOP code from this demo's ${referenceData.topCodes.length}-code reference list.`,
-      );
-    }
-
-    const coursePatch = editorPatchToCourseUpdate({
-      title: view.title,
-      departmentId: view.departmentId,
-      catalogDescription: view.catalogDescription,
-      units: canonicalNonNegative(view.units),
-      lectureHours: canonicalNonNegative(view.lectureHours),
-      labHours: canonicalNonNegative(view.labHours),
-      activityHours: canonicalNonNegative(view.activityHours),
-      tbaHours: canonicalNonNegative(view.tbaHours),
-      outsideHours: canonicalNonNegative(view.outsideHours),
-      totalStudentHours: canonicalNonNegative(view.totalStudentHours),
-      effectiveTerm: view.effectiveTerm,
-      topCode: normalizedTopCode,
-      ccnCode: view.ccnDisposition === 'adopted' ? view.ccnCode : '',
-    }) as UpdateCourseInput;
-
-    if (view.ccnDisposition === 'adopted' && view.ccnCode) {
-      const standard = referenceData.ccnStandards.find(
-        (candidate) => candidate.ccnCode === view.ccnCode,
-      );
-      if (!standard) {
-        throw new RepositoryError(
-          'validation',
-          'The selected CCN standard is not available in this demo reference set.',
-        );
-      }
-      const plan = planCCNAdoption(aggregateData.course, standard);
-      if (!plan.success || !plan.coursePatch) {
-        throw new RepositoryError(
-          'validation',
-          plan.errors.join(' ') || 'The selected CCN standard could not be adopted.',
-        );
-      }
-      Object.assign(coursePatch, plan.coursePatch);
-      const plannedCbCodes = { ...(plan.coursePatch.cbCodes || {}) };
-      const impliedTopCode =
-        typeof plan.cbCodesUpdated.CB03 === 'string'
-          ? plan.cbCodesUpdated.CB03
-          : null;
-      if (impliedTopCode && localTopCodes.has(impliedTopCode)) {
-        coursePatch.topCode = impliedTopCode;
-        plannedCbCodes.CB03 = impliedTopCode;
-      } else if (
-        typeof plannedCbCodes.CB03 !== 'string' ||
-        !localTopCodes.has(plannedCbCodes.CB03) ||
-        plannedCbCodes.CB03 !== coursePatch.topCode
-      ) {
-        delete plannedCbCodes.CB03;
-      }
-      coursePatch.cbCodes = plannedCbCodes;
-    }
-
-    const validSlos = view.slos.filter((slo) => slo.outcomeText.trim());
-    const sloInputs: StudentLearningOutcomeInput[] = validSlos.map((slo, index) => ({
-      ...(childId(slo.id) ? { id: slo.id } : {}),
-      clientId: slo.id,
-      sequence: index + 1,
-      outcomeText: slo.outcomeText.trim(),
-      bloomLevel: slo.bloomLevel || 'Apply',
-      performanceCriteria: slo.performanceCriteria?.trim() || null,
-    }));
-    const validViewSloIds = new Set(validSlos.map((slo) => slo.id));
-
-    const validContent = view.contentItems.filter((item) => item.topic.trim());
-    const contentInputs: CourseContentInput[] = validContent.map((item, index) => ({
-      ...(childId(item.id) ? { id: item.id } : {}),
-      sequence: index + 1,
-      topic: item.topic.trim(),
-      subtopics: item.subtopics.map((value) => value.trim()).filter(Boolean),
-      hoursAllocated: canonicalNonNegative(item.hours),
-      linkedSloIds: item.linkedSloIds.filter((sloId) =>
-        validViewSloIds.has(sloId),
-      ),
-    }));
-
-    const validRequisites = view.requisites.filter(
-      (requisite) => requisite.courseId || requisite.text?.trim(),
-    );
-    const requisiteInputs: CourseRequisiteInput[] = validRequisites.map((requisite) => ({
-      ...(childId(requisite.id) ? { id: requisite.id } : {}),
-      type: requisite.type,
-      validationType: requisite.validationType || null,
-      requisiteCourseId: requisite.courseId || null,
-      requisiteText: requisite.courseId ? null : requisite.text?.trim() || null,
-      contentReview: requisite.contentReview?.trim() || null,
-    }));
-
-    await curriculumRepository.saveCourseAggregate(id, {
-      course: coursePatch,
-      slos: sloInputs,
-      content: contentInputs,
-      requisites: requisiteInputs,
-      ccnJustification:
-        view.ccnDisposition === 'non-match'
-          ? {
-              ccnCode: view.ccnCandidateCode,
-              justification: view.ccnJustification.trim(),
-              evidence: [],
-            }
-          : null,
+    const plan = planCourseSave(view, {
+      course: aggregateData.course,
+      topCodes: referenceData.topCodes,
+      ccnStandards: referenceData.ccnStandards,
     });
+    if (!plan.ok) {
+      // The draft session renders error.message and never inspects the class,
+      // so a plain Error is the whole contract. Raising the repository's
+      // RepositoryError here would name a layer that enforced none of these.
+      throw new Error(plan.issues.join(' '));
+    }
+    await curriculumRepository.saveCourseAggregate(id, plan.command);
   };
 
   const audit = auditToView(
@@ -561,11 +432,6 @@ export function CourseEditRouteScreen() {
       submitDisabledReason={submission.reason}
     />
   );
-}
-
-function canonicalNonNegative(value: string) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? String(parsed) : '0';
 }
 
 export function CourseCompareRouteScreen() {

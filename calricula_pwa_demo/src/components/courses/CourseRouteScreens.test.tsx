@@ -264,54 +264,6 @@ describe('course route screens', () => {
     );
   });
 
-  it('passes temporary SLO client IDs for atomic content-link remapping', async () => {
-    state.params = 'id=course-1';
-    render(<CourseEditRouteScreen />);
-    const props = state.editorProps as {
-      initialCourse: CourseViewModel;
-      onSave: (course: CourseViewModel) => Promise<void>;
-    };
-    const temporarySlo = {
-      id: 'tmp-slo-new',
-      sequence: 1,
-      outcomeText: 'Evaluate evidence in an academic argument.',
-      bloomLevel: 'Evaluate' as const,
-    };
-
-    await act(async () => {
-      await props.onSave({
-        ...props.initialCourse,
-        slos: [temporarySlo],
-        contentItems: [
-          {
-            ...props.initialCourse.contentItems[0],
-            linkedSloIds: [temporarySlo.id],
-          },
-        ],
-      });
-    });
-
-    expect(state.saveCourseAggregate).toHaveBeenCalledWith(
-      'course-1',
-      expect.objectContaining({
-        slos: [
-          expect.objectContaining({
-            clientId: 'tmp-slo-new',
-            outcomeText: temporarySlo.outcomeText,
-          }),
-        ],
-        content: [
-          expect.objectContaining({
-            linkedSloIds: ['tmp-slo-new'],
-          }),
-        ],
-      }),
-    );
-    expect(
-      state.saveCourseAggregate.mock.calls[0][1].slos[0],
-    ).not.toHaveProperty('id');
-  });
-
   it('blocks direct editing of an approved official record', () => {
     state.params = 'id=course-1';
     state.aggregate = aggregate('Approved');
@@ -321,84 +273,6 @@ describe('course route screens', () => {
       screen.getByRole('heading', { name: 'Approved records are immutable' }),
     ).toBeInTheDocument();
     expect(state.editorProps).toBeNull();
-  });
-
-  it('rejects a non-match rationale that is not tied to a real CCN candidate', async () => {
-    state.params = 'id=course-1';
-    render(<CourseEditRouteScreen />);
-    const props = state.editorProps as {
-      initialCourse: CourseViewModel;
-      onSave: (course: CourseViewModel) => Promise<void>;
-    };
-
-    await expect(
-      props.onSave({
-        ...props.initialCourse,
-        ccnDisposition: 'non-match',
-        ccnCandidateCode: '',
-        ccnJustification:
-          'This course has a specialized local scope that differs from the state template.',
-      }),
-    ).rejects.toThrow(/Select the CCN standard/);
-    expect(state.saveCourseAggregate).not.toHaveBeenCalled();
-  });
-
-  it('rejects a TOP code that is not in the local reference set', async () => {
-    state.params = 'id=course-1';
-    render(<CourseEditRouteScreen />);
-    const props = state.editorProps as {
-      initialCourse: CourseViewModel;
-      onSave: (course: CourseViewModel) => Promise<void>;
-    };
-
-    await expect(
-      props.onSave({
-        ...props.initialCourse,
-        topCode: '9999.99',
-      }),
-    ).rejects.toThrow(/Select a TOP code from this demo's 1-code reference list/);
-    expect(state.saveCourseAggregate).not.toHaveBeenCalled();
-  });
-
-  it('keeps a valid local TOP code when an adopted CCN implies an unavailable code', async () => {
-    state.params = 'id=course-1';
-    state.ccnStandards = [{ ccnCode: 'ENGL C1000' }];
-    state.ccnPlan = {
-      success: true,
-      coursePatch: {
-        ccnCode: 'ENGL C1000',
-        cbCodes: { CB05: 'A', CB03: '9999.99' },
-      },
-      cbCodesUpdated: { CB05: 'A', CB03: '9999.99' },
-      warnings: [],
-      errors: [],
-      clearNonMatchJustification: true,
-    };
-    render(<CourseEditRouteScreen />);
-    const props = state.editorProps as {
-      initialCourse: CourseViewModel;
-      onSave: (course: CourseViewModel) => Promise<void>;
-    };
-
-    await act(async () => {
-      await props.onSave({
-        ...props.initialCourse,
-        ccnDisposition: 'adopted',
-        ccnCode: 'ENGL C1000',
-        topCode: '1501.00',
-      });
-    });
-
-    expect(state.saveCourseAggregate).toHaveBeenCalledWith(
-      'course-1',
-      expect.objectContaining({
-        course: expect.objectContaining({
-          ccnCode: 'ENGL C1000',
-          topCode: '1501.00',
-          cbCodes: { CB05: 'A' },
-        }),
-      }),
-    );
   });
 
   it('does not expose an unavailable CCN-implied TOP code as an adoptable UI value', () => {
