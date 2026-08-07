@@ -91,7 +91,7 @@ vi.mock('@/lib/data', () => {
       addComment: vi.fn(),
       setCommentResolved: vi.fn(),
       transitionCourse: vi.fn(),
-      listCourses: vi.fn(),
+      listAllCourses: vi.fn(),
     },
     useCourse: () => queryState(state.aggregate),
     useReferences: () =>
@@ -120,14 +120,10 @@ vi.mock('@/lib/data', () => {
       }),
     useActivePersona: () => queryState(state.activeActor),
     usePersonas: () => queryState([]),
-    useRepositoryQuery: () =>
-      queryState({
-        items: state.aggregate ? [state.aggregate.course] : [],
-        total: state.aggregate ? 1 : 0,
-        page: 1,
-        pageSize: 100,
-        pageCount: state.aggregate ? 1 : 0,
-      }),
+    // The screen asks for every course by name now, so this mock no longer has
+    // to stub the generic query hook the old in-screen fan-out was built from.
+    useAllCourses: () =>
+      queryState(state.aggregate ? [state.aggregate.course] : []),
   };
 });
 

@@ -7,7 +7,7 @@ const dataHooks = vi.hoisted(() => ({
     markAllNotificationsRead: vi.fn(),
   },
   useActivePersona: vi.fn(),
-  useCourses: vi.fn(),
+  useAllCourses: vi.fn(),
   useDashboard: vi.fn(),
   useNotifications: vi.fn(),
   usePersonas: vi.fn(),
@@ -82,14 +82,8 @@ describe("RegistrarDashboard", () => {
     ];
     dataHooks.useActivePersona.mockReturnValue(queryState(actor));
     dataHooks.usePersonas.mockReturnValue(queryState([actor]));
-    dataHooks.useCourses.mockReturnValue(
-      queryState({
-        items: courses,
-        total: courses.length,
-        page: 1,
-        pageSize: 250,
-        pageCount: 1,
-      }),
+    dataHooks.useAllCourses.mockReturnValue(
+      queryState(courses),
     );
     dataHooks.useDashboard.mockReturnValue(
       queryState({
@@ -173,12 +167,7 @@ describe("RegistrarDashboard", () => {
   });
 
   it("shows loading states without inventing queue records", () => {
-    dataHooks.useCourses.mockReturnValue(
-      queryState(
-        { items: [], total: 0, page: 1, pageSize: 250, pageCount: 0 },
-        { loading: true },
-      ),
-    );
+    dataHooks.useAllCourses.mockReturnValue(queryState([], { loading: true }));
     dataHooks.useDashboard.mockReturnValue(
       queryState(null, { loading: true }),
     );
@@ -306,14 +295,8 @@ describe("RegistrarDashboard", () => {
         }),
       ];
       dataHooks.useActivePersona.mockReturnValue(queryState(roleActor));
-      dataHooks.useCourses.mockReturnValue(
-        queryState({
-          items: roleCourses,
-          total: roleCourses.length,
-          page: 1,
-          pageSize: 250,
-          pageCount: 1,
-        }),
+      dataHooks.useAllCourses.mockReturnValue(
+        queryState(roleCourses),
       );
       dataHooks.useDashboard.mockReturnValue(
         queryState({

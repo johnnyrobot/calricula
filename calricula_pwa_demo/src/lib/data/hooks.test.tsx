@@ -7,6 +7,8 @@ import type { CourseAggregate, ProgramAggregate } from "@/lib/domain";
 import {
   useActivePersona,
   useCourse,
+  useAllCourses,
+  useAllPrograms,
   useCourses,
   useDashboard,
   useNotifications,
@@ -15,7 +17,6 @@ import {
   usePrograms,
   useReferences,
   useRepositoryQuery,
-  useRepositoryReady,
   useRepositoryRevision,
 } from "./hooks";
 import { curriculumRepository } from "./repository";
@@ -45,6 +46,8 @@ describe("repository live query hooks", () => {
       schemaVersion: 1,
       seedVersion: fixture.meta.seedVersion,
     });
+    vi.spyOn(curriculumRepository, "listAllCourses").mockResolvedValue(fixture.courses);
+    vi.spyOn(curriculumRepository, "listAllPrograms").mockResolvedValue(fixture.programs);
     vi.spyOn(curriculumRepository, "listCourses").mockResolvedValue({
       ...emptyPage,
       items: [fixture.courses[0]],
@@ -78,10 +81,11 @@ describe("repository live query hooks", () => {
     vi.spyOn(curriculumRepository, "getActivePersona").mockResolvedValue(fixture.actors[0]);
 
     const result = renderHook(() => ({
-      ready: useRepositoryReady(),
       courses: useCourses({ search: "MATH" }),
+      allCourses: useAllCourses({ search: "MATH" }),
       course: useCourse(null),
       programs: usePrograms({ search: "Science" }),
+      allPrograms: useAllPrograms({ search: "Science" }),
       program: useProgram(null),
       notifications: useNotifications({ unreadOnly: true }),
       dashboard: useDashboard(fixture.actors[0].id),
@@ -90,9 +94,12 @@ describe("repository live query hooks", () => {
       activePersona: useActivePersona(),
       revision: useRepositoryRevision(),
     }));
-    await waitFor(() => expect(result.result.current.ready.loading).toBe(false));
     await waitFor(() => expect(result.result.current.activePersona.loading).toBe(false));
     expect(result.result.current.courses.data.items[0]).toEqual(fixture.courses[0]);
+    // The unpaged reads are their own repository verbs, not a page reshaped by
+    // the hook: what the repository returns is what the caller sees.
+    expect(result.result.current.allCourses.data).toEqual(fixture.courses);
+    expect(result.result.current.allPrograms.data).toEqual(fixture.programs);
     expect(result.result.current.course.data).toBeNull();
     expect(result.result.current.programs.data.items[0]).toEqual(fixture.programs[0]);
     expect(result.result.current.program.data).toBeNull();

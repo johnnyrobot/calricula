@@ -61,6 +61,63 @@ describe("DexieCurriculumRepository", () => {
     });
   }
 
+  describe("reading every course and program", () => {
+    /**
+     * `page()` clamps pageSize to 100, so a caller that wants everything and
+     * asks for `pageSize: 250` is silently handed 100 rows with no error and
+     * no signal that anything was dropped. Two screens do exactly that. The
+     * seeded fixture has 22 courses, so nothing shows today — but the demo
+     * lets a user create courses, so the truncation is reachable.
+     */
+    it("truncates a large page request instead of refusing it", async () => {
+      const seeded = await repository.listCourses({ pageSize: 250 });
+      await Promise.all(
+        Array.from({ length: 120 }, (_, index) =>
+          createDraft(`${900 + index}`),
+        ),
+      );
+
+      const asked = await repository.listCourses({ pageSize: 250 });
+      expect(seeded.total + 120).toBeGreaterThan(100);
+      expect(asked.total).toBe(seeded.total + 120);
+      expect(asked.items).toHaveLength(100);
+    });
+
+    it("returns every course when asked for all of them", async () => {
+      const seeded = await repository.listCourses({ pageSize: 250 });
+      await Promise.all(
+        Array.from({ length: 120 }, (_, index) =>
+          createDraft(`${900 + index}`),
+        ),
+      );
+
+      const all = await repository.listAllCourses();
+      expect(all).toHaveLength(seeded.total + 120);
+    });
+
+    it("applies the same filter and sort as the paged read", async () => {
+      const all = await repository.listAllCourses({
+        sortBy: "courseCode",
+        sortDirection: "asc",
+      });
+      const firstPage = await repository.listCourses({
+        pageSize: 100,
+        sortBy: "courseCode",
+        sortDirection: "asc",
+      });
+      expect(all.slice(0, firstPage.items.length)).toEqual(firstPage.items);
+
+      const drafts = await repository.listAllCourses({ status: "Draft" });
+      expect(drafts.every((course) => course.status === "Draft")).toBe(true);
+    });
+
+    it("returns every program when asked for all of them", async () => {
+      const paged = await repository.listPrograms({ pageSize: 100 });
+      const all = await repository.listAllPrograms();
+      expect(all).toHaveLength(paged.total);
+    });
+  });
+
   // The repository exposes one write verb for a course and its children.
   // These name the partial saves the suite exercises so each test still reads
   // as the edit it is making.

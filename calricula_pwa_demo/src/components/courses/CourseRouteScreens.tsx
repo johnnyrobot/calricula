@@ -1,21 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { auditCourse, findCCNMatches } from '@/lib/compliance';
 import {
   curriculumRepository,
   useActivePersona,
+  useAllCourses,
   useCourse,
   usePersonas,
   useReferences,
-  useRepositoryQuery,
   type CourseAggregate,
-  type CourseQuery,
-  type PageResult,
 } from '@/lib/data';
-import type { CCNStandard, Course } from '@/lib/domain';
+import type { CCNStandard } from '@/lib/domain';
 import { getCourseSubmissionAvailability } from '@/components/approvals/workflow';
 import { CourseCompareView } from './CourseCompareView';
 import { CourseCatalogHeader } from './CourseCatalogHeader';
@@ -36,55 +34,6 @@ import type {
   CourseViewModel,
 } from './types';
 
-const REPOSITORY_PAGE_SIZE = 100;
-const EMPTY_COURSE_PAGE: PageResult<Course> = {
-  items: [],
-  total: 0,
-  page: 1,
-  pageSize: REPOSITORY_PAGE_SIZE,
-  pageCount: 0,
-};
-
-function useAllCourses(
-  sortBy: NonNullable<CourseQuery['sortBy']>,
-  sortDirection: NonNullable<CourseQuery['sortDirection']>,
-) {
-  const load = useCallback(async (): Promise<PageResult<Course>> => {
-    const first = await curriculumRepository.listCourses({
-      page: 1,
-      pageSize: REPOSITORY_PAGE_SIZE,
-      sortBy,
-      sortDirection,
-    });
-    if (first.pageCount <= 1) return first;
-
-    const remaining = await Promise.all(
-      Array.from({ length: first.pageCount - 1 }, (_, index) =>
-        curriculumRepository.listCourses({
-          page: index + 2,
-          pageSize: REPOSITORY_PAGE_SIZE,
-          sortBy,
-          sortDirection,
-        }),
-      ),
-    );
-    const items = [first, ...remaining].flatMap((page) => page.items);
-    return {
-      items,
-      total: first.total,
-      page: 1,
-      pageSize: items.length || REPOSITORY_PAGE_SIZE,
-      pageCount: items.length ? 1 : 0,
-    };
-  }, [sortBy, sortDirection]);
-
-  return useRepositoryQuery(
-    load,
-    [sortBy, sortDirection],
-    EMPTY_COURSE_PAGE,
-  );
-}
-
 function routeError(title: string, error: Error, retry?: () => void) {
   return (
     <CourseMessage
@@ -104,7 +53,7 @@ function routeError(title: string, error: Error, retry?: () => void) {
 
 function useSharedCourseData() {
   const references = useReferences();
-  const allCourses = useAllCourses('courseCode', 'asc');
+  const allCourses = useAllCourses({ sortBy: 'courseCode', sortDirection: 'asc' });
   const personas = usePersonas();
   return { references, allCourses, personas };
 }
@@ -127,7 +76,7 @@ function aggregateAudit(
 }
 
 export function CoursesRouteScreen() {
-  const courses = useAllCourses('updatedAt', 'desc');
+  const courses = useAllCourses({ sortBy: 'updatedAt', sortDirection: 'desc' });
   const references = useReferences();
 
   if (courses.loading || references.loading) {
@@ -142,7 +91,7 @@ export function CoursesRouteScreen() {
   if (references.error)
     return routeError('Reference data could not be opened', references.error, references.refresh);
 
-  const views = courses.data.items.map((course) =>
+  const views = courses.data.map((course) =>
     courseRecordToView(course, references.data?.departments || []),
   );
   return (
@@ -211,7 +160,7 @@ export function CourseViewRouteScreen() {
 
   const view = aggregateToView(aggregate.data, {
     departments: references.data?.departments,
-    courses: allCourses.data.items,
+    courses: allCourses.data,
     actors: personas.data,
   });
   const audit = auditToView(
@@ -291,12 +240,12 @@ export function CourseEditRouteScreen() {
     if (!aggregate.data) return null;
     return aggregateToView(aggregate.data, {
       departments: references.data?.departments,
-      courses: allCourses.data.items,
+      courses: allCourses.data,
       actors: personas.data,
     });
   }, [
     aggregate.data,
-    allCourses.data.items,
+    allCourses.data,
     personas.data,
     references.data?.departments,
   ]);
@@ -392,7 +341,7 @@ export function CourseEditRouteScreen() {
   const audit = auditToView(
     aggregateAudit(aggregateData, referenceData.ccnStandards),
   );
-  const courseOptions = allCourses.data.items.map((course) =>
+  const courseOptions = allCourses.data.map((course) =>
     courseRecordToView(course, referenceData.departments),
   );
 
@@ -507,13 +456,13 @@ export function CourseCompareRouteScreen() {
 
   const sourceView = aggregateToView(source.data, {
     departments: references.data?.departments,
-    courses: allCourses.data.items,
+    courses: allCourses.data,
     actors: personas.data,
   });
   const targetView = target.data
     ? aggregateToView(target.data, {
         departments: references.data?.departments,
-        courses: allCourses.data.items,
+        courses: allCourses.data,
         actors: personas.data,
       })
     : null;
@@ -536,7 +485,7 @@ export function CourseCompareRouteScreen() {
     );
   }
 
-  const versions = allCourses.data.items
+  const versions = allCourses.data
     .filter((course) => course.lineageId === source.data!.course.lineageId)
     .map((course) => courseRecordToView(course, references.data?.departments));
 

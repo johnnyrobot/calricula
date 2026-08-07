@@ -13,7 +13,6 @@ import type {
   CourseAggregate,
   CourseQuery,
   DashboardSummary,
-  InitializationResult,
   NotificationQuery,
   PageResult,
   ProgramAggregate,
@@ -85,13 +84,13 @@ function emptyPage<T>(pageSize = 25): PageResult<T> {
   return { items: [], total: 0, page: 1, pageSize, pageCount: 0 };
 }
 
+// Frozen module-level identities. A fresh [] as the initial value would be a
+// new dependency every render and restart the query forever.
+const EMPTY_COURSES: Course[] = [];
+const EMPTY_PROGRAMS: Program[] = [];
+
 function stableKey(value: unknown): string {
   return JSON.stringify(value ?? null);
-}
-
-export function useRepositoryReady(): RepositoryQueryState<InitializationResult | null> {
-  const query = useCallback(() => curriculumRepository.initialize(), []);
-  return useRepositoryQuery(query, [], null);
 }
 
 export function useCourses(query: CourseQuery = {}): RepositoryQueryState<PageResult<Course>> {
@@ -99,6 +98,20 @@ export function useCourses(query: CourseQuery = {}): RepositoryQueryState<PageRe
   const stableQuery = useMemo(() => JSON.parse(key) as CourseQuery, [key]);
   const load = useCallback(() => curriculumRepository.listCourses(stableQuery), [stableQuery]);
   return useRepositoryQuery(load, [key], emptyPage<Course>(query.pageSize));
+}
+
+/**
+ * Every matching course, unpaged.
+ *
+ * Screens that need the whole set — an approval queue, a course picker — used
+ * to guess a page size large enough and hope, which `page()` silently clamps
+ * to 100, or refetch page by page. This says what they mean.
+ */
+export function useAllCourses(query: CourseQuery = {}): RepositoryQueryState<Course[]> {
+  const key = stableKey(query);
+  const stableQuery = useMemo(() => JSON.parse(key) as CourseQuery, [key]);
+  const load = useCallback(() => curriculumRepository.listAllCourses(stableQuery), [stableQuery]);
+  return useRepositoryQuery(load, [key], EMPTY_COURSES);
 }
 
 export function useCourse(id: string | null | undefined): RepositoryQueryState<CourseAggregate | null> {
@@ -118,6 +131,14 @@ export function usePrograms(query: ProgramQuery = {}): RepositoryQueryState<Page
   const stableQuery = useMemo(() => JSON.parse(key) as ProgramQuery, [key]);
   const load = useCallback(() => curriculumRepository.listPrograms(stableQuery), [stableQuery]);
   return useRepositoryQuery(load, [key], emptyPage<Program>(query.pageSize));
+}
+
+/** Every matching program, unpaged. See `useAllCourses`. */
+export function useAllPrograms(query: ProgramQuery = {}): RepositoryQueryState<Program[]> {
+  const key = stableKey(query);
+  const stableQuery = useMemo(() => JSON.parse(key) as ProgramQuery, [key]);
+  const load = useCallback(() => curriculumRepository.listAllPrograms(stableQuery), [stableQuery]);
+  return useRepositoryQuery(load, [key], EMPTY_PROGRAMS);
 }
 
 export function useProgram(

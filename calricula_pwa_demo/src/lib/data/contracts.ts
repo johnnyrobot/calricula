@@ -192,8 +192,10 @@ export class RepositoryError extends Error {
 /** Every read a screen makes to render. No verb here changes anything. */
 export interface CurriculumReads {
   listCourses(query?: CourseQuery): Promise<PageResult<Course>>;
+  listAllCourses(query?: CourseQuery): Promise<Course[]>;
   getCourse(id: string): Promise<CourseAggregate | null>;
   listPrograms(query?: ProgramQuery): Promise<PageResult<Program>>;
+  listAllPrograms(query?: ProgramQuery): Promise<Program[]>;
   getProgram(id: string): Promise<ProgramAggregate | null>;
   listNotifications(query?: NotificationQuery): Promise<PageResult<Notification>>;
   getDashboard(actorId?: string): Promise<DashboardSummary>;

@@ -14,7 +14,7 @@ import {
   curriculumRepository,
   useActivePersona,
   useCourse,
-  useCourses,
+  useAllCourses,
   useReferences,
 } from "../../lib/data";
 import { ApprovalActionPanel } from "./ApprovalActionPanel";
@@ -26,8 +26,7 @@ const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", {
 
 export function ApprovalQueue() {
   const activePersona = useActivePersona();
-  const courses = useCourses({
-    pageSize: 250,
+  const courses = useAllCourses({
     sortBy: "updatedAt",
     sortDirection: "asc",
   });
@@ -40,8 +39,8 @@ export function ApprovalQueue() {
   );
   const queue = useMemo(
     () =>
-      courses.data.items.filter((course) => statuses.includes(course.status)),
-    [courses.data.items, statuses],
+      courses.data.filter((course) => statuses.includes(course.status)),
+    [courses.data, statuses],
   );
   const selectedIdForRole =
     selectedId && queue.some((course) => course.id === selectedId)

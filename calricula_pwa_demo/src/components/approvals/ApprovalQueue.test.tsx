@@ -3,14 +3,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const useActivePersona = vi.hoisted(() => vi.fn());
 const useCourse = vi.hoisted(() => vi.fn());
-const useCourses = vi.hoisted(() => vi.fn());
+const useAllCourses = vi.hoisted(() => vi.fn());
 const useReferences = vi.hoisted(() => vi.fn());
 const actionPanel = vi.hoisted(() => vi.fn());
 
 vi.mock("../../lib/data", () => ({
   useActivePersona,
   useCourse,
-  useCourses,
+  useAllCourses,
   useReferences,
 }));
 
@@ -137,24 +137,18 @@ describe("ApprovalQueue", () => {
   beforeEach(() => {
     useActivePersona.mockReset();
     useCourse.mockReset();
-    useCourses.mockReset();
+    useAllCourses.mockReset();
     useReferences.mockReset();
     actionPanel.mockReset();
 
     useActivePersona.mockReturnValue(queryState(chair));
-    useCourses.mockReturnValue(
-      queryState({
-        items: [
+    useAllCourses.mockReturnValue(
+      queryState([
           departmentReview,
           curriculumReview,
           articulationReview,
           draft,
-        ],
-        total: 4,
-        page: 1,
-        pageSize: 250,
-        pageCount: 1,
-      }),
+        ]),
     );
     useReferences.mockReturnValue(
       queryState({
@@ -277,14 +271,8 @@ describe("ApprovalQueue", () => {
   });
 
   it("renders empty role queues without implying a workflow failure", () => {
-    useCourses.mockReturnValue(
-      queryState({
-        items: [draft],
-        total: 1,
-        page: 1,
-        pageSize: 250,
-        pageCount: 1,
-      }),
+    useAllCourses.mockReturnValue(
+      queryState([draft]),
     );
     render(<ApprovalQueue />);
     expect(

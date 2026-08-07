@@ -21,7 +21,7 @@ import {
   type Role,
   type WorkflowHistory,
   useActivePersona,
-  useCourses,
+  useAllCourses,
   useDashboard,
   useNotifications,
   usePersonas,
@@ -97,9 +97,7 @@ export function RegistrarDashboard() {
   const activePersona = useActivePersona();
   const personas = usePersonas();
   const dashboard = useDashboard(activePersona.data?.id);
-  const courses = useCourses({
-    page: 1,
-    pageSize: 250,
+  const courses = useAllCourses({
     sortBy: "updatedAt",
     sortDirection: "desc",
   });
@@ -116,15 +114,15 @@ export function RegistrarDashboard() {
   const queue = useMemo(
     () =>
       queueForRole(
-        courses.data.items,
+        courses.data,
         activePersona.data?.role,
         activePersona.data?.id,
       ),
-    [activePersona.data, courses.data.items],
+    [activePersona.data, courses.data],
   );
   const courseById = useMemo(
-    () => new Map(courses.data.items.map((course) => [course.id, course])),
-    [courses.data.items],
+    () => new Map(courses.data.map((course) => [course.id, course])),
+    [courses.data],
   );
   const actorById = useMemo(
     () => new Map(personas.data.map((actor) => [actor.id, actor])),
@@ -134,8 +132,8 @@ export function RegistrarDashboard() {
     dashboard.data?.coursesByStatus
       .filter((entry) => entry.status !== "Approved")
       .reduce((total, entry) => total + entry.count, 0) ??
-    courses.data.items.filter((course) => course.status !== "Approved").length;
-  const flaggedCourses = courses.data.items.filter(
+    courses.data.filter((course) => course.status !== "Approved").length;
+  const flaggedCourses = courses.data.filter(
     (course) =>
       !checkMinimumHoursPerUnit(
         course.units,
@@ -233,7 +231,7 @@ export function RegistrarDashboard() {
           <MetricPanel
             label="Outlines in progress"
             value={activeCount}
-            suffix={`of ${courses.data.total}`}
+            suffix={`of ${courses.data.length}`}
             detail="All records not yet approved"
           />
           <MetricPanel

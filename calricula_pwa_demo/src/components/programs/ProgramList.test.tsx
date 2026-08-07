@@ -3,11 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Department, Program } from "../../lib/domain";
 
-const usePrograms = vi.hoisted(() => vi.fn());
+const useAllPrograms = vi.hoisted(() => vi.fn());
 const useReferences = vi.hoisted(() => vi.fn());
 
 vi.mock("../../lib/data", () => ({
-  usePrograms,
+  useAllPrograms,
   useReferences,
 }));
 
@@ -59,7 +59,7 @@ const programs = [
 
 describe("ProgramList", () => {
   beforeEach(() => {
-    usePrograms.mockReset();
+    useAllPrograms.mockReset();
     useReferences.mockReset();
     useReferences.mockReturnValue({
       data: {
@@ -72,12 +72,8 @@ describe("ProgramList", () => {
       loading: false,
       refresh: vi.fn(),
     });
-    usePrograms.mockImplementation(
-      (query: {
-        search?: string;
-        status?: Program["status"];
-        pageSize: number;
-      }) => {
+    useAllPrograms.mockImplementation(
+      (query: { search?: string; status?: Program["status"] }) => {
         const items = programs.filter(
           (program) =>
             (!query.search ||
@@ -87,13 +83,7 @@ describe("ProgramList", () => {
             (!query.status || program.status === query.status),
         );
         return {
-          data: {
-            items,
-            total: items.length,
-            page: 1,
-            pageSize: query.pageSize,
-            pageCount: items.length ? 1 : 0,
-          },
+          data: items,
           error: null,
           loading: false,
           refresh: vi.fn(),
@@ -136,7 +126,7 @@ describe("ProgramList", () => {
     fireEvent.change(screen.getByLabelText("Search programs"), {
       target: { value: "  web  " },
     });
-    expect(usePrograms).toHaveBeenLastCalledWith(
+    expect(useAllPrograms).toHaveBeenLastCalledWith(
       expect.objectContaining({ search: "web", status: undefined }),
     );
     expect(screen.getByText("Web Development")).toBeVisible();
@@ -145,7 +135,7 @@ describe("ProgramList", () => {
     fireEvent.change(screen.getByLabelText("Status"), {
       target: { value: "Approved" },
     });
-    expect(usePrograms).toHaveBeenLastCalledWith(
+    expect(useAllPrograms).toHaveBeenLastCalledWith(
       expect.objectContaining({ search: "web", status: "Approved" }),
     );
     expect(screen.getByText("No programs match this view")).toBeVisible();
@@ -153,14 +143,8 @@ describe("ProgramList", () => {
 
   it("shows loading and retryable failure states", () => {
     const refresh = vi.fn();
-    usePrograms.mockReturnValueOnce({
-      data: {
-        items: [],
-        total: 0,
-        page: 1,
-        pageSize: 50,
-        pageCount: 0,
-      },
+    useAllPrograms.mockReturnValueOnce({
+      data: [],
       error: null,
       loading: true,
       refresh,
@@ -168,14 +152,8 @@ describe("ProgramList", () => {
     const { rerender } = render(<ProgramList />);
     expect(screen.getByRole("status")).toHaveTextContent("Loading programs");
 
-    usePrograms.mockReturnValue({
-      data: {
-        items: [],
-        total: 0,
-        page: 1,
-        pageSize: 50,
-        pageCount: 0,
-      },
+    useAllPrograms.mockReturnValue({
+      data: [],
       error: new Error("IndexedDB is unavailable."),
       loading: false,
       refresh,

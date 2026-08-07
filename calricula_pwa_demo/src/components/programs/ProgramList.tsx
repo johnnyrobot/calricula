@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import type { ProgramStatus } from "../../lib/domain";
-import { usePrograms, useReferences } from "../../lib/data";
+import { useAllPrograms, useReferences } from "../../lib/data";
 
 const STATUS_OPTIONS: readonly (ProgramStatus | "All")[] = [
   "All",
@@ -36,10 +36,9 @@ function programStatusClass(status: ProgramStatus) {
 export function ProgramList() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<ProgramStatus | "All">("All");
-  const programs = usePrograms({
+  const programs = useAllPrograms({
     search: query.trim() || undefined,
     status: status === "All" ? undefined : status,
-    pageSize: 50,
     sortBy: "updatedAt",
     sortDirection: "desc",
   });
@@ -156,12 +155,12 @@ export function ProgramList() {
       ) : null}
 
       {!programs.loading && !programs.error ? (
-        programs.data.items.length ? (
+        programs.data.length ? (
           <div
             className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
             data-testid="programs-list"
           >
-            {programs.data.items.map((program) => {
+            {programs.data.map((program) => {
               const department = departments.get(program.departmentId);
               return (
                 <Link

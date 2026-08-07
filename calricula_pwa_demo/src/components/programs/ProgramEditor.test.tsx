@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const updateProgram = vi.hoisted(() => vi.fn());
 const useProgram = vi.hoisted(() => vi.fn());
-const useCourses = vi.hoisted(() =>
+const useAllCourses = vi.hoisted(() =>
   vi.fn(() => ({
     data: { items: [], total: 0, page: 1, pageSize: 100, pageCount: 0 },
     error: null,
@@ -47,7 +47,7 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("../../lib/data", () => ({
   curriculumRepository: { updateProgram, reorderProgramCourses },
-  useCourses,
+  useAllCourses,
   useProgram,
   useReferences,
 }));

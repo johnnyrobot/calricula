@@ -383,6 +383,19 @@ export class DexieCurriculumRepository implements CurriculumRepository {
   }
 
   async listCourses(query: CourseQuery = {}): Promise<PageResult<Course>> {
+    return page(await this.listAllCourses(query), query.page, query.pageSize);
+  }
+
+  /**
+   * Every course the query matches, unpaged.
+   *
+   * The paged read is a slice of this, not the other way round — the whole
+   * table is already in memory by the time either can filter. Without this
+   * verb a caller that wants everything either guesses a page size large
+   * enough (and `page()` silently clamps it to 100) or refetches page by page,
+   * repeating the full scan once per page.
+   */
+  async listAllCourses(query: CourseQuery = {}): Promise<Course[]> {
     await this.initialize();
     let values = await this.database.courses.toArray();
     const statuses = query.status
@@ -415,7 +428,7 @@ export class DexieCurriculumRepository implements CurriculumRepository {
       const field = query.sortBy === "createdAt" ? "createdAt" : "updatedAt";
       return direction * left[field].localeCompare(right[field]);
     });
-    return page(values, query.page, query.pageSize);
+    return values;
   }
 
   async getCourse(id: string): Promise<CourseAggregate | null> {
@@ -914,6 +927,11 @@ export class DexieCurriculumRepository implements CurriculumRepository {
     );
   }
   async listPrograms(query: ProgramQuery = {}): Promise<PageResult<Program>> {
+    return page(await this.listAllPrograms(query), query.page, query.pageSize);
+  }
+
+  /** Every program the query matches, unpaged. See `listAllCourses`. */
+  async listAllPrograms(query: ProgramQuery = {}): Promise<Program[]> {
     await this.initialize();
     let values = await this.database.programs.toArray();
     const statuses = query.status
@@ -933,7 +951,7 @@ export class DexieCurriculumRepository implements CurriculumRepository {
       const field = query.sortBy === "createdAt" ? "createdAt" : "updatedAt";
       return direction * left[field].localeCompare(right[field]);
     });
-    return page(values, query.page, query.pageSize);
+    return values;
   }
 
   async getProgram(id: string): Promise<ProgramAggregate | null> {

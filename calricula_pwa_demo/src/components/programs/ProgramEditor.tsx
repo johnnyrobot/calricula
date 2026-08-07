@@ -17,7 +17,7 @@ import {
 import type { UpdateProgramInput } from "../../lib/domain";
 import {
   curriculumRepository,
-  useCourses,
+  useAllCourses,
   useProgram,
   useReferences,
 } from "../../lib/data";
@@ -71,8 +71,7 @@ export function ProgramEditor({ programId }: { programId: string }) {
     ) => curriculumRepository.reorderProgramCourses(programId, requirements),
     [],
   );
-  const availableCourses = useCourses({
-    pageSize: 100,
+  const availableCourses = useAllCourses({
     sortBy: "courseCode",
     sortDirection: "asc",
   });
@@ -344,7 +343,7 @@ export function ProgramEditor({ programId }: { programId: string }) {
       />
       <ProgramCourseBuilder
         aggregate={aggregate.data}
-        availableCourses={availableCourses.data.items}
+        availableCourses={availableCourses.data}
         availableCoursesLoading={availableCourses.loading}
         disabled={aggregate.data.program.status === "Approved"}
         key={`program-courses-${aggregate.data.program.id}`}
