@@ -10,7 +10,6 @@ import {
   REQUEST_ID,
   apiRequest,
   baseEnv,
-  cookiePair,
   createSession,
   dependencies,
   envelope,
@@ -624,137 +623,40 @@ describe("OpenRouter policy and privacy contract", () => {
 });
 
 describe("AI output validation", () => {
-  it("normalizes a plain chat response", async () => {
+  /**
+   * The validators themselves are asserted directly in `worker/tasks.test.ts`,
+   * where a case costs nothing. This is the one case that still pays for a
+   * Turnstile exchange, an HMAC round trip and a quota reservation, because it
+   * is the only thing the direct tests cannot show: that a thrown
+   * `OutputValidationError` still reaches the caller as a 502
+   * `UPSTREAM_INVALID_RESPONSE` on a real route, leaking nothing about which
+   * field failed.
+   */
+  it("maps a rejected citation to 502 without naming what failed", async () => {
     const session = await createSession();
-    const { response } = await runAi({
-      cookie: session.cookie,
-      env: session.env,
-      upstream: openRouterSuccess("  A focused curriculum answer.  "),
-    });
-    expect(await envelope(response)).toMatchObject({
-      success: true,
-      data: { message: "A focused curriculum answer." },
-      model: FREE_MODELS[0],
-    });
-  });
-
-  it.each(["", "x".repeat(12_001)])(
-    "rejects invalid plain content",
-    async (content) => {
-      const session = await createSession();
-      const { response } = await runAi({
-        cookie: session.cookie,
-        env: session.env,
-        upstream: openRouterSuccess(content),
-      });
-      expect(response.status).toBe(502);
-      expect((await envelope(response)).error?.code).toBe(
-        "UPSTREAM_INVALID_RESPONSE",
-      );
-    },
-  );
-
-  it("accepts exact structured catalog-description output", async () => {
-    const session = await createSession();
-    const { response } = await runAi({
-      cookie: session.cookie,
-      env: session.env,
-      path: "/api/ai/catalog-description",
-      upstream: openRouterSuccess(
-        JSON.stringify({
-          description: "Develops foundational software testing knowledge.",
-        }),
-      ),
-    });
-    expect(await envelope(response)).toMatchObject({
-      success: true,
-      data: {
-        description: "Develops foundational software testing knowledge.",
-      },
-    });
-  });
-
-  it.each([
-    "not-json",
-    JSON.stringify({ description: "Valid", extra: "not allowed" }),
-    JSON.stringify({ description: "" }),
-  ])("rejects malformed structured output", async (content) => {
-    const session = await createSession();
-    const { response } = await runAi({
-      cookie: session.cookie,
-      env: session.env,
-      path: "/api/ai/catalog-description",
-      upstream: openRouterSuccess(content),
-    });
-    expect(response.status).toBe(502);
-    expect((await envelope(response)).error?.code).toBe(
-      "UPSTREAM_INVALID_RESPONSE",
-    );
-  });
-
-  it("enforces exact contact hours in a content outline", async () => {
-    const session = await createSession();
-    const valid = {
-      topics: [
-        {
-          sequence: 1,
-          topic: "Foundations",
-          contactHours: 27,
-          relatedSloNumbers: [1],
-        },
-        {
-          sequence: 2,
-          topic: "Applications",
-          contactHours: 27,
-          relatedSloNumbers: [2],
-        },
-      ],
-    };
-    const accepted = await runAi({
-      cookie: session.cookie,
-      env: session.env,
-      path: "/api/ai/content-outline",
-      body: { input: { totalContactHours: 54 } },
-      upstream: openRouterSuccess(JSON.stringify(valid)),
-    });
-    expect(accepted.response.status).toBe(200);
-
-    const rejected = await runAi({
-      cookie: cookiePair(accepted.response),
-      env: session.env,
-      path: "/api/ai/content-outline",
-      body: { input: { totalContactHours: 60 } },
-      upstream: openRouterSuccess(JSON.stringify(valid)),
-    });
-    expect(rejected.response.status).toBe(502);
-    expect((await envelope(rejected.response)).error?.code).toBe(
-      "UPSTREAM_INVALID_RESPONSE",
-    );
-  });
-
-  it("enforces the server-owned compliance citation pack", async () => {
-    const session = await createSession();
-    const invalidCitation = {
-      explanation: "This needs human review.",
-      recommendations: ["Consult the curriculum committee."],
-      citations: [
-        {
-          sourceId: "attacker-provided-source",
-          supports: "A fabricated claim.",
-        },
-      ],
-      humanReviewRequired: true,
-    };
     const { response } = await runAi({
       cookie: session.cookie,
       env: session.env,
       path: "/api/ai/compliance-explanation",
-      upstream: openRouterSuccess(JSON.stringify(invalidCitation)),
+      upstream: openRouterSuccess(
+        JSON.stringify({
+          explanation: "This needs human review.",
+          recommendations: ["Consult the curriculum committee."],
+          citations: [
+            {
+              sourceId: "attacker-provided-source",
+              supports: "A fabricated claim.",
+            },
+          ],
+          humanReviewRequired: true,
+        }),
+      ),
     });
     expect(response.status).toBe(502);
-    expect((await envelope(response)).error?.code).toBe(
-      "UPSTREAM_INVALID_RESPONSE",
-    );
+    const body = await envelope(response);
+    expect(body.error?.code).toBe("UPSTREAM_INVALID_RESPONSE");
+    expect(body.error?.message).not.toContain("attacker-provided-source");
+    expect(body.error?.message).not.toContain("sourceId");
   });
 });
 

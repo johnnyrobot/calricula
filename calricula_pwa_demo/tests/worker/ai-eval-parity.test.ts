@@ -14,13 +14,18 @@ import {
   type AITaskOutputMap,
 } from "../../src/lib/ai/schemas";
 import type { AITask } from "../../src/lib/ai/types";
+import {
+  OutputValidationError,
+  TASKS,
+  type TaskName,
+} from "../../worker/tasks";
 
 import { createSession, envelope, openRouterSuccess, runAi } from "./helpers";
 
 /**
  * `scripts/ai-evaluate.mjs` decides whether a candidate model is fit to deploy.
- * If its rubric accepted output that `worker/index.ts` rejects, a model would
- * pass qualification and then fail every real request as
+ * If its rubric accepted output that the Worker rejects, a model would pass
+ * qualification and then fail every real request as
  * `UPSTREAM_INVALID_RESPONSE`. This pins the rubric to the Worker instead of
  * leaving the agreement to review.
  *
@@ -36,6 +41,20 @@ const TASK_BODIES: Record<string, unknown> = {
   // Arms getExpectedContactHours so the exact-hours validator actually runs.
   "content-outline": { input: { totalContactHours: 54 } },
 };
+
+function taskInput(task: string): unknown {
+  return (TASK_BODIES[task] as { input: unknown } | undefined)?.input;
+}
+
+function validatorAccepts(task: string, content: string): boolean {
+  try {
+    TASKS[task as TaskName].validate(content, taskInput(task));
+    return true;
+  } catch (error) {
+    if (error instanceof OutputValidationError) return false;
+    throw error;
+  }
+}
 
 async function workerAccepts(
   task: string,
@@ -59,13 +78,13 @@ async function workerAccepts(
 describe("evaluation rubric / Worker validator parity", () => {
   it.each(EVAL_FIXTURES.map((fixture) => fixture.task))(
     "agrees with the Worker on accepted and rejected %s output",
-    async (task) => {
+    (task) => {
       const fixture = EVAL_FIXTURES.find((entry) => entry.task === task)!;
       const sample = EVAL_SAMPLES[task];
 
       for (const variant of ["good", "bad"] as const) {
         const content = sample[variant];
-        const { accepted } = await workerAccepts(task, content);
+        const accepted = validatorAccepts(task, content);
         const rubricAccepted = workerEnforcedVerdict(fixture, content);
 
         expect({ task, variant, accepted }).toEqual({
@@ -77,17 +96,26 @@ describe("evaluation rubric / Worker validator parity", () => {
     },
   );
 
-  it.each(EVAL_FIXTURES.map((fixture) => fixture.task))(
-    "rejects the %s violation for the reason the rubric names",
-    async (task) => {
-      const { accepted, errorCode } = await workerAccepts(
-        task,
-        EVAL_SAMPLES[task].bad,
-      );
-      expect(accepted).toBe(false);
-      expect(errorCode).toBe("UPSTREAM_INVALID_RESPONSE");
-    },
-  );
+  /**
+   * The comparison above is only worth anything if `handleRequest` still runs
+   * the validator it compares against — the gap that produced a93b1f0. One
+   * case goes over HTTP to prove the wiring is intact, and it is deliberately
+   * `content-outline`: the only task whose `validate` reads the request input,
+   * so this is also the case that proves `handleRequest` threads `input`
+   * through. A rubric agreeing with an unreachable validator fails here.
+   */
+  it("still reaches the validator through the route it is compared against", async () => {
+    const task = "content-outline";
+    const good = await workerAccepts(task, EVAL_SAMPLES[task].good);
+    expect(good.accepted).toBe(true);
+
+    const bad = await workerAccepts(task, EVAL_SAMPLES[task].bad);
+    expect(bad).toEqual({
+      accepted: false,
+      errorCode: "UPSTREAM_INVALID_RESPONSE",
+    });
+    expect(validatorAccepts(task, EVAL_SAMPLES[task].bad)).toBe(false);
+  });
 });
 
 describe("evaluation catalog / Worker catalog parity", () => {
@@ -97,9 +125,11 @@ describe("evaluation catalog / Worker catalog parity", () => {
     (_, index) => codes.slice(index * 3, index * 3 + 3),
   );
 
-  // The Worker keeps its own copy of the TOP catalog and it is module-private,
-  // so it is pinned behaviourally: every code and title the rubric believes in
-  // must survive the Worker's own title comparison.
+  // Pinned behaviourally rather than by comparing the two catalogs: what has
+  // to hold is that every code and title the rubric believes in survives the
+  // Worker's own title comparison on a real request. The Worker's catalog is
+  // reachable directly since it moved to `worker/catalog.ts`, so a data-level
+  // comparison is now possible too — see the follow-up note in the commit.
   it.each(groups.map((group, index) => [index, group] as const))(
     "accepts eval catalog codes in group %i",
     async (_index, group) => {

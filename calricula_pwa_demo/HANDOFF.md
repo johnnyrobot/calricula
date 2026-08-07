@@ -414,7 +414,7 @@ literal (`src/app/page.tsx:21`); `rehype-raw` is absent from both `package.json`
 and `node_modules`, so model output rendered through `ReactMarkdown` is not an
 XSS sink; `worker/` contains no `console.*` at all; every `ApiError` message is
 a literal and `OutputValidationError` is replaced by a fixed string
-(`worker/index.ts:1936`); the built `out/sw.js` contains `connectivity` zero
+(`worker/index.ts:1312`); the built `out/sw.js` contains `connectivity` zero
 times and no `/api/**` precache entry.
 
 Three defects were found and fixed in the range now under scan:
