@@ -97,6 +97,26 @@ two-sided rule existed solely in the editor's inline banner.
   60-unit program limit is the obvious next place to look. That sweep is queued
   separately rather than folded into this change.
 
+## Amendment — 2026-08-07
+
+The decision stands. This corrects one example in the text above, which named a rule this
+codebase does not contain.
+
+**There is no 60-unit program limit in this demo.** § Consequences, "Not swept", offers it
+as the obvious next place to look. It is not a place at all: `src/lib/compliance/rules.ts`
+mentions programs nowhere and carries no program-unit rule; `totalUnits` is a
+`UnitValueSchema` decimal string, format-checked but with no ceiling of any kind; and the
+string "60-unit" appears nowhere in `src/`, `worker/`, `shared/` or `scripts/`. It is a
+rule of the **parent** Next.js + FastAPI application — root `CLAUDE.md` describes the
+"Program builder (60-unit limit)" — and it crossed the stack boundary this demo's
+`CLAUDE.md` § "Scope and boundary" draws. The example was wrong; the point it illustrated
+was not.
+
+The sweep the bullet queues is still owed, with its target restated without the bad
+example: **which UI surfaces render a compliance verdict `rules.ts` does not sanction.**
+Candidate 1 found one in the course editor. `RegistrarDashboard.tsx` was checked and is
+correct. Nothing else has been checked.
+
 ## References
 
 - `src/lib/compliance/hours.ts` — the single implementation

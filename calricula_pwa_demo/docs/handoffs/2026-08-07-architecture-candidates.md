@@ -70,14 +70,22 @@ in-repo comment, and each was believed until read against the code.
    exist — the third catalog copy could simply be deleted rather than
    parity-tested.
 2. **"`useRepositoryRevision` has no production caller."** It is used at
-   `hooks.ts:49`, inside `useRepositoryQuery`.
+   `hooks.ts:48`, inside `useRepositoryQuery`.
 3. **"`DemoProvider` runs an untested duplicate of `useRepositoryReady`."** It
    does strictly more — retry and an error state the hook never had — and lives
    at `src/components/shell/`, not `src/contexts/`. `useRepositoryReady` was the
    one genuinely unused thing, and was deleted.
-4. **"9 of 12 hooks are pass-throughs."** Five are. `useCourses`, `usePrograms`
-   and `useNotifications` stabilise the query object, which is what stops a
-   fresh object literal per render from re-querying forever.
+4. **"9 of 12 hooks are pass-throughs."** Five are, counted at `9b4b2ab`, where
+   `hooks.ts` exported exactly 12. The five that delegate to one repository
+   method and do nothing else are `useRepositoryReady`, `useDashboard`,
+   `useReferences`, `usePersonas` and `useActivePersona`. Of the rest,
+   `useCourses`, `usePrograms` and `useNotifications` stabilise the query
+   object, which is what stops a fresh object literal per render from
+   re-querying forever; `useCourse` and `useProgram` suppress a stale aggregate
+   when the id changes under them. Both numbers are a census of that commit,
+   not a current figure — this review deleted `useRepositoryReady` and added
+   `useAllCourses` and `useAllPrograms`, which stabilise, so the tree now holds
+   13 hooks of which four are pass-throughs.
 5. **ADR-0002's own text.** It names `AIArtifactPersistence`, which never
    shipped, and a 33-method count that was 32 when checked and is 34 now.
    Amended by `ed1de9a` rather than edited, so the August decision and the later
@@ -99,9 +107,12 @@ the whole union, still in one import.
 
 None of these were started.
 
-1. **The Codex Security diff scan over `f0c5854..d650b92` is still owed.** An
-   automated pre-scan review found nothing and is recorded in `HANDOFF.md` with
-   the checks it ran; it is a prior, not the scan, and closes nothing.
+1. **The Codex Security diff scan is still owed.** `HANDOFF.md` holds the
+   authoritative range and target — `f0c5854..HEAD`, resolved at scan time
+   rather than pinned to a SHA — and this document deliberately does not
+   restate it, so there is one place to read it and no second copy to drift.
+   An automated pre-scan review found nothing and is recorded there with the
+   checks it ran; it is a prior, not the scan, and closes nothing.
 2. **`tests/` is not a release input.** Deliberate — Worker unit tests are not a
    build input — but it means a change there leaves the source fingerprint
    unchanged. Worth an explicit decision.
@@ -111,12 +122,30 @@ None of these were started.
 4. **`makeCCNMatches`** (`CourseRouteScreens.tsx`) — the same "logic in a screen"
    shape as candidate 4, plus a two-pass confidence fallback that deserves its
    own argument.
-5. **`spawnChild` consolidation** — nine duplicated capture blocks, five overflow
-   policies, two unbounded. Deferred because it touches `release-deploy.mjs`,
-   whose core is unreachable by tests and only runs against real Cloudflare.
+5. **Spawn-wrapper consolidation** — there is no `spawnChild` helper to grep
+   for, which is the finding. `scripts/` has 13 spawn sites, each with its own
+   wrapper; 12 call `spawn` directly and `release-deploy.mjs:470` goes through
+   an injectable `spawnProcess`, which is why a `spawn(` grep finds only 12.
+   Seven of them accumulate child output, under five different overflow
+   policies: `cloudflare-release-target.mjs:382` bounds accumulation and kills
+   the child; `local-production.mjs:101` keeps a 4,000-character tail;
+   `release-state.mjs:648`, `verify-fresh-checkout.mjs:49` and
+   `run-lighthouse.mjs:318` accumulate uncapped and truncate only when
+   formatting the error; `release-evidence.mjs:328` truncates from the head
+   rather than the tail; and `release-evidence.mjs:202` never truncates at all.
+   Deferred because it touches `release-deploy.mjs`, whose core is unreachable
+   by tests and only runs against real Cloudflare.
 6. **Verdict sweep** — candidate 1 found the editor rendering a compliance
-   verdict the domain rejects. The 60-unit program limit is the next place to
-   look; `RegistrarDashboard.tsx` was checked and is correct.
+   verdict the domain rejects. ADR-0003 named the 60-unit program limit as the
+   next place to look. **There is no such limit in this demo**: it is a
+   parent-app rule (root `CLAUDE.md`, "Program builder (60-unit limit)") that
+   crossed the stack boundary into the ADR. `compliance/rules.ts` mentions
+   programs nowhere and carries no program-unit rule, and `totalUnits` is a
+   format-checked decimal string with no ceiling, so nothing renders a verdict
+   about it. Corrected in ADR-0003. The sweep still has a target — which UI
+   surfaces render a verdict `rules.ts` does not sanction — but that limit is
+   not one of them, and a reader should not spend the search.
+   `RegistrarDashboard.tsx` was checked and is correct.
 
 ## Release state
 
