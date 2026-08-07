@@ -101,8 +101,17 @@ The expected tracked `src/lib/**` count at the current handoff is 45 (it was 44
 through `274d428`; `5c0de4c` added `src/lib/ai/session-readiness.ts` and its
 test, the seven-route evaluation work added
 `src/lib/ai/eval-catalog-parity.test.ts`, and removing the write-only AI
-artifact path deleted `src/lib/ai/persistence.ts` and its test). The last
-command must remain empty unless the user explicitly changes the
+artifact path deleted `src/lib/ai/persistence.ts` and its test).
+
+Runtime source is no longer confined to `src/lib/**`. `shared/` holds 4 tracked
+files read by both the Worker and the browser. It is not caught by the parent
+`lib/` ignore rule, so it needs no `.gitignore` negation, but it **is** a
+release input: `RELEASE_INPUT_DIRECTORIES` in `scripts/release-inputs.mjs` must
+list every directory that ships source, or `verify-fresh-checkout` rebuilds a
+tree missing it. `scripts/release-inputs.test.mjs` fails when one is
+unenumerated; do not weaken that guard when adding a directory.
+
+The last command must remain empty unless the user explicitly changes the
 boundary — and it is only meaningful from the repository root, because both of
 its pathspecs are cwd-relative.
 

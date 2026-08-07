@@ -1,6 +1,6 @@
 # Calricula PWA Demo - Security Remediation and Deployment Handoff
 
-Last reconciled: 2026-08-03 (America/Los_Angeles)
+Last reconciled: 2026-08-07 (America/Los_Angeles)
 
 This document is the point-in-time handoff for the standalone local-first PWA
 under `/Users/laccd/code/calricula/calricula_pwa_demo`. It is deliberately
@@ -12,8 +12,10 @@ verified in production.
 The demo implementation and the six known security remediations are committed
 on a clean release branch. The application is **not ready to be declared
 deployed or production-verified**. The mandatory security diff scan over
-`b446c76..f0c5854` **reported clean**. Code has landed since that head, so a
-further diff scan over `f0c5854..HEAD` is owed before release. A new full
+`b446c76..f0c5854` **reported clean**. Fourteen demo commits have landed since
+that head, so a further diff scan over `f0c5854..HEAD` is still owed before
+release; an automated pre-scan review over exactly that range found nothing on
+2026-08-07 and is a prior for the scan, not the scan. A new full
 standard scan, clean release evidence,
 Cloudflare bootstrap, Turnstile configuration, live model qualification,
 AI-enabled deployment, production browser checks, Lighthouse, offline checks,
@@ -26,7 +28,21 @@ did not report them — `run-lighthouse.mjs` to headless Chrome and
 is therefore evidence about the findings it looked for, not proof that a stated
 invariant holds; check invariants against the code.
 
-**Reconcile note, 2026-08-03.** Since the 2026-07-31 handoff, 22 commits of
+**Reconcile note, 2026-08-07.** Since the 2026-08-03 reconcile, 29 further demo
+commits landed: the remaining five candidates of the eight-candidate
+architecture review that `docs/handoffs/2026-08-07-architecture-candidates.md`
+carried, plus one release fix. It changed no release fact — every row in the
+table below has the status it had on 2026-08-03 — with one exception that is a
+release fact and is recorded as such:
+
+`f1e0535` added `shared/` and `scripts/release-inputs.mjs` did not enumerate it,
+so `release:verify:fresh-checkout` would have rebuilt a tree missing two runtime
+modules. Fixed by `d650b92`, which also adds the directory-coverage guard that
+would have caught it. Eight green `npm run verify` runs passed over the defect,
+because `verify` does not exercise the release scripts. Treat that as the
+standing lesson it already was, now with a second instance.
+
+**Superseded reconcile note, 2026-08-03.** Since the 2026-07-31 handoff, 22 commits of
 internal architecture work landed on this branch (a nine-candidate review, now
 closed — see `docs/handoffs/2026-08-02-architecture-deepening.md` and
 `docs/adr/`). It changed no release fact: every row in the table below has the
@@ -43,11 +59,11 @@ release-gate attempts at step 5 of 14.
 | --- | --- | --- |
 | Local-first PWA implementation | Implemented | Tracked application and test source |
 | Six historical security findings | Remediated in code | Requires diff-scan validation before closure |
-| `src/lib/**` provenance | Fixed | 45 files tracked (46 at `c83084f`; 44 at `274d428`; `ai/session-readiness.ts` and its test added by `5c0de4c`, `ai/eval-catalog-parity.test.ts` by the seven-route evaluation work, `ai/persistence.ts` and its test removed with the write-only artifact path); fresh-checkout package reproduction passed at `274d428` and not rerun since |
-| Aggregate local verification | Passed at `c83084f` | `npm run verify` exit 0 on 2026-08-03: 554 UI/repository tests in 75 files, 174 Worker tests, 7 Chromium smoke tests. Not a substitute for the release gate |
+| Runtime-source provenance | Fixed | 45 files tracked under `src/lib/**`, plus 4 under `shared/**` added by `f1e0535` and enumerated as release inputs by `d650b92` (46 at `c83084f`; 44 at `274d428`; `ai/session-readiness.ts` and its test added by `5c0de4c`, `ai/eval-catalog-parity.test.ts` by the seven-route evaluation work, `ai/persistence.ts` and its test removed with the write-only artifact path); fresh-checkout package reproduction passed at `274d428` and not rerun since |
+| Aggregate local verification | Passed at `d650b92` | `npm run verify` exit 0 on 2026-08-07: 617 UI/repository/release-script tests in 79 files, 222 Worker tests, 7 Chromium smoke tests. Not a substitute for the release gate |
 | Local test stability | Restored | The long-standing `AppShell` "flake" was a marginal-timeout defect, diagnosed and fixed 2026-08-04; 0 failures in 10 consecutive coverage runs. See "Resolved local instability" |
 | Security diff scan | **Reported clean** over `b446c76..f0c5854` | 43 commits. The originally configured `b446c76..274d428` range was stale and was re-targeted before start. It did **not** catch the two unscrubbed spawn sites fixed by `e683986` — see "What the clean scan does not establish" |
-| Diff scan of work after `f0c5854` | **Owed** | `460aeeb`, `4837dce`, `e683986` and later architecture work are unscanned. One batch scan at a stable head, per the re-target procedure below |
+| Diff scan of work after `f0c5854` | **Still owed** | 14 demo commits, `9b4b2ab`..`d650b92`. An automated pre-scan review over exactly this range reported no findings on 2026-08-07 and is recorded below with the checks it ran — it is a prior for the scan, not the scan, and closes nothing. target HEAD at scan time, not this SHA: `d650b92` is the last code-bearing commit, and the reconcile commits after it are documentation-only, which the pre-scan review could not have covered because they did not exist when it ran |
 | New complete standard scan | Not run | Required because historical scan omitted `src/lib/**` |
 | `.release-evidence/local-gate.json` | Missing | No bootstrap or full release seal exists |
 | Cloudflare bootstrap/deployment | Not performed | No release-owned hostname, version, deployment, or rollback receipt |
@@ -67,11 +83,16 @@ release-gate attempts at step 5 of 14.
 - Primary six-finding remediation commit: `3101f4a7acc933ca07d27268344ac13bd28b43a0`
 - Last code-only checkpoint before this documentation: `274d42813447b719d7f3dc82ab968d24349ea3a2`
 - Release-relevant head at the 2026-07-31 reconcile: `274d428`
-- **Current head at the 2026-08-03 reconcile: `c83084fe2a965273e3b998fc9976eae4521bcf35`**
-  — 22 architecture-only commits beyond `274d428`, listed by
-  `git log --oneline 274d428..HEAD`. None of them touches release scripts'
-  behaviour, `wrangler.jsonc` vars, or the security posture.
-- The implementation checkpoint was clean at both reconciles.
+- Head at the 2026-08-03 reconcile: `c83084fe2a965273e3b998fc9976eae4521bcf35`
+  — 22 architecture-only commits beyond `274d428`. None of them touches release
+  scripts' behaviour, `wrangler.jsonc` vars, or the security posture.
+- **Current head at the 2026-08-07 reconcile: `d650b92`**
+  — 29 commits beyond `c83084f`, listed by `git log --oneline c83084f..HEAD`.
+  Twenty-eight are architecture-only on the same terms as above. The
+  twenty-ninth, `d650b92`, *does* touch a release script: it adds `shared` to
+  `RELEASE_INPUT_DIRECTORIES`, repairing a fresh-checkout break introduced by
+  `f1e0535` earlier in the same range.
+- The implementation checkpoint was clean at all three reconciles.
 - Run from the **repository root** (`/Users/laccd/code/calricula`):
   `git diff --name-only main...HEAD -- . ':(exclude)calricula_pwa_demo/**'`
   It was empty at both reconciles: no parent frontend/backend file changed.
@@ -110,6 +131,26 @@ changes release, security, or deployment behaviour:
 | `0b0e595` … `84d2a11` | Candidates 1, 2, 7, 6, 9, 8, 3, 4 — see `docs/handoffs/2026-08-02-architecture-deepening.md` |
 | `f451f02` | Commit that handoff to `docs/handoffs/` |
 | `6834d95`, `b05d737`, `3b97f13`, `6e94f9f`, `c83084f` | Candidate 5 — narrow the curriculum repository interface, 47 → 33 methods; see `docs/adr/0002-repository-interface-roles-and-test-seam.md` |
+
+Architecture commits added between the 2026-08-03 and 2026-08-07 reconciles,
+oldest first. They close a separate eight-candidate review. All but the last are
+architecture-only; `d650b92` repairs a release script and is called out above:
+
+| Commit | Purpose |
+| --- | --- |
+| `9b4b2ab` | Re-target the security scan range to `b446c76..f0c5854` |
+| `460aeeb`, `4837dce` | Candidate 1 — one implementation of the 54-hour rule; see `docs/adr/0003-conventional-hours-are-a-reference-not-a-verdict.md` |
+| `e683986`, `2c64252` | Candidate 5 — the last two spawn sites routed through `childEnvironment()` |
+| `4a7a4be` | Candidate 4 — a course save planned in a module, not a React closure |
+| `500095d`, `4967315` | Candidate 3 — the Worker's task catalog out of `handleRequest`; `worker/index.ts` 2520 → 1706 lines |
+| `f1e0535`, `2ed0c6d` | Candidate 2 — one regulatory catalog and one set of output bounds behind `shared/` |
+| `2e7809f` | Candidate 6 — a repository verb for "every course"; fixes silent page-size truncation |
+| `33f6819` | Candidate 7 — the AI barrel exposes readiness, not the storage behind it |
+| `ed1de9a` | Candidate 8 — ADR-0002 amended rather than refactored |
+| `d650b92` | Enumerate `shared/` as a release input, repairing fresh-checkout reproduction |
+
+See `docs/handoffs/2026-08-07-architecture-candidates.md` for what each candidate
+found, and for the five prior claims that did not survive checking.
 
 Every commit contains the required trailer:
 
@@ -205,7 +246,8 @@ Historical issue: the parent Python `lib/` ignore rule excluded all runtime
 Implemented fix:
 
 - Demo `.gitignore` re-includes `src/lib/` and descendants.
-- All 44 runtime files are tracked.
+- All 45 runtime files under `src/lib/**` are tracked, as are the 4 under
+  `shared/**`.
 - `scripts/release-inputs.mjs` is the canonical enumerator shared by source
   fingerprinting and Git-tree validation.
 - It rejects ignored/missing inputs, symlinks, case/path inconsistencies, and
@@ -281,8 +323,8 @@ Implemented fix:
 
 ## Verification already performed
 
-The following checks passed via `npm run verify` (exit 0) at `c83084f` on
-2026-08-03. They are useful evidence of code health but are **not** a substitute
+The following checks passed via `npm run verify` (exit 0) at `d650b92` on
+2026-08-07. They are useful evidence of code health but are **not** a substitute
 for the fresh release gate required at the final commit — `verify` is 8 steps;
 `release:gate` is 14 and adds fresh-checkout reproduction, the five-browser E2E
 matrix, local production verification, Lighthouse, and the evidence seal:
@@ -290,19 +332,23 @@ matrix, local production verification, Lighthouse, and the evidence seal:
 - production dependency audit: zero production vulnerabilities at the
   configured threshold (`npm audit --omit=dev --audit-level=high`);
 - ESLint and TypeScript typecheck;
-- 75 Vitest files / 554 UI, domain, repository, and release-script tests;
-- coverage: 85.14% statements, 74.31% branches, 81.98% functions, and 87.00%
+- 79 Vitest files / 617 UI, domain, repository, and release-script tests;
+- coverage: 85.31% statements, 74.70% branches, 82.07% functions, and 87.13%
   lines, including the higher risk-module thresholds — `repository.ts` at
-  94.69/88.72/94.02/96.22 against its 90-line/85-branch floor;
-- 174 workerd-compatible Worker tests across 5 files;
+  94.59/88.67/93.88/96.15 against its 90-line/85-branch floor. `shared/**` was
+  added to the coverage include by `f1e0535`, so these figures cover a slightly
+  larger denominator than the 2026-08-03 ones;
+- 222 workerd-compatible Worker tests across 8 files;
 - static export validation: 211 of a 20,000 limit and approximately 2.31 MiB
   total, largest chunk 0.22 MiB; Workbox precached 207 finite files (2.27 MiB);
-- dry-run Worker validation: 68.46 KiB uploaded, 16.53 KiB gzipped,
+- dry-run Worker validation: 71.33 KiB uploaded, 16.69 KiB gzipped,
   approximately 0.02 MiB compressed by the validator, against the 3 MiB ceiling;
 - 7 Chromium critical-path smoke tests;
 The last two items below are carried from the 2026-07-31 reconcile and were
-**not** rerun on 2026-08-03. `npm run verify` does not include either one. Treat
-them as evidence about `274d428`, not about `c83084f`:
+**not** rerun on 2026-08-03 or 2026-08-07. `npm run verify` does not include
+either one — which is how `f1e0535` broke fresh-checkout reproduction for four
+commits without any green run noticing (see the 2026-08-07 reconcile note).
+Treat them as evidence about `274d428`, not about `d650b92`:
 
 - original six scan PoCs rerun against the repaired source; vulnerable source
   signatures no longer reproduced (at `274d428`);
@@ -400,6 +446,52 @@ load-sensitive flake, and "rerun and it passes" is evidence *for* a timing
 defect rather than against one. Nothing here indicated a production fault — the
 lazy boundary is deliberate architecture and the Chromium smoke suite never
 reproduced it.
+
+## Automated pre-scan review — 2026-08-07 (`f0c5854..HEAD`)
+
+A second automated review, over the 13 demo commits after `f0c5854` (58 files,
++2846/-1668). Same standing as the 2026-08-04 review below: it **does not
+substitute** for the Codex Security diff scan, which remains **owed** over this
+range, and it closes no finding. It is recorded so the scan has a prior and any
+discrepancy is visible rather than silent.
+
+**Result: no security findings.**
+
+What it checked, so a reader knows what a clean result does and does not cover
+— the 2026-08-04 scan reported clean over a range containing two unscrubbed
+spawn sites, which is the reason this list is explicit:
+
+| Check | Result |
+| --- | --- |
+| Secrets, private keys, bearer tokens in added lines | None. One `sk-or-v1-not-a-real-key` literal in `scripts/run-lighthouse.test.mjs`, added by `e683986` as the negative control proving `childEnvironment()` scrubs it; absent from `out/` and `.wrangler/` |
+| `NEXT_PUBLIC_`-prefixed secret names | None |
+| Real personal or maintainer email | None anywhere in the diff |
+| `console.*` added under `worker/` | None; `worker/` still contains none |
+| Spawn sites | All 13 in `scripts/` take an env derived from `childEnvironment()`. Two (`local-production.mjs:76`, `run-lighthouse.mjs:312`) place it outside a naive grep window and were read directly |
+| Worker error messages | Every `ApiError` message is a literal or interpolates only internal values. `OutputValidationError` still becomes the fixed 502 string at `worker/index.ts:1316` |
+| Prompt-injection guards | Intact after the catalog moved: the TOP allowlist and untrusted-content clauses survive in `worker/catalog.ts` and `worker/tasks.ts` |
+| `wrangler.jsonc` fail-closed | Unchanged — `AI_ENABLED=false`, invalid `APP_ORIGIN`, empty model list, no `account_id` |
+| `.gitignore` `src/lib` negations | Present (`:27-28`) |
+| Service worker | `connectivity` 0, `openrouter-llms-full` 0, precached `/api` entries 0. The one `/api/` string is the navigation handler *excluding* it |
+| Secrets in build output | None in `out/` after a clean rebuild |
+| Coverage floors | Not weakened. `shared/**` was **added** to the coverage include, enlarging the denominator |
+
+**New surface introduced in this range, and why it is not an exposure.**
+`shared/ai-catalog.ts` and `shared/ai-limits.ts` are read by both the Worker and
+the browser. Both are leaf modules importing nothing, and the client bundle
+contains no Worker-only string (`SERVER-OWNED SOURCE PACK`, `openrouter.ai/api`,
+`__Host-calricula_ai_session`, `TURNSTILE_SITEVERIFY`, `UPSTREAM_INVALID_RESPONSE`
+all absent from `out/_next`). The regulatory catalog does reach the client, but
+it did before this range too — `src/lib/ai/schemas.ts` held an identical copy at
+`f0c5854` and `CourseAIControls.tsx` imported it. Nothing newly crosses to the
+browser.
+
+**One sub-threshold observation, out of this range's scope.**
+`requireAllowedRequestKeys` reflects a client-supplied field name into a 400
+response (`worker/index.ts:453`). It is bounded only by the 64 KiB body limit,
+and is returned as JSON with no injection sink. It predates the baseline
+(`b446c76`) and does not appear in this diff, so a diff scan cannot reach it —
+it belongs to the **owed standard scan** over the complete tracked commit.
 
 ## Automated pre-scan review — 2026-08-04
 
@@ -704,11 +796,16 @@ the exact final URL and Cloudflare version:
 | Concern | Files |
 | --- | --- |
 | Architecture and operator workflow | `README.md`, `AGENTS.md`, this handoff |
+| Design decisions | `docs/adr/` (0001 AI session readiness, 0002 repository roles and test seam + its 2026-08-07 amendment, 0003 conventional hours), `CONTEXT.md` |
+| Prior handoffs | `docs/handoffs/` — 2026-08-02 nine-candidate architecture review, 2026-08-07 eight-candidate review |
+| Forward plan | `docs/plans/2026-08-04-public-beta-readiness.md` — the seven-route evaluation work; written before that work landed, so read its line references as of its own date |
+| Operational runbook | `docs/runbooks/ai-triage.md` — triaging AI-path failures once a deployment exists |
 | Static/export/PWA configuration | `next.config.ts`, `src/app/manifest.ts`, `scripts/build-pwa.mjs`, `scripts/validate-build.mjs`, `public/_headers` |
 | Local data and backup/reset | `src/lib/data/repository.ts`, `src/lib/data/database.ts`, `src/lib/domain/schemas.ts` |
 | Deterministic compliance | `src/lib/compliance/` |
 | Browser AI client/review/apply | `src/lib/ai/`, `src/components/ai/` |
 | Worker security and quota | `worker/index.ts`, `worker/daily-quota.test.ts`, `tests/worker/` |
+| Worker AI task contract | `worker/tasks.ts`, `worker/catalog.ts`, `shared/ai-catalog.ts`, `shared/ai-limits.ts` |
 | Cloudflare bindings | `wrangler.jsonc` |
 | Release inventory and fingerprints | `scripts/release-inputs.mjs`, `scripts/release-state.mjs`, `scripts/release-evidence.mjs` |
 | Exact-commit reproduction | `scripts/verify-fresh-checkout.mjs` |
