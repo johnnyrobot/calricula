@@ -6,6 +6,7 @@ import {
   MINIMUM_HOURS_PER_UNIT,
   SEMESTER_WEEKS,
   calculateHourBreakdown,
+  calculateTotalStudentLearningHours,
 } from "./hours";
 import { checkUnitsAndHours } from "./rules";
 import type { ComplianceStatus } from "./types";
@@ -50,6 +51,17 @@ describe("parent Python compliance-service golden parity", () => {
       expect(input.units * MINIMUM_HOURS_PER_UNIT).toBe(
         expected.minimumRequiredHours,
       );
+
+      // The course editor persists totalStudentHours through this verb rather
+      // than through calculateHourBreakdown, so pin it by name: a change to the
+      // delegation must not silently unpin the editor's path. See ADR-0003.
+      expect(
+        calculateTotalStudentLearningHours({
+          lectureHours: input.lecture_hours,
+          labHours: input.lab_hours,
+          outsideOfClassHours: input.outside_of_class_hours,
+        }),
+      ).toBe(expected.totalStudentLearningHours);
 
       const results = checkUnitsAndHours(input);
       const statusesByRuleId = new Map(

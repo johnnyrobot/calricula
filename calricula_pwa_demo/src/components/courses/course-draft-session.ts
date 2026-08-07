@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { calculateTotalStudentLearningHours } from '@/lib/compliance';
 import { courseDraftRecoveryKey } from '@/lib/pwa/course-draft-recovery';
 import { registerPendingWorkFlusher } from '@/lib/pwa/pending-work';
 import type {
@@ -37,13 +38,17 @@ interface NavigationLike {
 }
 
 function calculateTotal(course: CourseViewModel) {
+  // The 54-Hour Rule has one implementation. The editor's field names differ
+  // from the compliance module's, so map them here rather than widening
+  // WeeklyHoursInput to accommodate this one caller. See ADR-0003.
   return String(
-    (Number(course.lectureHours || 0) +
-      Number(course.labHours || 0) +
-      Number(course.activityHours || 0) +
-      Number(course.tbaHours || 0) +
-      Number(course.outsideHours || 0)) *
-      18,
+    calculateTotalStudentLearningHours({
+      lectureHours: course.lectureHours,
+      labHours: course.labHours,
+      activityHours: course.activityHours,
+      tbaHours: course.tbaHours,
+      outsideOfClassHours: course.outsideHours,
+    }),
   );
 }
 

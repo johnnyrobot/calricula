@@ -15,6 +15,7 @@ import {
   Trash2,
   TriangleAlert,
 } from 'lucide-react';
+import { calculateConventionalUnits, toFiniteNumber } from '@/lib/compliance';
 import type { CourseAggregate } from '@/lib/data';
 import type { Department, TopCode } from '@/lib/domain';
 import { CourseAIControls } from '@/components/ai/CourseAIControls';
@@ -144,10 +145,8 @@ export function OverviewSection({
   onChange: (patch: CourseEditorPatch) => void;
 }) {
   const unitsId = useId();
-  const total = Number(course.totalStudentHours || 0);
-  const units = Number(course.units || 0);
-  const conventionalUnits = total / 54;
-  const hoursMatch = units > 0 && Math.abs(conventionalUnits - units) <= 0.25;
+  const total = toFiniteNumber(course.totalStudentHours);
+  const conventionalUnits = calculateConventionalUnits(total);
 
   return (
     <div className="space-y-7">
@@ -280,23 +279,16 @@ export function OverviewSection({
             </div>
           ))}
         </div>
-        <div
-          className={`mt-5 flex flex-col gap-3 border-l-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${
-            hoursMatch
-              ? 'border-seal-approved bg-seal-approved/10'
-              : 'border-gold bg-gold/10'
-          }`}
-        >
-          <div>
-            <p className="font-sans text-sm font-semibold text-ink">
-              {hoursMatch ? 'Conventional 54-hour relationship satisfied' : 'Review the unit/hour relationship'}
-            </p>
-            <p className="mt-1 font-sans text-xs text-muted">
-              {total.toFixed(1)} total student hours ÷ 54 = {conventionalUnits.toFixed(2)} conventional units.
-              The deterministic audit separately applies the regulatory minimum.
-            </p>
-          </div>
-          <ComplianceMark status={hoursMatch ? 'pass' : 'warn'} label={`${course.units || '0'} units`} />
+        <div className="mt-5 border-l-2 border-hairline bg-surface px-4 py-3">
+          <p className="font-sans text-sm font-semibold text-ink">
+            Conventional unit reference
+          </p>
+          <p className="mt-1 font-sans text-xs text-muted">
+            {total.toFixed(1)} total student hours ÷ 54 ={' '}
+            {conventionalUnits.toFixed(2)} conventional units — a district
+            convention, not the Title 5 minimum. Compliance is evaluated against
+            the 48-hour minimum by the deterministic audit in Section VI.
+          </p>
         </div>
       </fieldset>
     </div>

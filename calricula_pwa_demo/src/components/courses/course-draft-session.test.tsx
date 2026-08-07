@@ -307,5 +307,16 @@ describe('useCourseDraftSession', () => {
       act(() => result.current.change({ labHours: '2' }));
       expect(result.current.course.totalStudentHours).toBe('198');
     });
+
+    it('treats an unreadable hours value as zero rather than persisting NaN', () => {
+      const { result } = renderSession(vi.fn().mockResolvedValue(undefined));
+
+      act(() => result.current.change({ lectureHours: 'not a number' }));
+
+      // 0 lecture + 0 lab + 0 activity + 0 TBA + 6 outside, across an 18-week
+      // semester. A recovered or imported draft can carry a value the number
+      // input never would, and "NaN" must not reach saveCourseAggregate.
+      expect(result.current.course.totalStudentHours).toBe('108');
+    });
   });
 });

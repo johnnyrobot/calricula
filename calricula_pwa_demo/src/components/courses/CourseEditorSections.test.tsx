@@ -4,6 +4,7 @@ import type { CourseAggregate } from '@/lib/domain';
 import {
   CCNSection,
   ContentSection,
+  OverviewSection,
   SLOSection,
 } from './CourseEditorSections';
 import type { CourseViewModel } from './types';
@@ -280,5 +281,39 @@ describe('CourseEditorSections', () => {
       ccnJustification: '',
       topCode: '1501.00',
     });
+  });
+
+  it('presents the conventional 54-hour figure as a reference, not a verdict', () => {
+    const value = course();
+    render(
+      <OverviewSection
+        course={value}
+        aggregate={aggregate(value)}
+        departments={[
+          {
+            id: 'department-1',
+            divisionId: 'division-1',
+            code: 'ENGL',
+            name: 'English',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ]}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        /162\.0 total student hours ÷ 54 = 3\.00 conventional units/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/not the Title 5 minimum/i)).toBeInTheDocument();
+
+    // Title 5 compliance is the 48-hour minimum, reported by the audit in
+    // Section VI. 54 is a district convention and must never be rendered as a
+    // pass/fail verdict here. See ADR-0003.
+    expect(screen.queryByText(/relationship satisfied/i)).toBeNull();
+    expect(screen.queryByText(/Review the unit\/hour relationship/i)).toBeNull();
   });
 });
