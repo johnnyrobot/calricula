@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
+import { CHILD_SECRET_KEYS } from './child-environment.mjs';
 import {
   LighthouseAssertionError,
   assertLighthouseReport,
   assertLighthouseSummary,
+  lighthouseChildEnvironment,
 } from './run-lighthouse.mjs';
 
 const thresholds = {
@@ -138,5 +140,42 @@ describe('Lighthouse threshold assertions', () => {
         thresholds,
       ),
     ).toThrow('stale');
+  });
+});
+
+describe('Lighthouse child environment', () => {
+  const source = {
+    PATH: '/usr/bin',
+    CHROME_PATH: '/opt/chrome',
+    OPENROUTER_API_KEY: 'sk-or-v1-not-a-real-key',
+    CLOUDFLARE_API_TOKEN: 'cf-token',
+    AI_SESSION_HMAC_SECRET: 'hmac',
+  };
+
+  it('denies every release secret to headless Chrome', () => {
+    const environment = lighthouseChildEnvironment(source, '/fallback/chrome');
+
+    for (const name of CHILD_SECRET_KEYS) {
+      expect(environment, `${name} must not reach Chrome`).not.toHaveProperty(
+        name,
+      );
+    }
+  });
+
+  it('keeps what Lighthouse needs to run', () => {
+    const environment = lighthouseChildEnvironment(source, '/fallback/chrome');
+
+    expect(environment.PATH).toBe('/usr/bin');
+    expect(environment.CHROME_PATH).toBe('/opt/chrome');
+    expect(environment.CI).toBe('1');
+  });
+
+  it('falls back to the bundled browser when CHROME_PATH is unset', () => {
+    const withoutChrome = { ...source };
+    delete withoutChrome.CHROME_PATH;
+
+    expect(
+      lighthouseChildEnvironment(withoutChrome, '/fallback/chrome').CHROME_PATH,
+    ).toBe('/fallback/chrome');
   });
 });

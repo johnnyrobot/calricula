@@ -6,6 +6,7 @@ import process from 'node:process';
 
 import { chromium } from '@playwright/test';
 
+import { childEnvironment } from './child-environment.mjs';
 import { withLocalProduction } from './local-production.mjs';
 import { normalizeProductionOrigin } from './verify-production.mjs';
 
@@ -292,6 +293,21 @@ function lighthouseExecutable() {
   );
 }
 
+/**
+ * Build the environment for the Lighthouse child, which in turn launches
+ * headless Chrome — the widest third-party surface in the release path. It gets
+ * the same scrubbed environment as every other release child, plus the two keys
+ * Lighthouse itself needs. `CHROME_PATH` is not a secret and survives the
+ * scrub; the fallback is Playwright's bundled browser.
+ */
+export function lighthouseChildEnvironment(source, fallbackChromePath) {
+  return {
+    ...childEnvironment(source),
+    CHROME_PATH: source.CHROME_PATH || fallbackChromePath,
+    CI: '1',
+  };
+}
+
 async function runCommand(command, args, env) {
   const child = spawn(command, args, {
     cwd: process.cwd(),
@@ -348,11 +364,7 @@ async function collectAndAssert(origin, reportPath, thresholdsPath) {
         '--max-wait-for-load=45000',
         '--chrome-flags=--headless=new --no-sandbox --disable-dev-shm-usage',
       ],
-      {
-        ...process.env,
-        CHROME_PATH: process.env.CHROME_PATH || chromium.executablePath(),
-        CI: '1',
-      },
+      lighthouseChildEnvironment(process.env, chromium.executablePath()),
     );
     const expectedUrl = `${normalizedOrigin}${route}`;
     const result = assertLighthouseReport(

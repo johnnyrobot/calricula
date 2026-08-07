@@ -6,6 +6,8 @@ import {
 import path from 'node:path';
 import { promisify } from 'node:util';
 
+import { childEnvironment } from './child-environment.mjs';
+
 const execute = promisify(execFile);
 
 export const RELEASE_INPUT_ROOT_FILES = [
@@ -92,12 +94,16 @@ export async function collectReleaseInputFiles(cwd = process.cwd()) {
   );
 }
 
-async function gitOutput(cwd, args) {
+async function gitOutput(cwd, args, run) {
   try {
-    const { stdout } = await execute('git', args, {
+    const { stdout } = await run('git', args, {
       cwd,
       encoding: 'utf8',
       maxBuffer: 16 * 1024 * 1024,
+      // git is a third-party child like any other and receives no release
+      // secret. Omitting `env` entirely would inherit all of process.env,
+      // which is how this call site sat outside childEnvironment() until now.
+      env: childEnvironment(),
     });
     return stdout;
   } catch {
@@ -109,19 +115,18 @@ async function gitOutput(cwd, args) {
 
 export async function assertTrackedReleaseInputs(options = {}) {
   const cwd = path.resolve(options.cwd ?? process.cwd());
+  const run = options.execute ?? execute;
   const [files, prefixOutput, topLevelOutput] = await Promise.all([
     collectReleaseInputFiles(cwd),
-    gitOutput(cwd, ['rev-parse', '--show-prefix']),
-    gitOutput(cwd, ['rev-parse', '--show-toplevel']),
+    gitOutput(cwd, ['rev-parse', '--show-prefix'], run),
+    gitOutput(cwd, ['rev-parse', '--show-toplevel'], run),
   ]);
   const prefix = prefixOutput.trim().replace(/\\/g, '/');
-  const treeOutput = await gitOutput(topLevelOutput.trim(), [
-    'ls-tree',
-    '-r',
-    '-z',
-    '--name-only',
-    'HEAD',
-  ]);
+  const treeOutput = await gitOutput(
+    topLevelOutput.trim(),
+    ['ls-tree', '-r', '-z', '--name-only', 'HEAD'],
+    run,
+  );
   const tracked = new Set(treeOutput.split('\0').filter(Boolean));
   const missing = files
     .map((file) => `${prefix}${file.relativePath}`)

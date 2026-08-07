@@ -13,6 +13,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { CHILD_SECRET_KEYS } from './child-environment.mjs';
 import {
   ReleaseInputError,
   RELEASE_INPUT_ROOT_FILES,
@@ -77,6 +78,35 @@ describe('release input provenance', () => {
     await expect(assertTrackedReleaseInputs({ cwd })).resolves.toMatchObject({
       missing: [],
     });
+  });
+
+  it('denies release secrets to every git child it spawns', async () => {
+    const { cwd, root } = await createProject();
+    await writeFile(
+      path.join(cwd, '.gitignore'),
+      '!src/lib/\n!src/lib/**\n',
+    );
+    await git(root, 'add', '-A');
+    await git(root, 'commit', '-qm', 'track runtime');
+
+    const observed = [];
+    const spy = (file, args, options) => {
+      observed.push(options.env);
+      return execute(file, args, options);
+    };
+
+    await assertTrackedReleaseInputs({ cwd, execute: spy });
+
+    expect(observed.length).toBeGreaterThan(0);
+    for (const environment of observed) {
+      for (const name of CHILD_SECRET_KEYS) {
+        expect(environment, `${name} must not reach git`).not.toHaveProperty(
+          name,
+        );
+      }
+      // Scrubbing must not cost git the environment it needs to run at all.
+      expect(environment.PATH).toBe(process.env.PATH);
+    }
   });
 
   it('supports a repository-root project with an empty Git prefix', async () => {
