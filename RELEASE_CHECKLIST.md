@@ -62,7 +62,7 @@ they can complete their FERPA / privacy review:
 ## 3. Verification & quality gates
 
 - [x] CI gate live and green: backend pytest (Postgres service) + frontend build/jest, on every push/PR.
-- [x] CodeRabbit reviews active (seat assigned mid-remediation).
+- [x] Automated code review active during remediation.
 - [x] **Coverage gates** live as ratchet floors (backend `--cov-fail-under`, frontend `coverageThreshold`). Raise the floors over time.
 - [x] Frontend React-Compiler hook warnings (`set-state-in-effect` ×27 etc.) resolved; any left as warnings are documented in `eslint.config.mjs`.
 - [~] 🔴 **End-to-end staging validation** against a production-like environment. A documented runbook + runnable scripts now exist — [`docs/STAGING_VALIDATION.md`](docs/STAGING_VALIDATION.md) and [`scripts/staging/`](scripts/staging/) — run them against a real staging deploy before launch:
