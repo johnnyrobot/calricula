@@ -14,7 +14,7 @@
  * two server routes are stubbed through `global.fetch`.
  */
 import React from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { AuthProvider, useAuth, refreshDelaySeconds } from '../AuthContext';
@@ -29,17 +29,24 @@ const PROFILE = {
 
 interface RouteSpec {
   session?: { status?: number; body?: unknown };
+  /** `GET /api/auth/token` with no `resource=` or `resource=calricula`. */
   token?: { status?: number; body?: unknown };
+  /** `GET /api/auth/token?resource=applicationx`. */
+  applicationxToken?: { status?: number; body?: unknown };
 }
 
 /**
- * Route `fetch` by URL to the two auth endpoints. The spec is read on every
- * call, so a test can mutate it to change what a later request sees.
+ * Route `fetch` by URL to the auth endpoints. The spec is read on every call,
+ * so a test can mutate it to change what a later request sees.
  */
 function mockAuthRoutes(options: RouteSpec) {
   const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    const spec = url.includes('/api/auth/session') ? options.session : options.token;
+    const spec = url.includes('/api/auth/session')
+      ? options.session
+      : url.includes('resource=applicationx')
+        ? options.applicationxToken
+        : options.token;
     const status = spec?.status ?? 200;
     return {
       ok: status >= 200 && status < 300,
@@ -56,6 +63,7 @@ function mockAuthRoutes(options: RouteSpec) {
 function Consumer() {
   const auth = useAuth();
   const [tokenOut, setTokenOut] = React.useState<string>('');
+  const [appTokenOut, setAppTokenOut] = React.useState<string>('');
   return (
     <div>
       <span data-testid="mode">{auth.mode}</span>
@@ -66,6 +74,7 @@ function Consumer() {
       <span data-testid="loading">{String(auth.loading)}</span>
       <span data-testid="error">{auth.error ?? ''}</span>
       <span data-testid="token">{tokenOut}</span>
+      <span data-testid="app-token">{appTokenOut}</span>
       <button onClick={() => auth.login('faculty@calricula.com', 'Test123!').catch(() => {})}>good-login</button>
       <button onClick={() => auth.login('faculty@calricula.com', 'wrong').catch(() => {})}>bad-login</button>
       <button onClick={() => auth.logout().catch(() => {})}>logout</button>
@@ -78,6 +87,14 @@ function Consumer() {
         }}
       >
         get-token
+      </button>
+      <button
+        onClick={async () => {
+          const t = await auth.getToken('applicationx');
+          setAppTokenOut(t ?? 'null');
+        }}
+      >
+        get-app-token
       </button>
     </div>
   );
@@ -496,6 +513,102 @@ describe('Logto mode', () => {
     mockAuthRoutes({ token: { status: 204 } });
     await user.click(screen.getByText('get-token'));
     await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('null'));
+  });
+
+  it('getToken("applicationx") fetches the resource-scoped route and caches it separately from the calricula token', async () => {
+    const fetchMock = mockAuthRoutes({
+      session: { body: { signedIn: true, profile: PROFILE } },
+      token: { body: { access_token: 'at-calricula', expires_in: 3600 } },
+      applicationxToken: { body: { access_token: 'at-appx', expires_in: 3600 } },
+    });
+    const user = userEvent.setup();
+    renderAuth();
+
+    await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+
+    await user.click(screen.getByText('get-app-token'));
+    await waitFor(() => expect(screen.getByTestId('app-token')).toHaveTextContent('at-appx'));
+
+    const appTokenCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes('/api/auth/token?resource=applicationx')
+    );
+    expect(appTokenCall).toBeDefined();
+
+    await user.click(screen.getByText('get-token'));
+    await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('at-calricula'));
+
+    // Both stay cached independently — asking for one did not clobber the other.
+    expect(screen.getByTestId('app-token')).toHaveTextContent('at-appx');
+  });
+
+  it('getToken("applicationx") returns null on 204 without signing the user out', async () => {
+    mockAuthRoutes({
+      session: { body: { signedIn: true, profile: PROFILE } },
+      token: { body: { access_token: 'at-calricula', expires_in: 3600 } },
+      applicationxToken: { status: 204 },
+    });
+    const user = userEvent.setup();
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+
+    await user.click(screen.getByText('get-app-token'));
+    await waitFor(() => expect(screen.getByTestId('app-token')).toHaveTextContent('null'));
+
+    // A missing/dead ApplicationX resource must not break Calricula sign-in.
+    expect(screen.getByTestId('authed')).toHaveTextContent('true');
+    expect(screen.getByTestId('user')).toHaveTextContent('real@calricula.com');
+  });
+
+  it('getToken("applicationx") returns null on 404 (resource not configured) without signing the user out', async () => {
+    mockAuthRoutes({
+      session: { body: { signedIn: true, profile: PROFILE } },
+      token: { body: { access_token: 'at-calricula', expires_in: 3600 } },
+      applicationxToken: { status: 404, body: { error: 'resource_not_configured' } },
+    });
+    const user = userEvent.setup();
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+
+    await user.click(screen.getByText('get-app-token'));
+    await waitFor(() => expect(screen.getByTestId('app-token')).toHaveTextContent('null'));
+
+    expect(screen.getByTestId('authed')).toHaveTextContent('true');
+  });
+
+  it('does not schedule a background refresh for the applicationx token', async () => {
+    jest.useFakeTimers();
+    try {
+      const fetchMock = mockAuthRoutes({
+        session: { body: { signedIn: true, profile: PROFILE } },
+        token: { body: { access_token: 'at-calricula', expires_in: 3600 } },
+        applicationxToken: { body: { access_token: 'at-appx', expires_in: 60 } },
+      });
+      renderAuth();
+      await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+
+      const timersAfterCalricula = jest.getTimerCount();
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('get-app-token'));
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(screen.getByTestId('app-token')).toHaveTextContent('at-appx'));
+
+      // Minting the on-demand ApplicationX token adds no scheduled timer.
+      expect(jest.getTimerCount()).toBe(timersAfterCalricula);
+
+      const appTokenCalls = () =>
+        fetchMock.mock.calls.filter(([url]) => String(url).includes('resource=applicationx')).length;
+      expect(appTokenCalls()).toBe(1);
+
+      await act(async () => {
+        jest.advanceTimersByTime(120_000);
+      });
+      // No background refresh ever fires for the applicationx resource.
+      expect(appTokenCalls()).toBe(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 

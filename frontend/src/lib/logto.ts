@@ -19,6 +19,9 @@ const env = {
   baseUrl: process.env.LOGTO_BASE_URL || 'http://localhost:3001',
   // Must equal the backend's `OIDC_AUDIENCE` or the API rejects the token.
   apiResource: process.env.LOGTO_API_RESOURCE,
+  // Optional: the ApplicationX API resource, for the embedded-workspace broker
+  // (host plan). Unset until that integration is deployed.
+  applicationxResource: process.env.LOGTO_APPLICATIONX_RESOURCE,
 };
 
 /** True only when every required server variable is set; auth routes 404 otherwise. */
@@ -28,6 +31,13 @@ export const LOGTO_CONFIGURED: boolean = Boolean(
 
 /** The API resource the access token is minted for; must equal the backend's `OIDC_AUDIENCE`. */
 export const LOGTO_API_RESOURCE: string = env.apiResource ?? '';
+
+/**
+ * The ApplicationX API resource indicator, when this deployment has one
+ * configured. Empty string otherwise — ApplicationX support is optional and
+ * absent until the embedded-workspace host plan wires up its broker.
+ */
+export const LOGTO_APPLICATIONX_RESOURCE: string = env.applicationxResource ?? '';
 
 /** Where the browser lands after sign-in/sign-out; trailing slashes trimmed. */
 export const LOGTO_BASE_URL: string = env.baseUrl.replace(/\/+$/, '');
@@ -56,7 +66,11 @@ export const logtoConfig: LogtoNextConfig | null = LOGTO_CONFIGURED
       // The SDK always requests `openid`, `offline_access` and `profile`;
       // `email` is what the backend keys the account on, so ask for it too.
       scopes: ['email'],
-      resources: [LOGTO_API_RESOURCE],
+      // Only request a token scoped to ApplicationX when its resource is
+      // configured — an unconfigured indicator would just be an unused audience.
+      resources: LOGTO_APPLICATIONX_RESOURCE
+        ? [LOGTO_API_RESOURCE, LOGTO_APPLICATIONX_RESOURCE]
+        : [LOGTO_API_RESOURCE],
     }
   : null;
 
@@ -75,6 +89,41 @@ export function noContent(): Response {
 /** The 404 every auth route returns while Logto is unconfigured. */
 export function notConfigured(): Response {
   return json({ error: 'logto_not_configured' }, 404);
+}
+
+/** The resource keys `GET /api/auth/token?resource=` and `AuthContext.getToken()` accept. */
+export type ResourceKey = 'calricula' | 'applicationx';
+
+export type ResourceLookupError = 'unknown_resource' | 'resource_not_configured';
+
+export type ResourceLookup =
+  | { ok: true; indicator: string }
+  | { ok: false; error: ResourceLookupError };
+
+/**
+ * Maps a `?resource=` query value to the configured API resource indicator.
+ * Pure — no SDK or network call — so the key→indicator mapping and its two
+ * error cases (an unrecognized key, a recognized key with nothing configured)
+ * are unit-testable without a live Logto tenant.
+ *
+ * `resource` absent/`null` defaults to `'calricula'`, matching the existing
+ * (single-resource) callers of `AuthContext.getToken()`. `indicators`
+ * defaults to this module's configured values; tests pass their own so the
+ * "both configured" / "one missing" cases don't depend on process.env.
+ */
+export function resolveResourceIndicator(
+  resource: string | null,
+  indicators: { calricula: string; applicationx: string } = {
+    calricula: LOGTO_API_RESOURCE,
+    applicationx: LOGTO_APPLICATIONX_RESOURCE,
+  }
+): ResourceLookup {
+  const key = resource ?? 'calricula';
+  if (key !== 'calricula' && key !== 'applicationx') {
+    return { ok: false, error: 'unknown_resource' };
+  }
+  const indicator = indicators[key];
+  return indicator ? { ok: true, indicator } : { ok: false, error: 'resource_not_configured' };
 }
 
 /**

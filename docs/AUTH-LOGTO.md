@@ -45,8 +45,15 @@ Create an **API resource** for Calricula's own backend:
 
 If you are also running the companion ApplicationX service and plan to use
 the embedded workspace broker, register a second API resource for
-ApplicationX and set `LOGTO_APPLICATIONX_RESOURCE` to its indicator. Leave it
-empty until that integration lands — it is not read by any route yet.
+ApplicationX and set `LOGTO_APPLICATIONX_RESOURCE` to its indicator. When set,
+`logtoConfig.resources` includes it (so `@logto/next` requests a token scoped
+to it) and `GET /api/auth/token?resource=applicationx` starts serving it; the
+frontend calls `getToken('applicationx')` for that token (see below) — the
+brokered adapter that forwards it to ApplicationX is a later, host-plan
+integration, not part of this migration. Leave `LOGTO_APPLICATIONX_RESOURCE`
+empty until that integration lands; the route then answers
+`404 {"error":"resource_not_configured"}` for `?resource=applicationx`
+instead of minting a token.
 
 ## 4. Connectors: require verified email
 

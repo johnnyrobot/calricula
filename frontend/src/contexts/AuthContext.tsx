@@ -27,6 +27,8 @@ import React, {
   ReactNode,
 } from 'react';
 
+import type { ResourceKey } from '@/lib/logto';
+
 // ===========================================
 // Types
 // ===========================================
@@ -175,8 +177,11 @@ export interface AuthContextType {
   // Logto sign-in: hands the browser to the server-side /sign-in route.
   signInWithProvider: () => void;
   logout: () => Promise<void>;
-  // Get the bearer token for API calls (dev identity or Logto access token)
-  getToken: () => Promise<string | null>;
+  // Get the bearer token for API calls (dev identity or Logto access token).
+  // `resource` defaults to `'calricula'`; `'applicationx'` is the token the
+  // embedded-workspace broker (host plan) forwards to the ApplicationX API —
+  // minted on demand only, and its absence never affects Calricula sign-in.
+  getToken: (resource?: ResourceKey) => Promise<string | null>;
   // Clear error
   clearError: () => void;
 }
@@ -235,12 +240,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [error, setError] = useState<string | null>(null);
 
   // The Logto access token lives here and nowhere else: no web storage, no
-  // cookie the page script can read, no URL.
+  // cookie the page script can read, no URL. `tokenRef` is the calricula
+  // token (background-refreshed, existing behavior); `appTokenRef` is the
+  // ApplicationX-scoped token for the embedded-workspace broker (host plan)
+  // — minted on demand only, with no scheduled refresh of its own.
   const tokenRef = useRef<CachedToken | null>(null);
+  const appTokenRef = useRef<CachedToken | null>(null);
+  // Only the calricula token has a background refresh timer.
   const refreshRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // De-duplicates concurrent callers: several widgets mount at once and each
-  // asks for a token, but only one request should go out.
-  const inflightRef = useRef<Promise<string | null> | null>(null);
+  // De-duplicates concurrent callers per resource: several widgets mount at
+  // once and each asks for a token, but only one request per resource should
+  // go out.
+  const inflightRef = useRef<Record<ResourceKey, Promise<string | null> | null>>({
+    calricula: null,
+    applicationx: null,
+  });
   const mountedRef = useRef(true);
   // Lets the refresh timer call the current fetcher without the fetcher having
   // to depend on itself. Assigned in an effect; the timer only fires ≥30s later.
@@ -261,12 +275,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signedOut = useCallback(() => {
     clearRefresh();
     tokenRef.current = null;
+    appTokenRef.current = null;
     if (mountedRef.current) setUser(null);
   }, [clearRefresh]);
 
   /**
-   * Mints (or renews) the API access token from the same-origin route handler
-   * and schedules the next renewal.
+   * Mints (or renews) the API access token for `resource` from the
+   * same-origin route handler.
+   *
+   * The `calricula` resource (default) schedules its next renewal and, on
+   * failure, signs the whole session out — unchanged from before this
+   * resource parameter existed. The `applicationx` resource is on-demand
+   * only: it is cached until its own margin but never gets a background
+   * timer, and a failure (204 signed-out-for-that-resource, or 404 because
+   * this deployment has no ApplicationX resource configured) just yields
+   * `null` — it must never sign out an otherwise-valid Calricula session
+   * (the embedded-workspace broker is optional; Calricula sign-in is not).
    *
    * Defined from the very first render — not inside the bootstrap effect —
    * because React runs child effects before the provider's own: a descendant
@@ -274,49 +298,70 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    * `autoFetch`) must get a real token rather than a stub that answers `null`
    * once and never retries.
    */
-  const fetchAccessToken = useCallback(async (): Promise<string | null> => {
-    if (inflightRef.current) return inflightRef.current;
+  const fetchAccessToken = useCallback(
+    async (resource: ResourceKey = 'calricula'): Promise<string | null> => {
+      const inflight = inflightRef.current[resource];
+      if (inflight) return inflight;
 
-    const request = (async (): Promise<string | null> => {
-      try {
-        const response = await fetch('/api/auth/token', {
-          cache: 'no-store',
-          credentials: 'same-origin',
-        });
-        if (response.status !== 200) {
-          // 204 (signed out) or an error: the session is over.
-          signedOut();
+      const request = (async (): Promise<string | null> => {
+        try {
+          const response = await fetch(`/api/auth/token?resource=${resource}`, {
+            cache: 'no-store',
+            credentials: 'same-origin',
+          });
+          if (response.status !== 200) {
+            // 204 (signed out) or an error (400/404): no token for this resource.
+            if (resource === 'calricula') {
+              signedOut();
+            } else {
+              appTokenRef.current = null;
+            }
+            return null;
+          }
+          const { access_token: accessToken, expires_in: expiresIn } =
+            (await response.json()) as TokenBody;
+          const delaySeconds = refreshDelaySeconds(expiresIn);
+          const cached: CachedToken = {
+            value: accessToken,
+            refreshAt: Date.now() + delaySeconds * 1000,
+          };
+          if (resource === 'calricula') {
+            tokenRef.current = cached;
+            if (mountedRef.current) {
+              clearRefresh();
+              refreshRef.current = setTimeout(() => {
+                refreshRef.current = null;
+                void fetchRef.current();
+              }, delaySeconds * 1000);
+            }
+          } else {
+            // On-demand only: cached until `refreshAt`, no timer scheduled.
+            appTokenRef.current = cached;
+          }
+          return accessToken;
+        } catch (err) {
+          // A transport failure is indistinguishable from a dead session here;
+          // fail closed rather than hand out a token we could not confirm.
+          console.warn(
+            `Could not obtain a${resource === 'applicationx' ? 'n ApplicationX' : ''} access token:`,
+            err instanceof Error ? err.message : err
+          );
+          if (resource === 'calricula') {
+            signedOut();
+          } else {
+            appTokenRef.current = null;
+          }
           return null;
+        } finally {
+          inflightRef.current[resource] = null;
         }
-        const { access_token: accessToken, expires_in: expiresIn } =
-          (await response.json()) as TokenBody;
-        const delaySeconds = refreshDelaySeconds(expiresIn);
-        tokenRef.current = { value: accessToken, refreshAt: Date.now() + delaySeconds * 1000 };
-        if (mountedRef.current) {
-          clearRefresh();
-          refreshRef.current = setTimeout(() => {
-            refreshRef.current = null;
-            void fetchRef.current();
-          }, delaySeconds * 1000);
-        }
-        return accessToken;
-      } catch (err) {
-        // A transport failure is indistinguishable from a dead session here;
-        // fail closed rather than hand out a token we could not confirm.
-        console.warn(
-          'Could not obtain an access token:',
-          err instanceof Error ? err.message : err
-        );
-        signedOut();
-        return null;
-      } finally {
-        inflightRef.current = null;
-      }
-    })();
+      })();
 
-    inflightRef.current = request;
-    return request;
-  }, [clearRefresh, signedOut]);
+      inflightRef.current[resource] = request;
+      return request;
+    },
+    [clearRefresh, signedOut]
+  );
 
   useEffect(() => {
     fetchRef.current = fetchAccessToken;
@@ -458,6 +503,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setError(null);
     clearRefresh();
     tokenRef.current = null;
+    appTokenRef.current = null;
     setUser(null);
 
     if (mode === 'dev') {
@@ -474,20 +520,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  // Bearer token for API calls
-  const getToken = async (): Promise<string | null> => {
+  // Bearer token for API calls. `resource` defaults to `'calricula'`; pass
+  // `'applicationx'` for the token the embedded-workspace broker forwards to
+  // the ApplicationX API (host plan) — see `fetchAccessToken` for why that
+  // resource never signs the user out on failure.
+  const getToken = async (resource: ResourceKey = 'calricula'): Promise<string | null> => {
     // In dev bypass mode the mock user's id IS the token; the backend resolves
-    // `dev-*` tokens only while AUTH_DEV_MODE is on.
+    // `dev-*` tokens only while AUTH_DEV_MODE is on. There is no separate
+    // ApplicationX identity in dev mode, so the same id stands in for both.
     if (mode === 'dev') {
       return user ? user.id : null;
     }
     if (mode !== 'logto') return null;
-    const cached = tokenRef.current;
+    const ref = resource === 'calricula' ? tokenRef : appTokenRef;
+    const cached = ref.current;
     // Renew a token that is inside its refresh margin rather than handing out
     // one that is about to expire — the scheduled timer does not run while the
     // tab is frozen, so the cached copy can be arbitrarily old.
     if (cached && Date.now() < cached.refreshAt) return cached.value;
-    return fetchAccessToken();
+    return fetchAccessToken(resource);
   };
 
   // Clear error
