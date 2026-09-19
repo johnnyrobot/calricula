@@ -35,6 +35,7 @@ import {
 } from '@heroicons/react/24/solid';
 import { useAuth, UserProfile } from '@/contexts/AuthContext';
 import { api } from '@/lib/api';
+import { useApplicationXStatus } from '@/hooks/useApplicationXStatus';
 
 // ===========================================
 // Types
@@ -47,6 +48,7 @@ interface NavItem {
   iconActive: React.ComponentType<{ className?: string }>;
   roles?: UserProfile['role'][]; // Only show to these roles
   showBadge?: boolean; // Show pending count badge
+  requiresApplicationX?: boolean; // Only show when the ApplicationX embed is enabled
 }
 
 interface PageShellProps {
@@ -89,6 +91,13 @@ const navigation: NavItem[] = [
     iconActive: BriefcaseIconSolid,
   },
   {
+    name: 'Employer & Career Collaboration',
+    href: '/collaboration',
+    icon: BriefcaseIcon,
+    iconActive: BriefcaseIconSolid,
+    requiresApplicationX: true,
+  },
+  {
     name: 'BLS Data',
     href: '/bls-data',
     icon: ChartBarIcon,
@@ -115,6 +124,7 @@ interface SidebarProps {
   mobile?: boolean;
   onClose?: () => void;
   pendingCount?: number;
+  applicationXEnabled?: boolean;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -124,9 +134,11 @@ const Sidebar: React.FC<SidebarProps> = ({
   mobile = false,
   onClose,
   pendingCount = 0,
+  applicationXEnabled = false,
 }) => {
-  // Filter navigation items based on user role
+  // Filter navigation items based on user role and embed availability
   const filteredNav = navigation.filter((item) => {
+    if (item.requiresApplicationX && !applicationXEnabled) return false;
     if (!item.roles) return true;
     if (!user) return false;
     return item.roles.includes(user.role) || user.role === 'Admin';
@@ -215,6 +227,8 @@ const PageShell: React.FC<PageShellProps> = ({ children }) => {
   const { user, loading, isAuthenticated, logout, getToken } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
+  const { status: axStatus } = useApplicationXStatus();
+  const applicationXEnabled = axStatus?.enabled === true;
 
   // Check if user is a reviewer
   const isReviewer = user && ['CurriculumChair', 'ArticulationOfficer', 'Admin'].includes(user.role);
@@ -313,12 +327,19 @@ const PageShell: React.FC<PageShellProps> = ({ children }) => {
           mobile={true}
           onClose={() => setSidebarOpen(false)}
           pendingCount={pendingCount}
+          applicationXEnabled={applicationXEnabled}
         />
       </div>
 
       {/* Desktop Sidebar */}
       <div className="hidden lg:block">
-        <Sidebar user={user} currentPath={pathname} onLogout={handleLogout} pendingCount={pendingCount} />
+        <Sidebar
+          user={user}
+          currentPath={pathname}
+          onLogout={handleLogout}
+          pendingCount={pendingCount}
+          applicationXEnabled={applicationXEnabled}
+        />
       </div>
 
       {/* Main Content Area */}

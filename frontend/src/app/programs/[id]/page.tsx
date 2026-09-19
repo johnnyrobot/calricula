@@ -18,12 +18,14 @@ import {
   ExclamationTriangleIcon,
   DocumentArrowDownIcon,
   SparklesIcon,
+  BriefcaseIcon,
 } from '@heroicons/react/24/outline';
 import { PageShell } from '@/components/layout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/toast';
 import { api, ProgramDetail, CourseInProgram, ProgramStatus, ProgramType, ProgramNarrativeResponse } from '@/lib/api';
 import { invalidateProgramCache } from '@/lib/swr';
+import { useApplicationXStatus } from '@/hooks/useApplicationXStatus';
 
 // ===========================================
 // Status Badge Component
@@ -179,6 +181,7 @@ export default function ProgramDetailPage() {
   const router = useRouter();
   const { getToken, user } = useAuth();
   const toast = useToast();
+  const { status: axStatus } = useApplicationXStatus();
   const programId = params.id as string;
 
   const [program, setProgram] = useState<ProgramDetail | null>(null);
@@ -400,6 +403,17 @@ export default function ProgramDetailPage() {
                 )}
               </div>
               <div className="flex items-center gap-3">
+                {/* Employer & Career Collaboration (ApplicationX embed) — all statuses */}
+                {axStatus?.enabled && (
+                  <Link
+                    href={`/programs/${program.id}/collaboration`}
+                    className="luminous-button-secondary inline-flex items-center"
+                  >
+                    <BriefcaseIcon className="h-5 w-5 mr-2" aria-hidden="true" />
+                    Collaboration
+                  </Link>
+                )}
+
                 {/* Export PDF Button */}
                 <button
                   onClick={handleExportPDF}
