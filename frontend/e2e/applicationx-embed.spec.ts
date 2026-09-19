@@ -1,12 +1,14 @@
 /**
- * ApplicationX embed acceptance (EMBEDDED §7 cases 1, 4, 6, 8, 9).
+ * ApplicationX embed acceptance (EMBEDDED §7 cases 1, 2, 4, 6, 8, 9).
  *
  * Prerequisites (see docs/APPLICATIONX-EMBED.md):
  *   - Dev auth mode on both sides (AUTH_DEV_MODE / NEXT_PUBLIC_AUTH_DEV_MODE).
  *   - Backend with APPLICATIONX_EMBED_ENABLED=true and
  *     APPLICATIONX_API_ORIGIN pointing at the stub upstream
  *     (backend/tests/stubs/applicationx_stub.py on :8099) started with
- *     STUB_MAPPED=<uuid of the "Computer Science" seed program>.
+ *     STUB_MAPPED=<uuid of the "Computer Science" seed program>. The stub
+ *     answers `access_required` for the articulation officer's dev token
+ *     (`dev-articulation-001`), which case 2 relies on.
  *   - PLAYWRIGHT_BASE_URL pointing at the running frontend.
  *
  * Case 9 needs the stub restarted with STUB_DOWN=1 and this spec run with
@@ -65,6 +67,22 @@ test.describe('ApplicationX embed', () => {
     await page.keyboard.press('Enter');
     await expect(page.getByRole('status')).toHaveText(/answer ready/i);
     await expect(page.getByRole('list', { name: /sources/i })).toBeVisible();
+  });
+
+  test('staff without ApplicationX access sees the access panel, never a workspace (case 2)', async ({ page }) => {
+    await loginAsUser(page, TEST_USERS.articulation);
+    await page.getByRole('link', { name: /Employer & Career Collaboration/ }).first().click();
+    await expect(page).toHaveURL(/\/collaboration$/);
+    await expect(page.getByText(/You do not have ApplicationX access/)).toBeVisible();
+    await expect(page.getByRole('region', { name: /Workspace context/ })).toHaveCount(0);
+
+    // The same answer on a mapped program's collaboration page: still no workspace.
+    await openProgram(page, MAPPED_PROGRAM);
+    await page.getByRole('link', { name: /^Collaboration$/ }).click();
+    await expect(page.getByText(/You do not have ApplicationX access/)).toBeVisible();
+    await expect(page.getByRole('region', { name: /Workspace context/ })).toHaveCount(0);
+    await expect(page.getByLabel(/ask/i)).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /Back to program/ })).toBeVisible();
   });
 
   test('unmapped program requires explicit setup (case 4)', async ({ page }) => {

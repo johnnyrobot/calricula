@@ -40,14 +40,19 @@ Copy the block from `.env.example`:
 | `APPLICATIONX_STANDALONE_URL` | no | Public URL of standalone ApplicationX, offered as an "Open in ApplicationX" link. |
 | `APPLICATIONX_SERVICE_TOKEN` | no | Optional transport credential sent as `X-Calricula-Service`. It identifies the Calricula deployment; it never expands a user's scope. |
 | `APPLICATIONX_TIMEOUT_SECONDS` | no | Upstream timeout (default 20). |
+| `APPLICATIONX_STREAM_MAX_SECONDS` | no | Upper bound on one SSE proxy connection (default 600). When exceeded the broker emits `event: error` with `{"code": "stream_timeout"}` and closes the stream. |
+| `LOGTO_APPLICATIONX_RESOURCE` (frontend, Logto mode) | yes | Logto API resource indicator of the ApplicationX API. The frontend requests an access token for that resource on demand (`getToken('applicationx')`); see `docs/AUTH-LOGTO.md`. Not needed in dev auth mode. |
 
-The embed is considered ready only when the first four are set. With
+The backend embed is considered ready only when the first four are set. With
 `APPLICATIONX_EMBED_ENABLED=true` but an incomplete configuration, `/status`
 reports `enabled: false` and the entry stays hidden.
 
-Frontend (Logto mode) additionally needs `LOGTO_APPLICATIONX_RESOURCE`: the
-Logto API resource indicator of the ApplicationX API. The frontend requests an
-access token for that resource on demand; see `docs/AUTH-LOGTO.md`.
+`LOGTO_APPLICATIONX_RESOURCE` is a **frontend** (server-only, Next.js) variable
+and is required whenever the embed is enabled and sign-in is through Logto.
+Without it the browser cannot obtain an ApplicationX token: the entry is
+visible, but every collaboration page reports "ApplicationX is unavailable —
+ApplicationX sign-in is not configured for this deployment." rather than an
+expired session. Signing in again does not fix that; set the variable.
 
 ## Two-token contract
 
@@ -61,8 +66,11 @@ Every broker call carries two bearer tokens:
 The broker forwards only the second token, plus `X-Calricula-Host: calricula`
 and the optional service token. No cookies or other request headers cross the
 boundary. Upstream 4xx bodies are replaced with generic messages unless they
-carry a typed host `state`; upstream 5xx and network failures become 502/504
-with a stable `code` (`upstream_unavailable`, `upstream_timeout`, …).
+carry a typed host `state`; in that case only `state` (one of the failure
+states listed below), `message` (truncated to 500 characters) and `retryable`
+are relayed, as `{"detail": {"state", "message", "retryable"}}` with the
+upstream status. Upstream 5xx and network failures become 502/504 with a
+stable `code` (`upstream_unavailable`, `upstream_timeout`, …).
 
 In dev mode (`AUTH_DEV_MODE=true` and `NEXT_PUBLIC_AUTH_DEV_MODE=true`) there is
 no separate ApplicationX identity: both headers carry the same documented
@@ -79,11 +87,18 @@ The broker exposes exactly these upstream routes; anything else is 404.
 | `POST /api/applicationx/ops/chat.cancel` | `POST /v1/chat/runs/{run_id}/cancel` | `run_id` must be a UUID. |
 | `POST /api/applicationx/ops/sources.list` | `GET /v1/sources` | |
 | `POST /api/applicationx/ops/sources.health` | `GET /v1/sources/{source_id}/health` | `source_id` must match `[a-z_]{2,40}`. |
-| `GET /api/applicationx/runs/{run_id}/events` | `GET /v1/chat/runs/{run_id}/events` | Server-Sent Events pass-through; `Last-Event-ID` is honored for resume and a keepalive comment is emitted every 15 s. |
+| `GET /api/applicationx/runs/{run_id}/events` | `GET /v1/chat/runs/{run_id}/events` | Server-Sent Events pass-through; `Last-Event-ID` is honored for resume, a keepalive comment is emitted every 15 s, and one connection is capped at `APPLICATIONX_STREAM_MAX_SECONDS`. |
+
+Event ids are **opaque cursors**: the broker forwards `Last-Event-ID` only when
+it matches `^[A-Za-z0-9._:-]{1,64}$` and never interprets it (the stub happens
+to use decimal integers). `X-Calricula-Service` is sent on every upstream call,
+including the SSE stream, when `APPLICATIONX_SERVICE_TOKEN` is set.
 
 Host states the resolve call can return: `ready`, `access_required`,
 `mapping_required`, `context_stale`, `session_expired`, `service_unavailable`,
-`version_mismatch`.
+`version_mismatch`. The real ApplicationX returns host failures as `200`
+bodies; a typed 4xx is handled as described above. A `state` this build does
+not know is shown as `version_mismatch`.
 
 ## Local development with the stub upstream
 
