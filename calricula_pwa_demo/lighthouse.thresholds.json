@@ -1,0 +1,19 @@
+{
+  "formFactor": "mobile",
+  "routes": [
+    "/",
+    "/dashboard/",
+    "/courses/"
+  ],
+  "categories": {
+    "performance": 0.9,
+    "accessibility": 1,
+    "best-practices": 0.9,
+    "seo": 0.9
+  },
+  "audits": {
+    "largest-contentful-paint": 2500,
+    "cumulative-layout-shift": 0.1,
+    "total-blocking-time": 300
+  }
+}

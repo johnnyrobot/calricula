@@ -1,0 +1,4 @@
+# Defense in depth for Wrangler Static Assets.
+*.map
+docs/**
+openrouter-llms-full.txt

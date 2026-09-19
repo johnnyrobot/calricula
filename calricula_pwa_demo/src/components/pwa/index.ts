@@ -1,0 +1,1 @@
+export { PwaUpdater } from './PwaUpdater';

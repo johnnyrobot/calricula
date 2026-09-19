@@ -1,0 +1,17 @@
+# Copy this file to `.dev.vars` for local Worker development.
+# `.dev.vars` is gitignored. Do not put production credentials in this example.
+
+# Secrets: set real local values in `.dev.vars`, then use `wrangler secret put`
+# for production. AI_SESSION_HMAC_SECRET should be at least 32 random bytes.
+OPENROUTER_API_KEY="replace-with-a-restricted-openrouter-key"
+TURNSTILE_SECRET_KEY="replace-with-a-turnstile-secret-key"
+AI_SESSION_HMAC_SECRET="replace-with-at-least-32-random-bytes"
+
+# Non-secret Worker configuration. APP_ORIGIN must exactly match the browser
+# Origin header, including scheme and port.
+APP_ORIGIN="http://localhost:8787"
+AI_ENABLED="true"
+
+# Optional whitespace- or comma-separated, evaluation-approved exact `:free`
+# model slugs. The Worker always appends `openrouter/free` as the final fallback.
+OPENROUTER_FREE_MODELS=""

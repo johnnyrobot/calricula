@@ -1,0 +1,284 @@
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import {
+  ReleaseStateError,
+  assertSiteKeyEmbedded,
+  computeArtifactFingerprint,
+  requireCleanGitReleaseState,
+  resolveReleaseSecretsFile,
+  sealPublicationPackage,
+  sealReleaseSecretsFile,
+  withSealedReleaseSecrets,
+  siteKeyDigest,
+  validateReleaseSecrets,
+  verifySealedPublicationPackage,
+} from './release-state.mjs';
+
+const temporaryDirectories = [];
+const SITE_KEY = '0x4AAAAAAReleaseVerificationSiteKey';
+const HMAC_SECRET =
+  'A1b2C3d4E5f6G7h8I9j0K_lMnOpQrStUvWxYz-12345';
+
+async function fixture() {
+  const cwd = await mkdtemp(
+    path.join(os.tmpdir(), 'calricula-release-state-'),
+  );
+  temporaryDirectories.push(cwd);
+  await mkdir(path.join(cwd, 'out'), { recursive: true });
+  await mkdir(path.join(cwd, '.wrangler', 'dry-run'), {
+    recursive: true,
+  });
+  await writeFile(
+    path.join(cwd, 'out', 'app.js'),
+    `globalThis.siteKey="${SITE_KEY}";`,
+  );
+  await writeFile(
+    path.join(cwd, '.wrangler', 'dry-run', 'index.js'),
+    'export default {};',
+  );
+  await writeFile(
+    path.join(cwd, 'wrangler.jsonc'),
+    '{"name":"calricula-demo"}',
+  );
+  return cwd;
+}
+
+async function unlockTree(directory) {
+  let entries;
+  try {
+    await chmod(directory, 0o700);
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const absolutePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await unlockTree(absolutePath);
+    } else {
+      await chmod(absolutePath, 0o600);
+    }
+  }
+}
+
+afterEach(async () => {
+  await Promise.all(
+    temporaryDirectories.splice(0).map(async (directory) => {
+      await unlockTree(directory);
+      await rm(directory, { force: true, recursive: true });
+    }),
+  );
+});
+
+describe('release artifact state', () => {
+  // Git child processes are scrubbed by `childEnvironment`, which owns that
+  // invariant and asserts it in child-environment.test.mjs.
+
+  it('changes the sealed fingerprint when deployable output is mutated', async () => {
+    const cwd = await fixture();
+    const before = await computeArtifactFingerprint({ cwd });
+    await writeFile(
+      path.join(cwd, 'out', 'app.js'),
+      `globalThis.siteKey="${SITE_KEY}";globalThis.changed=true;`,
+    );
+    const after = await computeArtifactFingerprint({ cwd });
+    expect(after.fingerprint).not.toBe(before.fingerprint);
+    expect(after.files).toBe(before.files);
+  });
+
+  it('seals exact Worker, asset, and effective configuration bytes', async () => {
+    const cwd = await fixture();
+    const sealed = await sealPublicationPackage({ cwd });
+    const workerBefore = await readFile(sealed.workerPath, 'utf8');
+    await writeFile(
+      path.join(cwd, '.wrangler', 'dry-run', 'index.js'),
+      'export default { changed: true };',
+    );
+    await writeFile(path.join(cwd, 'out', 'app.js'), 'changed');
+    await writeFile(
+      path.join(cwd, 'wrangler.jsonc'),
+      '{"name":"changed"}',
+    );
+    await expect(
+      verifySealedPublicationPackage(sealed, { cwd }),
+    ).resolves.toMatchObject({
+      fingerprint: sealed.fingerprint,
+      files: sealed.files,
+      totalBytes: sealed.totalBytes,
+    });
+    await expect(readFile(sealed.workerPath, 'utf8')).resolves.toBe(
+      workerBefore,
+    );
+    const changed = await sealPublicationPackage({ cwd });
+    expect(changed.fingerprint).not.toBe(sealed.fingerprint);
+  });
+
+  it.each([
+    ['Worker', 'worker.js'],
+    ['asset', path.join('out', 'app.js')],
+    ['configuration', 'wrangler.jsonc'],
+  ])('rejects changed sealed %s bytes', async (_kind, relativePath) => {
+    const cwd = await fixture();
+    const sealed = await sealPublicationPackage({ cwd });
+    const target = path.join(sealed.directory, relativePath);
+    await chmod(target, 0o600);
+    await writeFile(target, 'tampered');
+    await expect(
+      verifySealedPublicationPackage(sealed, { cwd }),
+    ).rejects.toThrow('no longer match');
+  });
+
+  it('proves the exact expected site key is compiled without exposing it', async () => {
+    const cwd = await fixture();
+    await expect(
+      assertSiteKeyEmbedded(SITE_KEY, { cwd }),
+    ).resolves.toEqual({
+      digest: siteKeyDigest(SITE_KEY),
+      matches: 1,
+    });
+    await expect(
+      assertSiteKeyEmbedded(
+        '0x4AAAAAADifferentReleaseSiteKey',
+        { cwd },
+      ),
+    ).rejects.toThrow('not embedded');
+  });
+
+  it('requires a committed clean Git identity for a release seal', () => {
+    expect(
+      requireCleanGitReleaseState({
+        clean: true,
+        commit: 'a'.repeat(40),
+        tree: 'b'.repeat(40),
+      }),
+    ).toMatchObject({ clean: true });
+    expect(() =>
+      requireCleanGitReleaseState({
+        clean: false,
+        commit: 'a'.repeat(40),
+        tree: 'b'.repeat(40),
+      }),
+    ).toThrow(ReleaseStateError);
+  });
+
+  it('accepts only the exact three non-placeholder Worker secrets', () => {
+    expect(
+      validateReleaseSecrets(
+        [
+          `OPENROUTER_API_KEY=sk-or-v1-${'a'.repeat(20)}`,
+          'TURNSTILE_SECRET_KEY=0x4AAAAAABbCcDdEeFfGgHhIi',
+          `AI_SESSION_HMAC_SECRET=${HMAC_SECRET}`,
+        ].join('\n'),
+      ),
+    ).toBe(true);
+    expect(() =>
+      validateReleaseSecrets(
+        [
+          `OPENROUTER_API_KEY=sk-or-v1-${'a'.repeat(20)}`,
+          'TURNSTILE_SECRET_KEY=0x4AAAAAABbCcDdEeFfGgHhIi',
+          'AI_SESSION_HMAC_SECRET=ccccccccccccccccccccccccccccccccccccccccccc',
+          'UNEXPECTED_SECRET=no',
+        ].join('\n'),
+      ),
+    ).toThrow('exactly the three');
+  });
+
+  it('seals the exact private secrets bytes and rejects pre-publish changes', async () => {
+    const cwd = await fixture();
+    const secretDirectory = await mkdtemp(
+      path.join(os.tmpdir(), 'calricula-secret-source-'),
+    );
+    temporaryDirectories.push(secretDirectory);
+    const secretPath = path.join(secretDirectory, 'release.env');
+    const content = [
+      `OPENROUTER_API_KEY=sk-or-v1-${'a'.repeat(20)}`,
+      'TURNSTILE_SECRET_KEY=0x4AAAAAABbCcDdEeFfGgHhIi',
+      `AI_SESSION_HMAC_SECRET=${HMAC_SECRET}`,
+    ].join('\n');
+    await writeFile(secretPath, content, { mode: 0o600 });
+    await chmod(secretPath, 0o600);
+    const metadata = await resolveReleaseSecretsFile(
+      { CALRICULA_SECRETS_FILE: secretPath },
+      { cwd },
+    );
+    const sealed = await sealReleaseSecretsFile(metadata, { cwd });
+    await expect(
+      import('node:fs/promises').then(({ readFile }) =>
+        readFile(sealed.path, 'utf8'),
+      ),
+    ).resolves.toBe(content);
+    await sealed.cleanup();
+
+    await writeFile(secretPath, `${content}\n# changed\n`, {
+      mode: 0o600,
+    });
+    await expect(
+      sealReleaseSecretsFile(metadata, { cwd }),
+    ).rejects.toThrow('changed after preflight');
+  });
+
+  it('removes the sealed secrets copy even when the caller throws', async () => {
+    // The sealed copy is a plaintext file holding all three Worker secrets.
+    // Callers used to seal it and only later open the try/finally that removed
+    // it, so anything throwing in between left it on disk. Scoping cleanup to
+    // a callback makes that ordering mistake unrepresentable.
+    const cwd = await fixture();
+    const secretDirectory = await mkdtemp(
+      path.join(os.tmpdir(), 'calricula-secrets-scope-'),
+    );
+    temporaryDirectories.push(secretDirectory);
+    const secretPath = path.join(secretDirectory, 'release.env');
+    const content = [
+      `OPENROUTER_API_KEY=sk-or-v1-${'a'.repeat(20)}`,
+      'TURNSTILE_SECRET_KEY=0x4AAAAAABbCcDdEeFfGgHhIi',
+      `AI_SESSION_HMAC_SECRET=${HMAC_SECRET}`,
+    ].join('\n');
+    await writeFile(secretPath, content, { mode: 0o600 });
+    await chmod(secretPath, 0o600);
+    const metadata = await resolveReleaseSecretsFile(
+      { CALRICULA_SECRETS_FILE: secretPath },
+      { cwd },
+    );
+
+    let sealedPath;
+    await expect(
+      withSealedReleaseSecrets(metadata, { cwd }, async (sealed) => {
+        sealedPath = sealed.path;
+        const { readFile } = await import('node:fs/promises');
+        expect(await readFile(sealed.path, 'utf8')).toBe(content);
+        throw new Error('publish failed before cleanup');
+      }),
+    ).rejects.toThrow('publish failed before cleanup');
+
+    expect(sealedPath).toBeTruthy();
+    const { access } = await import('node:fs/promises');
+    await expect(access(sealedPath)).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  });
+
+  it('passes undefined through when there are no release secrets', async () => {
+    const seen = [];
+    const result = await withSealedReleaseSecrets(
+      undefined,
+      {},
+      async (sealed) => {
+        seen.push(sealed);
+        return 'ran';
+      },
+    );
+    expect(result).toBe('ran');
+    expect(seen).toEqual([undefined]);
+  });
+});

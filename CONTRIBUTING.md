@@ -49,7 +49,7 @@ npm run lint
 2. **Branch from `main`** using a descriptive prefix: `feat/…`, `fix/…`, `chore/…`, or `docs/…`.
 3. **Keep PRs small and focused** — one logical change per PR. It makes review (and revert) easy.
 4. **Write tests** for new behavior. The backend has a pytest safety net (with coverage floors) and the frontend uses Jest; both run in CI. Don't weaken or delete tests to get green.
-5. **All CI checks must pass** before merge: backend `pytest` (against a Postgres service) and frontend build + jest. PRs are also reviewed by CodeRabbit.
+5. **All CI checks must pass** before merge: backend `pytest` (against a Postgres service) and frontend build + jest.
 6. **Reference the issue** your PR closes (e.g. `Closes #123`) and fill out the PR template.
 
 ## Coding standards

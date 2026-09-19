@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1F2A44" />
+    <title>Calricula is offline</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, sans-serif;
+        background: #f7f3e9;
+        color: #1c1b19;
+      }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+      }
+      main {
+        width: min(34rem, calc(100% - 3rem));
+        border-block: 1px solid #bcB199;
+        padding: 2.5rem 0;
+      }
+      h1 {
+        margin: 0 0 0.75rem;
+        font-family: Georgia, serif;
+        color: #1f2a44;
+      }
+      p {
+        line-height: 1.6;
+      }
+      a {
+        display: inline-block;
+        margin-top: 1rem;
+        padding: 0.7rem 1rem;
+        background: #1f2a44;
+        color: #f4efe2;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      a:focus-visible {
+        outline: 3px solid #7e6018;
+        outline-offset: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>You are offline</h1>
+      <p>
+        Calricula keeps your demo records on this device. Previously opened app
+        screens remain available offline, but the AI assistant needs an internet
+        connection.
+      </p>
+      <a href="/dashboard/">Return to your dashboard</a>
+    </main>
+  </body>
+</html>

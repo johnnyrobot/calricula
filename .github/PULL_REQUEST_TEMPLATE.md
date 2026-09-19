@@ -20,4 +20,4 @@ Closes #
 - [ ] DB schema changes include an Alembic migration (no runtime DDL)
 - [ ] Compliance-rule changes cite the regulation (Title 5 / PCAH / CCN / C-ID)
 - [ ] Updated `RELEASE_CHECKLIST.md` if this touches security, privacy, migrations, or deploy
-- [ ] CI is green and CodeRabbit review addressed
+- [ ] CI is green and review feedback addressed
