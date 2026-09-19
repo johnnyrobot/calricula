@@ -141,10 +141,11 @@ def relink_legacy_row(
     """Point `legacy` at the OIDC subject that just proved its email.
 
     `placeholder` is the row get_current_user may already have provisioned for
-    the same subject from an access token: on a first sign-in the browser asks
-    for the profile (this route) and for an API token at the same time, and
-    when the API call lands first it creates a `{sub}@oidc.invalid` row before
-    /login has had a chance to adopt the legacy one. That row carries nothing
+    the same subject from an access token: an API call that reaches the
+    backend before this route (the current frontend holds its token requests
+    until /login has settled, but another client or a stale tab need not)
+    creates a `{sub}@oidc.invalid` row before /login has had a chance to
+    adopt the legacy one. That row carries nothing
     the legacy row lacks, so it is deleted and the legacy row takes the
     subject. If the delete is refused because something already references
     the placeholder, the merge is abandoned: the placeholder is kept, the
