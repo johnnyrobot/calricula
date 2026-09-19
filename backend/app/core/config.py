@@ -5,6 +5,7 @@ Loads environment variables and provides typed configuration.
 
 from functools import lru_cache
 from typing import List, Optional
+from urllib.parse import urlsplit
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -98,6 +99,7 @@ class Settings(BaseSettings):
     APPLICATIONX_CAMPUS_REF: Optional[str] = None       # e.g. LAMC
     APPLICATIONX_SERVICE_TOKEN: Optional[str] = None    # optional transport credential; never expands user scope
     APPLICATIONX_TIMEOUT_SECONDS: float = 20.0
+    APPLICATIONX_STREAM_MAX_SECONDS: float = 600.0  # upper bound on one SSE proxy connection
     APPLICATIONX_STANDALONE_URL: Optional[str] = None
 
     @property
@@ -178,8 +180,16 @@ class Settings(BaseSettings):
                 )
 
             if self.APPLICATIONX_EMBED_ENABLED:
-                origin = self.APPLICATIONX_API_ORIGIN or ""
-                if not origin.startswith("https://") or origin.rstrip("/").count("/") != 2:
+                parts = urlsplit(self.APPLICATIONX_API_ORIGIN or "")
+                if (
+                    parts.scheme != "https"
+                    or not parts.netloc
+                    or parts.username is not None
+                    or parts.password is not None
+                    or parts.path not in ("", "/")
+                    or parts.query
+                    or parts.fragment
+                ):
                     raise ValueError(
                         "APPLICATIONX_API_ORIGIN must be an https origin without a "
                         "path in production."

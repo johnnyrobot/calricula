@@ -9,6 +9,7 @@ passing through Server-Sent Events with an idle keepalive.
 
 import asyncio
 import re
+import time
 import uuid
 from typing import AsyncIterator
 
@@ -31,9 +32,31 @@ STREAMS: dict[str, tuple[str, str]] = {
 # to hold the connection open through intermediate proxies.
 KEEPALIVE_SECONDS = 15.0
 
+# Host failure states the upstream may return in a typed 4xx body. Anything
+# else (including `ready`/`loading`, which are not failures) is sanitized.
+HOST_FAILURE_STATES = frozenset(
+    {
+        "access_required",
+        "mapping_required",
+        "context_stale",
+        "session_expired",
+        "service_unavailable",
+        "version_mismatch",
+    }
+)
+_MESSAGE_MAX = 500
+
+# SSE event ids are opaque cursors; only forward `Last-Event-ID` values from a
+# conservative charset so nothing header-injectable crosses the boundary.
+_EVENT_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
+
 _PARAM_RULES = {
     "run_id": lambda v: _is_uuid(v),
     "source_id": lambda v: re.fullmatch(r"[a-z_]{2,40}", v) is not None,
+}
+# Canonical form substituted into the upstream path (after validation).
+_PARAM_NORMALIZE = {
+    "run_id": lambda v: str(uuid.UUID(v)),
 }
 _SAFE_4XX = {
     400: "invalid request",
@@ -74,8 +97,22 @@ def _path(template: str, params: dict[str, str]) -> str:
             ok = False
         if not ok:
             raise BrokerError(400, "bad_path_param", f"invalid {name}")
-        out = out.replace("{" + name + "}", value)
+        normalize = _PARAM_NORMALIZE.get(name)
+        out = out.replace("{" + name + "}", normalize(value) if normalize else value)
     return out
+
+
+def _typed_failure(data: object) -> dict | None:
+    """Return the `{state, message, retryable}` allowlist projection of an
+    upstream 4xx body when `state` is a known host failure; else None."""
+    if not isinstance(data, dict):
+        return None
+    state = data.get("state")
+    if not isinstance(state, str) or state not in HOST_FAILURE_STATES:
+        return None
+    message = data.get("message")
+    message = "" if message is None else str(message)[:_MESSAGE_MAX]
+    return {"state": state, "message": message, "retryable": bool(data.get("retryable", False))}
 
 
 class ApplicationXBroker:
@@ -135,8 +172,9 @@ class ApplicationXBroker:
             raise BrokerError(502, "upstream_invalid", "ApplicationX returned an invalid response")
 
         if resp.status_code >= 400:
-            if isinstance(data, dict) and "state" in data:
-                return resp.status_code, data
+            typed = _typed_failure(data)
+            if typed is not None:
+                return resp.status_code, typed
             return resp.status_code, {"detail": _SAFE_4XX.get(resp.status_code, "request rejected")}
 
         return resp.status_code, data
@@ -154,8 +192,10 @@ class ApplicationXBroker:
         method, template = STREAMS[operation]
         path = _path(template, path_params)
         extra = {"Accept": "text/event-stream"}
-        if last_event_id and last_event_id.isdigit():
+        if last_event_id and _EVENT_ID_RE.match(last_event_id):
             extra["Last-Event-ID"] = last_event_id
+        max_seconds = settings.APPLICATIONX_STREAM_MAX_SECONDS
+        started = time.monotonic()
 
         try:
             async with self._client(timeout=httpx.Timeout(settings.APPLICATIONX_TIMEOUT_SECONDS, read=None)) as client:
@@ -176,8 +216,15 @@ class ApplicationXBroker:
                     pending = asyncio.ensure_future(body_iter.__anext__())
                     try:
                         while True:
-                            done, _ = await asyncio.wait({pending}, timeout=KEEPALIVE_SECONDS)
+                            remaining = max_seconds - (time.monotonic() - started)
+                            if remaining <= 0:
+                                yield b'event: error\ndata: {"code": "stream_timeout"}\n\n'
+                                break
+                            done, _ = await asyncio.wait({pending}, timeout=min(KEEPALIVE_SECONDS, remaining))
                             if pending not in done:
+                                if time.monotonic() - started >= max_seconds:
+                                    yield b'event: error\ndata: {"code": "stream_timeout"}\n\n'
+                                    break
                                 yield b": keepalive\n\n"
                                 continue
                             try:
@@ -187,7 +234,10 @@ class ApplicationXBroker:
                             yield chunk
                             pending = asyncio.ensure_future(body_iter.__anext__())
                     finally:
+                        # Let the cancelled __anext__() task settle before the
+                        # response/stream is closed underneath it.
                         pending.cancel()
+                        await asyncio.gather(pending, return_exceptions=True)
         except httpx.TimeoutException:
             yield b'event: error\ndata: {"code": "upstream_timeout"}\n\n'
         except httpx.HTTPError:

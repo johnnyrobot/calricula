@@ -42,7 +42,19 @@ def test_status_enabled_only_when_fully_configured(as_faculty, configured, monke
     assert as_faculty.get("/api/applicationx/status").json()["enabled"] is False
 
 
-def test_production_requires_https_origin_when_enabled():
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://ax.internal",
+        "https://user:pw@ax.example.edu",
+        "https://ax.example.edu?x=1",
+        "https://ax.example.edu#frag",
+        "https://ax.example.edu/v1",
+        "https://",
+        "",
+    ],
+)
+def test_production_requires_https_origin_when_enabled(origin):
     from app.core.config import Settings
 
     with pytest.raises(ValueError, match="APPLICATIONX_API_ORIGIN"):
@@ -54,7 +66,7 @@ def test_production_requires_https_origin_when_enabled():
             OIDC_AUDIENCE="https://api.calricula.test",
             OIDC_CLIENT_ID="calricula-web",
             APPLICATIONX_EMBED_ENABLED=True,
-            APPLICATIONX_API_ORIGIN="http://ax.internal",
+            APPLICATIONX_API_ORIGIN=origin,
             APPLICATIONX_ORGANIZATION_REF="lamc",
             APPLICATIONX_CAMPUS_REF="LAMC",
         )
@@ -140,6 +152,39 @@ def test_upstream_4xx_typed_state_passes_and_untyped_is_sanitized(configured):
     assert status == 403 and body == {"detail": "forbidden"}
 
 
+def test_upstream_4xx_typed_state_is_projected_to_allowlist(configured):
+    """A typed host failure keeps only {state, message, retryable}; extra keys
+    (debug text, ids) never cross the boundary and message is bounded."""
+    upstream = {"state": "access_required", "message": "Ask your admin. " + "x" * 600, "retryable": "yes", "debug": "token=abc"}
+    b = ApplicationXBroker(transport=_transport(lambda r: httpx.Response(403, json=upstream)))
+    status, body = asyncio.run(b.forward("chat.messages", user_token="t", path_params={}, body={"question": "q"}))
+    assert status == 403
+    assert set(body) == {"state", "message", "retryable"}
+    assert body["state"] == "access_required" and body["retryable"] is True
+    assert len(body["message"]) == 500 and "abc" not in str(body)
+
+
+@pytest.mark.parametrize("state", ["ready", "loading", "pwned", 42, None])
+def test_upstream_4xx_unknown_state_is_sanitized(configured, state):
+    b = ApplicationXBroker(transport=_transport(lambda r: httpx.Response(403, json={"state": state, "message": "secret=abc"})))
+    status, body = asyncio.run(b.forward("chat.messages", user_token="t", path_params={}, body={"question": "q"}))
+    assert status == 403 and body == {"detail": "forbidden"}
+
+
+def test_run_id_is_normalized_to_canonical_uuid(configured):
+    seen = {}
+
+    def handler(req):
+        seen["url"] = str(req.url)
+        return httpx.Response(200, json={})
+
+    rid = uuid.uuid4()
+    b = ApplicationXBroker(transport=_transport(handler))
+    for raw in (rid.hex, f"urn:uuid:{rid}", "{" + str(rid) + "}", str(rid).upper()):
+        asyncio.run(b.forward("chat.cancel", user_token="t", path_params={"run_id": raw}, body=None))
+        assert seen["url"] == f"https://ax.example.test/v1/chat/runs/{rid}/cancel", raw
+
+
 def test_stream_passes_events_and_last_event_id(configured):
     seen = {}
 
@@ -154,6 +199,61 @@ def test_stream_passes_events_and_last_event_id(configured):
 
     out = asyncio.run(collect())
     assert b"event: done" in out and seen["lei"] == "1"
+
+
+@pytest.mark.parametrize(
+    ("cursor", "forwarded"),
+    [
+        ("1", "1"),
+        ("cursor-7", "cursor-7"),
+        ("evt_01J8:abc.def", "evt_01J8:abc.def"),
+        ("a" * 64, "a" * 64),
+        ("a" * 65, None),
+        ("x y", None),
+        ("a\r\nX-Injected: 1", None),
+        ("", None),
+        (None, None),
+    ],
+)
+def test_stream_forwards_only_safe_opaque_cursors(configured, cursor, forwarded):
+    seen = {}
+
+    def handler(req):
+        seen["lei"] = req.headers.get("last-event-id")
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=b"id: 1\nevent: done\ndata: {}\n\n")
+
+    b = ApplicationXBroker(transport=_transport(handler))
+
+    async def collect():
+        return [c async for c in b.stream("chat.events", user_token="t", path_params={"run_id": str(uuid.uuid4())}, last_event_id=cursor)]
+
+    asyncio.run(collect())
+    assert seen["lei"] == forwarded
+
+
+def test_stream_stops_with_stream_timeout_after_max_seconds(configured, monkeypatch):
+    monkeypatch.setattr(broker_module, "KEEPALIVE_SECONDS", 0.02)
+    monkeypatch.setattr(settings, "APPLICATIONX_STREAM_MAX_SECONDS", 0.1)
+
+    class NeverDone(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"id: 1\nevent: status\ndata: {}\n\n"
+            await asyncio.sleep(10)
+            yield b"id: 2\nevent: done\ndata: {}\n\n"  # pragma: no cover
+
+    b = ApplicationXBroker(transport=_transport(lambda r: httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=NeverDone())))
+
+    async def collect():
+        return [c async for c in b.stream("chat.events", user_token="t", path_params={"run_id": str(uuid.uuid4())}, last_event_id=None)]
+
+    import time as _time
+
+    t0 = _time.monotonic()
+    chunks = asyncio.run(collect())
+    assert _time.monotonic() - t0 < 2
+    assert chunks[0] == b"id: 1\nevent: status\ndata: {}\n\n"
+    assert chunks[-1] == b'event: error\ndata: {"code": "stream_timeout"}\n\n'
+    assert b"event: done" not in b"".join(chunks)
 
 
 def test_stream_emits_idle_keepalive(configured, monkeypatch):
