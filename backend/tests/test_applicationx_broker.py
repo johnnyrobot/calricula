@@ -181,3 +181,132 @@ def test_stream_emits_idle_keepalive(configured, monkeypatch):
     chunks = asyncio.run(collect())
     assert b": keepalive\n\n" in chunks
     assert b"".join(c for c in chunks if c != b": keepalive\n\n") == b"id: 1\nevent: status\ndata: {}\n\nid: 2\nevent: done\ndata: {}\n\n"
+
+
+# --- Broker routes: trusted program enrichment + SSE proxy -----------------
+
+from datetime import datetime, timezone  # noqa: E402
+from app.models.program import Program, ProgramType, ProgramStatus  # noqa: E402
+from app.services import applicationx_broker as mod  # noqa: E402
+
+
+class _FakeBroker:
+    def __init__(self):
+        self.calls = []
+
+    async def forward(self, operation, *, user_token, path_params, body):
+        self.calls.append((operation, user_token, path_params, body))
+        return 200, {
+            "state": "ready",
+            "workspace_id": "w",
+            "workspace_title": "Nursing",
+            "program_title": body.get("program_ref", {}).get("title") if body else None,
+            "campus_label": "LAMC",
+            "revision_label": "r",
+            "api_version": "0.1",
+        }
+
+    async def stream(self, operation, *, user_token, path_params, last_event_id):
+        yield b"id: 1\nevent: done\ndata: {}\n\n"
+
+
+@pytest.fixture
+def fake_broker(monkeypatch):
+    fb = _FakeBroker()
+    monkeypatch.setattr("app.api.routes.applicationx.get_broker", lambda: fb)
+    return fb
+
+
+def test_resolve_enriches_program_from_database(as_faculty, configured, fake_broker, db_session, test_department, test_user_faculty):
+    p = Program(title="Nursing AS", type=ProgramType.AS, department_id=test_department.id, created_by=test_user_faculty.id, status=ProgramStatus.APPROVED)
+    db_session.add(p)
+    db_session.commit()
+    db_session.refresh(p)
+    r = as_faculty.post(
+        "/api/applicationx/host-contexts/resolve",
+        headers={"Authorization": "Bearer tok", "X-ApplicationX-Token": "tok"},
+        json={"program_id": str(p.id), "workspace_id": None, "context_id": "ctx"},
+    )
+    assert r.status_code == 200 and r.json()["state"] == "ready"
+    op, token, _, body = fake_broker.calls[0]
+    assert op == "host-contexts.resolve" and token == "tok"
+    assert body["organization_ref"] == "lamc" and body["campus_ref"] == "LAMC" and body["host"] == "calricula"
+    assert body["program_ref"]["external_id"] == str(p.id) and body["program_ref"]["title"] == "Nursing AS" and body["program_ref"]["status"] == "Approved"
+    assert body["program_ref"]["revision"].endswith("+00:00")
+
+
+def test_resolve_unknown_program_404_and_no_upstream_call(as_faculty, configured, fake_broker):
+    r = as_faculty.post(
+        "/api/applicationx/host-contexts/resolve",
+        headers={"Authorization": "Bearer tok", "X-ApplicationX-Token": "tok"},
+        json={"program_id": str(uuid.uuid4()), "workspace_id": None, "context_id": "ctx"},
+    )
+    assert r.status_code == 404 and fake_broker.calls == []
+
+
+def test_ops_only_allowlisted(as_faculty, configured, fake_broker):
+    assert as_faculty.post(
+        "/api/applicationx/ops/host-contexts.resolve",
+        headers={"Authorization": "Bearer tok", "X-ApplicationX-Token": "tok"},
+        json={"path_params": {}, "body": {}},
+    ).status_code == 404
+    assert as_faculty.post(
+        "/api/applicationx/ops/chat.messages",
+        headers={"Authorization": "Bearer tok", "X-ApplicationX-Token": "tok"},
+        json={"path_params": {}, "body": {"question": "q", "context_id": "c", "conversation_id": None, "workspace_id": None, "language": "en"}},
+    ).status_code == 200
+
+
+def test_disabled_embed_is_503_everywhere_but_status(as_faculty, fake_broker):
+    assert as_faculty.post(
+        "/api/applicationx/host-contexts/resolve",
+        headers={"Authorization": "Bearer tok", "X-ApplicationX-Token": "tok"},
+        json={"program_id": None, "workspace_id": None, "context_id": "c"},
+    ).status_code == 503
+    assert as_faculty.get("/api/applicationx/status").status_code == 200
+
+
+def test_events_stream_proxied(as_faculty, configured, fake_broker):
+    r = as_faculty.get(
+        f"/api/applicationx/runs/{uuid.uuid4()}/events",
+        headers={"Authorization": "Bearer tok", "X-ApplicationX-Token": "tok", "Last-Event-ID": "0"},
+    )
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream") and b"event: done" in r.content
+
+
+def test_broker_error_never_echoes_token(as_faculty, configured, monkeypatch):
+    class Boom:
+        async def forward(self, *a, **k):
+            raise mod.BrokerError(502, "upstream_error", "ApplicationX returned an error")
+
+    monkeypatch.setattr("app.api.routes.applicationx.get_broker", lambda: Boom())
+    r = as_faculty.post(
+        "/api/applicationx/ops/sources.list",
+        headers={"Authorization": "Bearer tok", "X-ApplicationX-Token": "secret-token-xyz"},
+        json={"path_params": {}, "body": None},
+    )
+    assert r.status_code == 502 and "secret-token-xyz" not in r.text and r.json()["detail"]["code"] == "upstream_error"
+
+
+def test_missing_upstream_token_is_401(as_faculty, configured, fake_broker):
+    r = as_faculty.post(
+        "/api/applicationx/ops/sources.list",
+        headers={"Authorization": "Bearer tok"},
+        json={"path_params": {}, "body": None},
+    )
+    assert r.status_code == 401 and r.json()["detail"]["code"] == "missing_upstream_token"
+    assert fake_broker.calls == []
+
+
+def test_stream_broker_error_before_first_byte_surfaces_as_error_status(as_faculty, configured, monkeypatch):
+    class BoomStream:
+        async def stream(self, *a, **k):
+            raise mod.BrokerError(403, "upstream_stream_error", "forbidden")
+            yield b""  # pragma: no cover -- makes this an async generator
+
+    monkeypatch.setattr("app.api.routes.applicationx.get_broker", lambda: BoomStream())
+    r = as_faculty.get(
+        f"/api/applicationx/runs/{uuid.uuid4()}/events",
+        headers={"Authorization": "Bearer tok", "X-ApplicationX-Token": "tok"},
+    )
+    assert r.status_code == 403 and r.json()["detail"]["code"] == "upstream_stream_error"
