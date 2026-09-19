@@ -162,7 +162,13 @@ export default function ProgramCollaborationPage() {
         )}
 
         {!embedDisabled && resolution.state !== 'loading' && resolution.state !== 'ready' && (
-          <HostStatePanel resolution={resolution} onRetry={load} standaloneUrl={standaloneUrl} />
+          <>
+            <HostStatePanel resolution={resolution} onRetry={load} standaloneUrl={standaloneUrl} />
+            {/* Outage isolation (AX-21): curriculum editing stays one link away. */}
+            <Link href={`/programs/${id}`} className="luminous-button-secondary mt-4 inline-flex">
+              Back to program
+            </Link>
+          </>
         )}
 
         {resolution.state === 'ready' && (
