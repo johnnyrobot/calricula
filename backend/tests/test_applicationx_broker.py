@@ -76,3 +76,108 @@ def test_production_accepts_https_origin_when_enabled():
         APPLICATIONX_CAMPUS_REF="LAMC",
     )
     assert s.APPLICATIONX_API_ORIGIN == "https://ax.example.edu"
+
+
+# --- ApplicationXBroker service ---------------------------------------------
+
+import asyncio  # noqa: E402
+import httpx  # noqa: E402
+
+from app.services import applicationx_broker as broker_module  # noqa: E402
+from app.services.applicationx_broker import ApplicationXBroker, BrokerError  # noqa: E402
+
+
+def _transport(handler):
+    return httpx.MockTransport(handler)
+
+
+def test_forward_sends_only_allowlisted_headers(configured):
+    seen = {}
+
+    def handler(req):
+        seen.update({"url": str(req.url), "headers": dict(req.headers), "body": req.content})
+        return httpx.Response(200, json={"state": "ready"})
+
+    b = ApplicationXBroker(transport=_transport(handler))
+    status, body = asyncio.run(b.forward("host-contexts.resolve", user_token="tok-123", path_params={}, body={"context_id": "c"}))
+    assert status == 200 and body == {"state": "ready"}
+    assert seen["url"] == "https://ax.example.test/v1/host-contexts/resolve"
+    assert seen["headers"]["authorization"] == "Bearer tok-123" and seen["headers"]["x-calricula-host"] == "calricula"
+    assert "cookie" not in seen["headers"] and "x-forwarded-for" not in seen["headers"]
+
+
+def test_unknown_operation_and_bad_path_param(configured):
+    b = ApplicationXBroker(transport=_transport(lambda r: httpx.Response(200, json={})))
+    for op, params, code in (("admin.nuke", {}, 404), ("chat.cancel", {"run_id": "../x"}, 400), ("sources.health", {"source_id": "A;drop"}, 400)):
+        try:
+            asyncio.run(b.forward(op, user_token="t", path_params=params, body=None))
+            assert False, op
+        except BrokerError as e:
+            assert e.status == code
+
+
+def test_upstream_5xx_and_timeout_become_typed_errors_without_leaking_body(configured):
+    b = ApplicationXBroker(transport=_transport(lambda r: httpx.Response(500, text="secret stack trace token=abc")))
+    try:
+        asyncio.run(b.forward("sources.list", user_token="t", path_params={}, body=None))
+        assert False
+    except BrokerError as e:
+        assert e.status == 502 and "abc" not in e.safe_message and "trace" not in e.safe_message
+
+    def slow(req):
+        raise httpx.ReadTimeout("slow")
+
+    try:
+        asyncio.run(ApplicationXBroker(transport=_transport(slow)).forward("sources.list", user_token="t", path_params={}, body=None))
+        assert False
+    except BrokerError as e:
+        assert e.status == 504
+
+
+def test_upstream_4xx_typed_state_passes_and_untyped_is_sanitized(configured):
+    b = ApplicationXBroker(transport=_transport(lambda r: httpx.Response(403, json={"detail": "workspace access denied for user@x"})))
+    status, body = asyncio.run(b.forward("chat.messages", user_token="t", path_params={}, body={"question": "q"}))
+    assert status == 403 and body == {"detail": "forbidden"}
+
+
+def test_stream_passes_events_and_last_event_id(configured):
+    seen = {}
+
+    def handler(req):
+        seen["lei"] = req.headers.get("last-event-id")
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=b"id: 1\nevent: status\ndata: {}\n\nid: 2\nevent: done\ndata: {}\n\n")
+
+    b = ApplicationXBroker(transport=_transport(handler))
+
+    async def collect():
+        return b"".join([chunk async for chunk in b.stream("chat.events", user_token="t", path_params={"run_id": str(uuid.uuid4())}, last_event_id="1")])
+
+    out = asyncio.run(collect())
+    assert b"event: done" in out and seen["lei"] == "1"
+
+
+def test_stream_emits_idle_keepalive(configured, monkeypatch):
+    """When the upstream body stalls longer than the keepalive interval,
+    stream() yields an SSE keepalive comment instead of blocking forever."""
+    monkeypatch.setattr(broker_module, "KEEPALIVE_SECONDS", 0.05)
+
+    class SlowBody(httpx.AsyncByteStream):
+        async def __aiter__(self):
+            yield b"id: 1\nevent: status\ndata: {}\n\n"
+            await asyncio.sleep(0.2)
+            yield b"id: 2\nevent: done\ndata: {}\n\n"
+
+    def handler(req):
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=SlowBody())
+
+    b = ApplicationXBroker(transport=_transport(handler))
+
+    async def collect():
+        chunks = []
+        async for chunk in b.stream("chat.events", user_token="t", path_params={"run_id": str(uuid.uuid4())}, last_event_id=None):
+            chunks.append(chunk)
+        return chunks
+
+    chunks = asyncio.run(collect())
+    assert b": keepalive\n\n" in chunks
+    assert b"".join(c for c in chunks if c != b": keepalive\n\n") == b"id: 1\nevent: status\ndata: {}\n\nid: 2\nevent: done\ndata: {}\n\n"
