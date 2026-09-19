@@ -6,7 +6,14 @@
  * (`X-ApplicationX-Token`) upstream, so every call needs both tokens — see
  * backend/app/api/routes/applicationx.py.
  */
-import { eventsUrl, op, resolveContext as clientResolveContext, AXTokens } from './client';
+import {
+  eventsUrl,
+  missingTokenResolution,
+  op,
+  resolveContext as clientResolveContext,
+  workspaceStandaloneUrl,
+  AXTokens,
+} from './client';
 import { subscribeSSE } from './sse';
 import type { HostResolution, ProgramRef, WorkspaceEvent, WorkspaceHostAdapter, WorkspaceHostContext } from './types';
 
@@ -22,12 +29,6 @@ export interface CreateBrokeredAdapterOptions {
   standaloneUrl: string | null;
 }
 
-const SESSION_EXPIRED_RESOLUTION: HostResolution = {
-  state: 'session_expired',
-  message: 'Your session expired. Sign in again.',
-  retryable: false,
-};
-
 function sessionExpiredError(): Error {
   return Object.assign(new Error('session_expired'), { code: 'session_expired' });
 }
@@ -40,17 +41,20 @@ function missingSourceIdError(): Error {
   return Object.assign(new Error('sources.health requires a source_id'), { code: 'missing_source_id' });
 }
 
-async function resolveTokens(getToken: GetToken): Promise<AXTokens | null> {
+type TokenLookup = { tokens: AXTokens; failure: null } | { tokens: null; failure: HostResolution };
+
+async function resolveTokens(getToken: GetToken): Promise<TokenLookup> {
   const [calricula, applicationx] = await Promise.all([getToken(), getToken('applicationx')]);
-  if (!calricula || !applicationx) return null;
-  return { calricula, applicationx };
+  const failure = missingTokenResolution(calricula, applicationx);
+  if (failure) return { tokens: null, failure };
+  return { tokens: { calricula: calricula as string, applicationx: applicationx as string }, failure: null };
 }
 
 export function createBrokeredAdapter({ getToken, router, standaloneUrl }: CreateBrokeredAdapterOptions): WorkspaceHostAdapter {
   return {
     async resolveContext(ctx: WorkspaceHostContext, signal: AbortSignal): Promise<HostResolution> {
-      const tokens = await resolveTokens(getToken);
-      if (!tokens) return SESSION_EXPIRED_RESOLUTION;
+      const { tokens, failure } = await resolveTokens(getToken);
+      if (!tokens) return failure;
       return clientResolveContext(
         tokens,
         { program_id: ctx.program_ref?.external_id ?? null, workspace_id: ctx.workspace_id, context_id: ctx.context_id },
@@ -59,7 +63,7 @@ export function createBrokeredAdapter({ getToken, router, standaloneUrl }: Creat
     },
 
     async request<T>(operation: string, parameters: Record<string, unknown>, signal: AbortSignal): Promise<T> {
-      const tokens = await resolveTokens(getToken);
+      const { tokens } = await resolveTokens(getToken);
       if (!tokens) throw sessionExpiredError();
 
       switch (operation) {
@@ -82,7 +86,7 @@ export function createBrokeredAdapter({ getToken, router, standaloneUrl }: Creat
     },
 
     async *subscribe(resourceId: string, cursor: string | null, signal: AbortSignal): AsyncIterable<WorkspaceEvent> {
-      const tokens = await resolveTokens(getToken);
+      const { tokens } = await resolveTokens(getToken);
       if (!tokens) throw sessionExpiredError();
 
       yield* subscribeSSE(
@@ -99,8 +103,9 @@ export function createBrokeredAdapter({ getToken, router, standaloneUrl }: Creat
     },
 
     openStandalone(workspaceId: string): void {
-      if (!standaloneUrl) return;
-      window.open(`${standaloneUrl}/workspaces/${workspaceId}`, '_blank', 'noopener');
+      const url = workspaceStandaloneUrl(standaloneUrl, workspaceId);
+      if (!url) return;
+      window.open(url, '_blank', 'noopener');
     },
   };
 }

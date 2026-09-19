@@ -17,6 +17,7 @@ describe('HostStatePanel', () => {
     expect(screen.getByText('Contact your dean.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
     expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   test('mapping_required: explains and tells the user who can map it', () => {
@@ -24,6 +25,7 @@ describe('HostStatePanel', () => {
     expect(screen.getByText('This program is not mapped to an ApplicationX workspace.')).toBeInTheDocument();
     expect(screen.getByText(/Ask an ApplicationX administrator to map it/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   test('context_stale: shows message and Retry calls onRetry', () => {
@@ -34,6 +36,7 @@ describe('HostStatePanel', () => {
     expect(btn).toHaveAttribute('type', 'button');
     fireEvent.click(btn);
     expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   test('session_expired: alert with Sign in again link to /login', () => {
@@ -70,6 +73,15 @@ describe('HostStatePanel', () => {
   test('version_mismatch: no standalone link without a URL', () => {
     render(<HostStatePanel resolution={failure('version_mismatch')} onRetry={jest.fn()} standaloneUrl={null} />);
     expect(screen.queryByRole('link', { name: /Open in ApplicationX/ })).toBeNull();
+  });
+
+  test('unknown state: falls back to the version_mismatch copy with a heading (M-7)', () => {
+    const unknown = { state: 'brand_new_state', message: 'm', retryable: false } as unknown as HostFailure;
+    render(<HostStatePanel resolution={unknown} onRetry={jest.fn()} standaloneUrl="https://ax.example.edu" />);
+    expect(screen.getByRole('heading', { level: 2 })).toHaveTextContent('This embedded workspace needs an update.');
+    expect(screen.getByText('ApplicationX returned a response this version of Calricula cannot display.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Open in ApplicationX/ })).toHaveAttribute('href', 'https://ax.example.edu');
+    expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
   });
 
   test('never renders workspace data even if a ready-shaped object is forced in', () => {

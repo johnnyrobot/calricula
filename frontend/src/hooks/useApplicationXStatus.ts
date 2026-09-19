@@ -2,8 +2,10 @@
  * Fetches ApplicationX embed status once per session, cached at module scope
  * for 5 minutes so re-renders/remounts (e.g. navigating between COR pages)
  * don't re-hit the broker. Any failure — network error, non-2xx, missing
- * token — degrades to `enabled: false` rather than surfacing an error, since
- * ApplicationX embedding is an enhancement, not a hard dependency.
+ * token — degrades to `enabled: false` for that render rather than surfacing
+ * an error, since ApplicationX embedding is an enhancement, not a hard
+ * dependency. Only successful responses are cached, so one transient failure
+ * does not hide the entry for the whole TTL.
  */
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -25,7 +27,7 @@ interface StatusCache {
 }
 
 let cache: StatusCache | null = null;
-let inFlight: Promise<AXStatus> | null = null;
+let inFlight: Promise<AXStatus | null> | null = null;
 
 /** Test-only: clears the module-level cache between test cases. */
 export function resetApplicationXStatusCache(): void {
@@ -33,13 +35,14 @@ export function resetApplicationXStatusCache(): void {
   inFlight = null;
 }
 
-async function fetchStatus(getToken: () => Promise<string | null>): Promise<AXStatus> {
+/** Resolves to the status on success, or `null` on any failure (not cached). */
+async function fetchStatus(getToken: () => Promise<string | null>): Promise<AXStatus | null> {
   try {
     const token = await getToken();
-    if (!token) return DISABLED_STATUS;
+    if (!token) return null;
     return await getStatus(token);
   } catch {
-    return DISABLED_STATUS;
+    return null;
   }
 }
 
@@ -84,7 +87,7 @@ export function useApplicationXStatus(): UseApplicationXStatusResult {
 
     if (!inFlight) {
       inFlight = fetchStatus(() => getTokenRef.current()).then((value) => {
-        cache = { value, fetchedAt: Date.now() };
+        if (value) cache = { value, fetchedAt: Date.now() };
         inFlight = null;
         return value;
       });
@@ -92,7 +95,7 @@ export function useApplicationXStatus(): UseApplicationXStatusResult {
 
     inFlight.then((value) => {
       if (cancelled) return;
-      setStatus(value);
+      setStatus(value ?? DISABLED_STATUS);
       setLoading(false);
     });
 

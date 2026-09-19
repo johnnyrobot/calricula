@@ -39,3 +39,16 @@ test('a rejected getStatus yields enabled:false', async () => {
   await waitFor(() => expect(result.current.loading).toBe(false));
   expect(result.current.status).toMatchObject({ enabled: false, organization_ref: null, campus_ref: null, standalone_url: null, api_version: null });
 });
+
+test('a failed status fetch is not cached: the next mount refetches (M-9)', async () => {
+  mockGetStatus.mockRejectedValueOnce(new Error('boom'));
+  const { result: r1 } = renderHook(() => useApplicationXStatus());
+  await waitFor(() => expect(r1.current.loading).toBe(false));
+  expect(r1.current.status?.enabled).toBe(false);
+
+  mockGetStatus.mockResolvedValueOnce({ enabled: true, organization_ref: 'lamc', campus_ref: 'LAMC', standalone_url: null, api_version: null });
+  const { result: r2 } = renderHook(() => useApplicationXStatus());
+  await waitFor(() => expect(r2.current.loading).toBe(false));
+  expect(mockGetStatus).toHaveBeenCalledTimes(2);
+  expect(r2.current.status?.enabled).toBe(true);
+});

@@ -54,14 +54,29 @@ test('resolveContext forwards both tokens to the client', async () => {
   );
 });
 
-test('resolveContext resolves session_expired when either token is missing', async () => {
+test('resolveContext resolves session_expired when the Calricula token is missing', async () => {
+  const noTokens = jest.fn(async () => null);
+  const adapter = createBrokeredAdapter({ getToken: noTokens, router, standaloneUrl: null });
+  const signal = new AbortController().signal;
+
+  const result = await adapter.resolveContext(baseCtx, signal);
+
+  expect(result).toEqual({ state: 'session_expired', message: 'Your session expired. Sign in again.', retryable: false });
+  expect(mockResolveContext).not.toHaveBeenCalled();
+});
+
+test('resolveContext reports "not configured" when only the ApplicationX token is missing (I-2)', async () => {
   const noAppToken = jest.fn(async (resource?: string) => (resource === 'applicationx' ? null : 'ctok'));
   const adapter = createBrokeredAdapter({ getToken: noAppToken, router, standaloneUrl: null });
   const signal = new AbortController().signal;
 
   const result = await adapter.resolveContext(baseCtx, signal);
 
-  expect(result).toEqual({ state: 'session_expired', message: 'Your session expired. Sign in again.', retryable: false });
+  expect(result).toEqual({
+    state: 'service_unavailable',
+    message: 'ApplicationX sign-in is not configured for this deployment.',
+    retryable: false,
+  });
   expect(mockResolveContext).not.toHaveBeenCalled();
 });
 
@@ -172,5 +187,13 @@ test('openStandalone opens the workspace URL when standaloneUrl is set', () => {
   const adapter = createBrokeredAdapter({ getToken, router, standaloneUrl: 'https://standalone.example' });
   adapter.openStandalone('w-1');
   expect(openSpy).toHaveBeenCalledWith('https://standalone.example/workspaces/w-1', '_blank', 'noopener');
+  openSpy.mockRestore();
+});
+
+test('openStandalone encodes the workspace id and tolerates a trailing slash (M-8)', () => {
+  const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null);
+  const adapter = createBrokeredAdapter({ getToken, router, standaloneUrl: 'https://standalone.example/' });
+  adapter.openStandalone('w 1/../x');
+  expect(openSpy).toHaveBeenCalledWith('https://standalone.example/workspaces/w%201%2F..%2Fx', '_blank', 'noopener');
   openSpy.mockRestore();
 });

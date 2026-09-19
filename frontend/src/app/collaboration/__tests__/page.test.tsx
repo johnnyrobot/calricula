@@ -15,7 +15,10 @@ jest.mock('@/components/layout/PageShell', () => ({
 }));
 
 const resolveContext = jest.fn();
-jest.mock('@/lib/applicationx/client', () => ({ resolveContext: (...a: unknown[]) => resolveContext(...a) }));
+jest.mock('@/lib/applicationx/client', () => ({
+  ...jest.requireActual('@/lib/applicationx/client'),
+  resolveContext: (...a: unknown[]) => resolveContext(...a),
+}));
 
 beforeEach(() => {
   jest.clearAllMocks();

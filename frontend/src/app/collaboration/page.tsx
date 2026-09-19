@@ -14,7 +14,7 @@ import Link from 'next/link';
 import PageShell from '@/components/layout/PageShell';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApplicationXStatus } from '@/hooks/useApplicationXStatus';
-import { resolveContext } from '@/lib/applicationx/client';
+import { missingTokenResolution, resolveContext } from '@/lib/applicationx/client';
 import type { HostResolution } from '@/lib/applicationx/types';
 import { HostStatePanel, WorkspaceSelector } from '@/components/applicationx';
 
@@ -49,13 +49,17 @@ export default function CollaborationPage() {
       getTokenRef.current('applicationx'),
     ]);
     if (ctl.signal.aborted) return;
-    if (!calricula || !applicationx) {
-      setResolution({ state: 'session_expired', message: 'Your session expired. Sign in again.', retryable: false });
+    // No Calricula token → session expired; Calricula token but no
+    // ApplicationX token → the deployment has not configured the ApplicationX
+    // resource (I-2): signing in again would not help.
+    const missing = missingTokenResolution(calricula, applicationx);
+    if (missing) {
+      setResolution(missing);
       return;
     }
     try {
       const r = await resolveContext(
-        { calricula, applicationx },
+        { calricula: calricula as string, applicationx: applicationx as string },
         { program_id: null, workspace_id: null, context_id: ROOT_CONTEXT_ID },
         ctl.signal,
       );

@@ -16,17 +16,13 @@ import PageShell from '@/components/layout/PageShell';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApplicationXStatus } from '@/hooks/useApplicationXStatus';
 import { api, type ProgramDetail } from '@/lib/api';
-import { resolveContext } from '@/lib/applicationx/client';
+import { missingTokenResolution, resolveContext, SESSION_EXPIRED_RESOLUTION } from '@/lib/applicationx/client';
 import type { HostResolution } from '@/lib/applicationx/types';
 import { ContextBanner, HostStatePanel } from '@/components/applicationx';
 
 type PageResolution = HostResolution | { state: 'loading' };
 
-const SESSION_EXPIRED: HostResolution = {
-  state: 'session_expired',
-  message: 'Your session expired. Sign in again.',
-  retryable: false,
-};
+const SESSION_EXPIRED: HostResolution = SESSION_EXPIRED_RESOLUTION;
 
 export default function ProgramCollaborationPage() {
   const { id } = useParams<{ id: string }>();
@@ -67,8 +63,12 @@ export default function ProgramCollaborationPage() {
       getTokenRef.current('applicationx'),
     ]);
     if (ctl.signal.aborted) return;
-    if (!calricula || !applicationx) {
-      setResolution(SESSION_EXPIRED);
+    // No Calricula token → session expired; Calricula token but no
+    // ApplicationX token → the deployment has not configured the ApplicationX
+    // resource (I-2): signing in again would not help.
+    const missing = missingTokenResolution(calricula, applicationx);
+    if (missing) {
+      setResolution(missing);
       return;
     }
 
@@ -88,7 +88,7 @@ export default function ProgramCollaborationPage() {
     latestContext.current = contextId;
     try {
       const r = await resolveContext(
-        { calricula, applicationx },
+        { calricula: calricula as string, applicationx: applicationx as string },
         { program_id: p.id, workspace_id: null, context_id: contextId },
         ctl.signal,
       );
@@ -145,12 +145,13 @@ export default function ProgramCollaborationPage() {
           </div>
         )}
 
-        {program && resolution.state === 'ready' && (
+        {!embedDisabled && program && resolution.state === 'ready' && (
           <ContextBanner
             campusLabel={resolution.campus_label}
             programTitle={program.title}
             revisionLabel={resolution.revision_label}
             standaloneUrl={standaloneUrl}
+            workspaceId={resolution.workspace_id}
             backHref={`/programs/${program.id}`}
           />
         )}
@@ -171,7 +172,7 @@ export default function ProgramCollaborationPage() {
           </>
         )}
 
-        {resolution.state === 'ready' && (
+        {!embedDisabled && resolution.state === 'ready' && (
           <section aria-label="Workspace" className="luminous-card mt-6">
             <p className="text-sm text-ink-soft">Workspace ready. Chat arrives with the shared package.</p>
           </section>

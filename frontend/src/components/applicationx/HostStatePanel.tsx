@@ -29,6 +29,13 @@ export function HostStatePanel({ resolution, onRetry, standaloneUrl }: HostState
   let heading: string;
   let body: React.ReactNode;
 
+  const openStandalone = standaloneUrl && (
+    <a href={standaloneUrl} target="_blank" rel="noopener noreferrer" className="luminous-button-secondary mt-4 inline-flex">
+      Open in ApplicationX
+      <span className="sr-only"> (opens in a new tab)</span>
+    </a>
+  );
+
   switch (state) {
     case 'access_required':
       heading = 'You do not have ApplicationX access for this organization.';
@@ -80,17 +87,21 @@ export function HostStatePanel({ resolution, onRetry, standaloneUrl }: HostState
           <p className="mt-2 text-sm text-ink-soft">
             This program requires a newer version of ApplicationX than Calricula currently embeds. {message}
           </p>
-          {standaloneUrl && (
-            <a
-              href={standaloneUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="luminous-button-secondary mt-4 inline-flex"
-            >
-              Open in ApplicationX
-              <span className="sr-only"> (opens in a new tab)</span>
-            </a>
-          )}
+          {openStandalone}
+        </>
+      );
+      break;
+    default:
+      // A state this build does not know (newer API). `client.resolveContext`
+      // already maps those to `version_mismatch`; this is the last line of
+      // defence so the panel never renders a heading-less card.
+      heading = 'This embedded workspace needs an update.';
+      body = (
+        <>
+          <p className="mt-2 text-sm text-ink-soft">
+            ApplicationX returned a response this version of Calricula cannot display.
+          </p>
+          {openStandalone}
         </>
       );
       break;
