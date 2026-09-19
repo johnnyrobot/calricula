@@ -20,6 +20,14 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuth } from '@/contexts/AuthContext';
 
+/** Messages for the `?error=` values the server-side auth routes redirect with. */
+const REDIRECT_ERRORS: Record<string, string> = {
+  // `/callback` could not complete the authorization-code exchange (cancelled
+  // at the provider, state mismatch, expired code).
+  callback:
+    'Sign-in could not be completed. Please try again; if this keeps happening, contact an administrator.',
+};
+
 export default function LoginPage() {
   const router = useRouter();
   const { login, loading, mode, isAuthenticated, error: authError } = useAuth();
@@ -33,10 +41,15 @@ export default function LoginPage() {
 
   // Track if component is mounted to avoid hydration mismatch
   const [mounted, setMounted] = useState(false);
+  // An error the server-side auth routes redirected here with (`?error=...`).
+  // Read after mount, like `mounted`, so the server render never sees it.
+  const [redirectError, setRedirectError] = useState<string | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount flag to gate client-only redirect and avoid SSR hydration mismatch
     setMounted(true);
+    const code = new URLSearchParams(window.location.search).get('error');
+    if (code && REDIRECT_ERRORS[code]) setRedirectError(REDIRECT_ERRORS[code]);
   }, []);
 
   // Redirect if already authenticated (only after mount to avoid hydration issues)
@@ -63,9 +76,10 @@ export default function LoginPage() {
     }
   };
 
-  // Errors raised by the provider flow (e.g. the demo-account gate) surface
-  // alongside form errors.
-  const shownError = error ?? authError;
+  // Errors raised by the provider flow (e.g. the demo-account gate) and by
+  // the server-side auth routes (`?error=callback`) surface alongside form
+  // errors.
+  const shownError = error ?? authError ?? redirectError;
 
   return (
     <div className="min-h-screen flex">

@@ -371,18 +371,67 @@ describe('Logto mode', () => {
     await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('at-lazy'));
   });
 
-  it('mints a token for a child that asks during its own mount effect', async () => {
+  it('mints a token for a child that asks during its own mount effect, only once the session route has settled', async () => {
     // React runs child effects before the provider's: the token fetcher must
     // exist from the first render, not be installed by the provider's effect.
-    mockAuthRoutes({
-      session: { body: { signedIn: true, profile: PROFILE } },
-      token: { body: { access_token: 'at-eager', expires_in: 3600 } },
+    // But `/api/auth/session` runs the backend `/login` (which re-links a
+    // legacy account); a token request that reached the API first would make
+    // it provision a fresh placeholder account instead. So the child's request
+    // must be held until the session route has answered.
+    let releaseSession: () => void = () => {};
+    const sessionPending = new Promise<void>((resolve) => {
+      releaseSession = resolve;
     });
+    const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/auth/session')) {
+        await sessionPending;
+        return { ok: true, status: 200, json: async () => ({ signedIn: true, profile: PROFILE }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ access_token: 'at-eager', expires_in: 3600 }),
+      };
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const urls = () => fetchMock.mock.calls.map(([url]) => String(url));
+    const tokenCalls = () => urls().filter((url) => url.includes('/api/auth/token')).length;
 
     renderAuth(<EagerTokenConsumer />);
 
-    // No waiting on `loading` first — the child gets a real token straight away.
+    // The session request has left; the child's token request has not.
+    await waitFor(() => expect(urls()).toContain('/api/auth/session'));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(tokenCalls()).toBe(0);
+    expect(screen.getByTestId('eager-token')).toHaveTextContent('');
+
+    // Once /login has run server-side, the queued request goes out and the
+    // child still gets a real token — without ever waiting on `loading`.
+    await act(async () => {
+      releaseSession();
+    });
     await waitFor(() => expect(screen.getByTestId('eager-token')).toHaveTextContent('at-eager'));
+    expect(urls()[0]).toBe('/api/auth/session');
+    expect(tokenCalls()).toBeGreaterThanOrEqual(1);
+  });
+
+  it('opens the token gate even when the session route itself fails', async () => {
+    // A network failure on /api/auth/session must not leave every queued
+    // getToken() hanging forever; the token route then fails closed on its own.
+    const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/auth/session')) throw new Error('network down');
+      return { ok: false, status: 204, json: async () => ({}) };
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    renderAuth(<EagerTokenConsumer />);
+
+    await waitFor(() => expect(screen.getByTestId('eager-token')).toHaveTextContent('null'));
+    expect(screen.getByTestId('authed')).toHaveTextContent('false');
   });
 
   it('refreshes the access token before it expires', async () => {

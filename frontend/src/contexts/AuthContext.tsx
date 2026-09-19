@@ -233,6 +233,20 @@ interface CachedToken {
   refreshAt: number;
 }
 
+/** A promise settled from the outside; never rejects. */
+interface Gate {
+  promise: Promise<void>;
+  open: () => void;
+}
+
+const createGate = (): Gate => {
+  let open: () => void = () => {};
+  const promise = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  return { promise, open };
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -259,6 +273,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Lets the refresh timer call the current fetcher without the fetcher having
   // to depend on itself. Assigned in an effect; the timer only fires ≥30s later.
   const fetchRef = useRef<() => Promise<string | null>>(async () => null);
+  // Opens once the session bootstrap (`/api/auth/session`, which runs the
+  // backend's `POST /api/auth/login` server-side) has settled — or at once in
+  // the modes that have no bootstrap. Every token request waits on it: on a
+  // legacy user's first sign-in, an API call that reached the backend before
+  // `/login` would make it provision a fresh placeholder account, and `/login`
+  // would then never re-link the account that holds their role. Created on
+  // the first render (lazy state, never replaced) because React runs child
+  // effects before the provider's own, so a child can ask for a token before
+  // the bootstrap effect exists.
+  const [sessionGate] = useState<Gate>(createGate);
 
   // Dev bypass is checked on every render because it can be flipped at runtime
   // via localStorage (only in builds where that is permitted).
@@ -296,7 +320,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
    * because React runs child effects before the provider's own: a descendant
    * that calls `getToken()` in its mount effect (e.g. `useUserCourses` with
    * `autoFetch`) must get a real token rather than a stub that answers `null`
-   * once and never retries.
+   * once and never retries. It gets that token only after the session
+   * bootstrap has settled, though (see `sessionGate`): a child may ask at
+   * any time, but no token leaves before `/login` has run.
    */
   const fetchAccessToken = useCallback(
     async (resource: ResourceKey = 'calricula'): Promise<string | null> => {
@@ -305,6 +331,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const request = (async (): Promise<string | null> => {
         try {
+          await sessionGate.promise;
           const response = await fetch(`/api/auth/token?resource=${resource}`, {
             cache: 'no-store',
             credentials: 'same-origin',
@@ -360,7 +387,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       inflightRef.current[resource] = request;
       return request;
     },
-    [clearRefresh, signedOut]
+    [clearRefresh, sessionGate, signedOut]
   );
 
   useEffect(() => {
@@ -379,6 +406,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     // ---- Dev bypass: restore the picked identity from sessionStorage -------
     if (mode === 'dev') {
+      sessionGate.open();
       if (typeof window !== 'undefined') {
         const storedUser = window.sessionStorage.getItem('dev_user');
         if (storedUser) {
@@ -398,6 +426,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // ---- No provider configured ------------------------------------------
     if (mode === 'none') {
+      sessionGate.open();
       if (isRuntimeBypassAllowed() && typeof window !== 'undefined') {
         // Dev/demo builds with nothing configured fall back to the identity
         // picker so the app is usable locally. Writing the flag re-renders us
@@ -416,10 +445,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     let cancelled = false;
 
     const bootstrap = async () => {
-      const response = await fetch('/api/auth/session', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-      });
+      let response: Response;
+      try {
+        response = await fetch('/api/auth/session', {
+          cache: 'no-store',
+          credentials: 'same-origin',
+        });
+      } finally {
+        // `/login` has now run (or could not be reached): token requests that
+        // children queued during their mount effects may proceed. A cancelled
+        // bootstrap opens the gate too — its request still reached the server.
+        sessionGate.open();
+      }
       if (cancelled) return;
       const session = (await response.json().catch(() => null)) as SessionBody | null;
       if (cancelled) return;
@@ -458,7 +495,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     return () => {
       cancelled = true;
     };
-  }, [mode, clearRefresh, signedOut, fetchAccessToken]);
+  }, [mode, clearRefresh, signedOut, fetchAccessToken, sessionGate]);
 
   // Dev-mode sign-in (the identity picker on /login). Real sign-in goes
   // through the provider; there is no password for this app to check.
