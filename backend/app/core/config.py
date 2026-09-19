@@ -91,6 +91,20 @@ class Settings(BaseSettings):
     # BLS API (U.S. Bureau of Labor Statistics)
     BLS_API_KEY: Optional[str] = None
 
+    # ApplicationX embedded staff workspace (companion app broker)
+    APPLICATIONX_EMBED_ENABLED: bool = False
+    APPLICATIONX_API_ORIGIN: Optional[str] = None       # e.g. https://ax.example.edu (no path)
+    APPLICATIONX_ORGANIZATION_REF: Optional[str] = None # ApplicationX organization slug for this deployment
+    APPLICATIONX_CAMPUS_REF: Optional[str] = None       # e.g. LAMC
+    APPLICATIONX_SERVICE_TOKEN: Optional[str] = None    # optional transport credential; never expands user scope
+    APPLICATIONX_TIMEOUT_SECONDS: float = 20.0
+    APPLICATIONX_STANDALONE_URL: Optional[str] = None
+
+    @property
+    def applicationx_ready(self) -> bool:
+        return bool(self.APPLICATIONX_EMBED_ENABLED and self.APPLICATIONX_API_ORIGIN
+                    and self.APPLICATIONX_ORGANIZATION_REF and self.APPLICATIONX_CAMPUS_REF)
+
     model_config = SettingsConfigDict(
         env_file="../.env",  # Look in project root
         extra="ignore",  # Ignore extra env vars
@@ -162,6 +176,14 @@ class Settings(BaseSettings):
                     "(minted for the browser) satisfies the access-token "
                     "audience check and would authorize API calls."
                 )
+
+            if self.APPLICATIONX_EMBED_ENABLED:
+                origin = self.APPLICATIONX_API_ORIGIN or ""
+                if not origin.startswith("https://") or origin.rstrip("/").count("/") != 2:
+                    raise ValueError(
+                        "APPLICATIONX_API_ORIGIN must be an https origin without a "
+                        "path in production."
+                    )
         return self
 
 
