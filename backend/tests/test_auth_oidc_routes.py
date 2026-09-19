@@ -376,3 +376,246 @@ def test_unconfigured_provider_fails_closed(client, monkeypatch):
     resp = client.get(PROTECTED_URL, headers=_bearer(_tok()))
 
     assert resp.status_code == 503
+
+
+# =============================================================================
+# (7) Only a *verified* email claim is ever trusted
+# =============================================================================
+
+def test_access_token_provisions_with_placeholder_email(client):
+    """An access token carries no email claim, and users.email is NOT NULL, so
+    the row gets an undeliverable placeholder rather than a guess."""
+    unique = uuid.uuid4().hex[:8]
+    sub = f"logto_noemail_{unique}"
+
+    resp = client.get(PROTECTED_URL, headers=_bearer(_tok(sub=sub)))
+
+    assert resp.status_code == 200, resp.text
+    created = _by_subject(sub)
+    assert created.email == f"{sub}@oidc.invalid"
+    assert created.full_name == "New User"
+
+
+def test_login_with_unverified_email_provisions_placeholder(client):
+    """An unverified email claim is attacker-chosen text. It must never be
+    stored as the user's address -- other users see it in workflow responses."""
+    unique = uuid.uuid4().hex[:8]
+    sub = f"logto_unverified_{unique}"
+    token = _tok(
+        aud=CLIENT_ID,
+        sub=sub,
+        email=f"victim_{unique}@calricula.com",
+        email_verified=False,
+        name="Claims To Be Someone",
+    )
+
+    resp = client.post(LOGIN_URL, headers=_bearer(token))
+
+    assert resp.status_code == 200, resp.text
+    created = _by_subject(sub)
+    assert created.email == f"{sub}@oidc.invalid"
+    assert resp.json()["user"]["email"] == f"{sub}@oidc.invalid"
+
+
+def test_login_replaces_placeholder_email_with_verified_email(client):
+    """Once the same subject proves an address at sign-in, the placeholder the
+    access-token path left behind is repaired."""
+    unique = uuid.uuid4().hex[:8]
+    sub = f"logto_repair_{unique}"
+    email = f"repair_{unique}@calricula.com"
+
+    assert client.get(PROTECTED_URL, headers=_bearer(_tok(sub=sub))).status_code == 200
+    assert _by_subject(sub).email == f"{sub}@oidc.invalid"
+
+    resp = client.post(
+        LOGIN_URL,
+        headers=_bearer(
+            _tok(aud=CLIENT_ID, sub=sub, email=email, email_verified=True)
+        ),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert _by_subject(sub).email == email
+
+
+def test_login_does_not_overwrite_a_real_email(client, db_session):
+    """Only a placeholder is repaired. A real stored address is never rewritten
+    from a token, verified or not."""
+    unique = uuid.uuid4().hex[:8]
+    sub = f"logto_stable_{unique}"
+    stored = f"stored_{unique}@calricula.com"
+    user = User(
+        email=stored,
+        auth_subject=sub,
+        auth_issuer=ISS,
+        full_name="Stable User",
+        role=UserRole.FACULTY,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    resp = client.post(
+        LOGIN_URL,
+        headers=_bearer(
+            _tok(
+                aud=CLIENT_ID,
+                sub=sub,
+                email=f"other_{unique}@calricula.com",
+                email_verified=True,
+            )
+        ),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert _by_subject(sub).email == stored
+
+
+def test_login_repairs_placeholder_full_name(client):
+    """The access-token path has no `name` claim and stores "New User"; the ID
+    token at sign-in carries one, so repair the display name too."""
+    unique = uuid.uuid4().hex[:8]
+    sub = f"logto_name_{unique}"
+
+    assert client.get(PROTECTED_URL, headers=_bearer(_tok(sub=sub))).status_code == 200
+    assert _by_subject(sub).full_name == "New User"
+
+    resp = client.post(
+        LOGIN_URL,
+        headers=_bearer(
+            _tok(
+                aud=CLIENT_ID,
+                sub=sub,
+                email=f"named_{unique}@calricula.com",
+                email_verified=True,
+                name="Real Name",
+            )
+        ),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert _by_subject(sub).full_name == "Real Name"
+
+
+def test_demo_mode_login_rejects_unverified_demo_email(client, monkeypatch):
+    """The demo gate reads the verified address only -- an unverified
+    'demo@...' claim must not open a demo deployment."""
+    monkeypatch.setattr(settings, "DEMO_MODE", True)
+    unique = uuid.uuid4().hex[:8]
+    sub = f"logto_fakedemo_{unique}"
+    token = _tok(
+        aud=CLIENT_ID,
+        sub=sub,
+        email=f"demo_{unique}@calricula.com",
+        email_verified=False,
+    )
+
+    resp = client.post(LOGIN_URL, headers=_bearer(token))
+
+    assert resp.status_code == 403
+    assert _by_subject(sub) is None
+
+
+# =============================================================================
+# (8) The legacy re-link window can be closed by configuration
+# =============================================================================
+
+def test_legacy_relink_can_be_disabled(client, db_session, monkeypatch):
+    """Once every pre-migration user has signed in, the deployer sets
+    AUTH_LEGACY_RELINK=false and email matching stops adopting rows."""
+    monkeypatch.setattr(settings, "AUTH_LEGACY_RELINK", False)
+    unique = uuid.uuid4().hex[:8]
+    email = f"legacy_closed_{unique}@calricula.com"
+    legacy = User(
+        email=email,
+        auth_subject=f"fb_legacy_{unique}",
+        auth_issuer=None,
+        full_name="Legacy User",
+        role=UserRole.ADMIN,
+    )
+    db_session.add(legacy)
+    db_session.commit()
+    db_session.refresh(legacy)
+    legacy_id = legacy.id
+
+    new_sub = f"logto_{unique}"
+    resp = client.post(
+        LOGIN_URL,
+        headers=_bearer(
+            _tok(aud=CLIENT_ID, sub=new_sub, email=email, email_verified=True)
+        ),
+    )
+
+    assert resp.status_code == 200, resp.text
+    untouched = _reload(legacy_id)
+    assert untouched.auth_subject == f"fb_legacy_{unique}"
+    assert untouched.auth_issuer is None
+    provisioned = _by_subject(new_sub)
+    assert provisioned is not None
+    assert provisioned.id != legacy_id
+
+
+def test_legacy_relink_is_enabled_by_default():
+    """Default-on: a deployment migrating from the retired provider works with
+    no extra configuration."""
+    assert settings.AUTH_LEGACY_RELINK is True
+
+
+# =============================================================================
+# (9) Demo mode is enforced on every request, not just at sign-in
+# =============================================================================
+
+def test_demo_mode_refuses_an_existing_non_demo_user(client, db_session, monkeypatch):
+    """A row that predates DEMO_MODE (or was provisioned before it was turned
+    on) must not keep access to a demo deployment."""
+    monkeypatch.setattr(settings, "AUTH_DEV_MODE", True)
+    unique = uuid.uuid4().hex[:8]
+    sub = f"test_nondemo_{unique}"
+    monkeypatch.setitem(
+        oidc._DEV_TOKEN_MAP,
+        "dev-nondemo-001",
+        {"sub": sub, "email": f"faculty_{unique}@calricula.com"},
+    )
+    db_session.add(
+        User(
+            email=f"faculty_{unique}@calricula.com",
+            auth_subject=sub,
+            auth_issuer="dev",
+            full_name="Regular Faculty",
+            role=UserRole.FACULTY,
+        )
+    )
+    db_session.commit()
+
+    assert client.get(PROTECTED_URL, headers=_bearer("dev-nondemo-001")).status_code == 200
+
+    monkeypatch.setattr(settings, "DEMO_MODE", True)
+    resp = client.get(PROTECTED_URL, headers=_bearer("dev-nondemo-001"))
+
+    assert resp.status_code == 403
+    assert "demo" in resp.json()["detail"].lower()
+
+
+def test_demo_mode_allows_an_existing_demo_user(client, db_session, monkeypatch):
+    monkeypatch.setattr(settings, "DEMO_MODE", True)
+    monkeypatch.setattr(settings, "AUTH_DEV_MODE", True)
+    unique = uuid.uuid4().hex[:8]
+    sub = f"test_isdemo_{unique}"
+    monkeypatch.setitem(
+        oidc._DEV_TOKEN_MAP,
+        "dev-isdemo-001",
+        {"sub": sub, "email": f"demo_{unique}@calricula.com"},
+    )
+    db_session.add(
+        User(
+            email=f"demo_{unique}@calricula.com",
+            auth_subject=sub,
+            auth_issuer="dev",
+            full_name="Demo Person",
+            role=UserRole.FACULTY,
+        )
+    )
+    db_session.commit()
+
+    resp = client.get(PROTECTED_URL, headers=_bearer("dev-isdemo-001"))
+
+    assert resp.status_code == 200

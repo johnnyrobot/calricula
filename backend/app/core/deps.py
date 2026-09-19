@@ -24,10 +24,34 @@ security = HTTPBearer(auto_error=False)
 
 
 # Placeholder email domain for a user provisioned from a token that carries no
-# email claim (an API access token normally carries none). `.invalid` is
+# usable email claim (an API access token normally carries none). `.invalid` is
 # reserved by RFC 2606 and can never be delivered to; POST /api/auth/login
 # replaces it with the real address once an ID token proves one.
 PROVISIONAL_EMAIL_DOMAIN = "oidc.invalid"
+
+# Display name stored when the token carries no usable name. /api/auth/login
+# repairs it when an ID token later supplies one.
+PROVISIONAL_FULL_NAME = "New User"
+
+# Shared 403 text for a non-demo identity on a demo deployment. /api/auth/login
+# raises it for the token's verified email, get_current_user for the stored one.
+DEMO_MODE_DETAIL = (
+    "Demo mode only allows access to users with 'demo' in their email address"
+)
+
+
+def verified_email(claims: dict) -> Optional[str]:
+    """The token's email address, but only when the provider vouches for it.
+
+    An unverified `email` claim is attacker-chosen text: at many providers a
+    user can set it to anyone's address without proving control. Calricula
+    stores the email on the user row and shows it to other users in workflow
+    and approval responses, and matches on it when adopting a pre-migration
+    row, so an unverified claim must never be used for either.
+    """
+    if claims.get("email_verified") is True:
+        return claims.get("email")
+    return None
 
 
 def is_provisional_email(email: Optional[str]) -> bool:
@@ -37,15 +61,16 @@ def is_provisional_email(email: Optional[str]) -> bool:
 
 def provisioning_email(claims: dict, subject: str) -> str:
     """The email to store for a newly provisioned user. users.email is NOT
-    NULL, so a token without an email claim gets an undeliverable placeholder
-    rather than failing the request."""
-    return claims.get("email") or f"{subject}@{PROVISIONAL_EMAIL_DOMAIN}"
+    NULL, so a token with no verified email claim gets an undeliverable
+    placeholder rather than failing the request (or storing a guess)."""
+    return verified_email(claims) or f"{subject}@{PROVISIONAL_EMAIL_DOMAIN}"
 
 
 def provisioning_name(claims: dict) -> str:
-    """Display name from the token, falling back to the email local part."""
-    email = claims.get("email")
-    return claims.get("name") or (email.split("@")[0] if email else "New User")
+    """Display name from the token, falling back to the verified email's local
+    part -- never to an unverified one, which is equally attacker-chosen."""
+    email = verified_email(claims)
+    return claims.get("name") or (email.split("@")[0] if email else PROVISIONAL_FULL_NAME)
 
 
 async def get_current_user(
@@ -109,11 +134,20 @@ async def get_current_user(
     statement = select(User).where(User.auth_subject == subject)
     user = session.exec(statement).first()
 
+    if user and settings.DEMO_MODE and "demo" not in (user.email or "").lower():
+        # A demo deployment admits demo accounts only, and it re-checks on
+        # every request: a row that predates DEMO_MODE (or was provisioned
+        # before it was switched on) must not keep its access.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=DEMO_MODE_DETAIL,
+        )
+
     if not user:
         # Demo mode gates who may have an account at all, and that gate lives
-        # in POST /api/auth/login (which sees the ID token's email). Provisioning
-        # here would let a protected route create the very account /login just
-        # refused, so refuse instead.
+        # in POST /api/auth/login (which sees the ID token's verified email).
+        # Provisioning here would let a protected route create the very account
+        # /login just refused, so refuse instead.
         if settings.DEMO_MODE:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

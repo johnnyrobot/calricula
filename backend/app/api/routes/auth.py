@@ -19,10 +19,13 @@ from sqlmodel import Session, select
 from app.core.config import settings
 from app.core.database import get_session
 from app.core.deps import (
+    DEMO_MODE_DETAIL,
+    PROVISIONAL_FULL_NAME,
     get_current_user,
     is_provisional_email,
     provisioning_email,
     provisioning_name,
+    verified_email,
 )
 from app.core.oidc import AuthError, resolve_dev_token, verify_bearer, verify_id_token
 from app.models.user import User, UserRole
@@ -174,28 +177,31 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    email = claims.get("email")
-    email_verified = bool(claims.get("email_verified"))
+    # Only a verified address is ever trusted: it is stored on the row, shown
+    # to other users, and matched against pre-migration rows below.
+    email = verified_email(claims)
     issuer = claims.get("iss")
 
-    # Demo mode: a public demo deployment only admits demo accounts. This is
-    # the only gate -- get_current_user refuses to provision in demo mode so it
-    # cannot be walked around by calling a protected route directly.
+    # Demo mode: a public demo deployment only admits demo accounts.
+    # get_current_user re-checks this on every request, so a non-demo identity
+    # cannot slip past by calling a protected route directly.
     if settings.DEMO_MODE and "demo" not in (email or "").lower():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Demo mode only allows access to users with 'demo' in their email address",
+            detail=DEMO_MODE_DETAIL,
         )
 
     # 1. Already linked to this subject.
     user = session.exec(select(User).where(User.auth_subject == subject)).first()
 
-    if user is None and email and email_verified:
+    if user is None and email and settings.AUTH_LEGACY_RELINK:
         # 2. One-time re-link of a pre-migration row: its auth_subject still
         # holds the retired provider's uid and its auth_issuer is NULL. Only a
-        # *verified* email is proof of ownership, and only an unambiguous match
-        # is adopted -- a row that already names an issuer is never re-pointed,
-        # so a later subject cannot claim someone else's account.
+        # *verified* email is proof of ownership (see deps.verified_email), and
+        # only an unambiguous match is adopted -- a row that already names an
+        # issuer is never re-pointed, so a later subject cannot claim someone
+        # else's account. Deployers close this window with
+        # AUTH_LEGACY_RELINK=false once every legacy user has signed in.
         legacy = session.exec(
             select(User).where(
                 User.auth_issuer.is_(None),
@@ -223,15 +229,26 @@ async def login(
         session.add(user)
         session.commit()
         session.refresh(user)
-    elif email and email_verified and is_provisional_email(user.email):
-        # The row was provisioned from an access token that carried no email
-        # (see deps.provisioning_email). Now that the same subject has proved
-        # an address, replace the placeholder. Only a placeholder is
-        # overwritten -- a real stored email is never rewritten from a token.
-        user.email = email
-        session.add(user)
-        session.commit()
-        session.refresh(user)
+    else:
+        # The row may have been provisioned from an access token, which carries
+        # no profile claims at all (see deps.provisioning_email). Now that the
+        # same subject has presented an ID token, repair those placeholders --
+        # and only those: a real stored email or name is never rewritten from a
+        # token.
+        repaired = False
+
+        if email and is_provisional_email(user.email):
+            user.email = email
+            repaired = True
+
+        if claims.get("name") and user.full_name == PROVISIONAL_FULL_NAME:
+            user.full_name = claims["name"]
+            repaired = True
+
+        if repaired:
+            session.add(user)
+            session.commit()
+            session.refresh(user)
 
     # Build and return user profile
     profile = get_user_profile(user, session)

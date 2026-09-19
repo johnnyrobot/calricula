@@ -308,6 +308,39 @@ def test_production_rejects_partial_oidc_settings():
 
 
 @pytest.mark.unit
+def test_production_rejects_audience_equal_to_client_id():
+    """OIDC_AUDIENCE (the API resource) and OIDC_CLIENT_ID (the web app) must
+    differ. If they are equal, an ID token satisfies the access-token audience
+    check, so a token minted for the browser would authorize API calls."""
+    with pytest.raises(ValidationError) as exc:
+        Settings(
+            ENVIRONMENT="production",
+            AUTH_DEV_MODE=False,
+            DEMO_MODE=False,
+            ALLOWED_HOSTS=["calricula.com"],
+            OIDC_ISSUER="https://tenant.logto.app/oidc",
+            OIDC_AUDIENCE="calricula-web-app",
+            OIDC_CLIENT_ID="calricula-web-app",
+        )
+    msg = str(exc.value)
+    assert "OIDC_AUDIENCE" in msg and "OIDC_CLIENT_ID" in msg
+
+
+@pytest.mark.unit
+def test_production_accepts_distinct_audience_and_client_id():
+    s = Settings(
+        ENVIRONMENT="production",
+        AUTH_DEV_MODE=False,
+        DEMO_MODE=False,
+        ALLOWED_HOSTS=["calricula.com"],
+        OIDC_ISSUER="https://tenant.logto.app/oidc",
+        OIDC_AUDIENCE="https://api.calricula.com",
+        OIDC_CLIENT_ID="calricula-web-app",
+    )
+    assert s.OIDC_AUDIENCE != s.OIDC_CLIENT_ID
+
+
+@pytest.mark.unit
 def test_development_allows_missing_oidc_settings():
     """Non-production environments don't require OIDC to be configured (the
     dev-* token map in oidc.resolve_dev_token covers local dev/test)."""
