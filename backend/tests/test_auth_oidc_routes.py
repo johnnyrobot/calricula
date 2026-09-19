@@ -28,6 +28,7 @@ from app.core import oidc
 from app.core.config import settings
 from app.core.database import engine
 from app.main import app
+from app.models.department import Division
 from app.models.user import User, UserRole
 
 
@@ -291,6 +292,190 @@ def test_login_does_not_relink_a_row_that_already_has_an_issuer(client, db_sessi
     assert untouched.auth_subject == f"logto_owner_{unique}"
     assert untouched.role == UserRole.ADMIN
     assert resp.json()["user"]["id"] != str(linked_id)
+
+
+def test_login_does_not_relink_a_seeded_dev_row(client, db_session):
+    """Seeded accounts carry auth_issuer="dev" (seeds/seed_users.py), so a
+    Logto identity presenting the same verified address -- including
+    admin@calricula.com, which no deployer's domain controls -- provisions a
+    fresh row rather than adopting the seeded one."""
+    unique = uuid.uuid4().hex[:8]
+    email = f"seeded_admin_{unique}@calricula.com"
+    seeded = User(
+        email=email,
+        auth_subject=f"test_admin_{unique}",
+        auth_issuer="dev",
+        full_name="Seeded Admin",
+        role=UserRole.ADMIN,
+    )
+    db_session.add(seeded)
+    db_session.commit()
+    db_session.refresh(seeded)
+    seeded_id = seeded.id
+
+    new_sub = f"logto_{unique}"
+    token = _tok(aud=CLIENT_ID, sub=new_sub, email=email, email_verified=True)
+
+    resp = client.post(LOGIN_URL, headers=_bearer(token))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["user"]["id"] != str(seeded_id)
+    assert resp.json()["user"]["role"] == UserRole.FACULTY.value
+    untouched = _reload(seeded_id)
+    assert untouched.auth_subject == f"test_admin_{unique}"
+    assert untouched.auth_issuer == "dev"
+    assert untouched.role == UserRole.ADMIN
+
+
+def test_seeded_users_all_carry_the_dev_issuer():
+    """The seed data itself must never produce an adoptable (NULL-issuer) row."""
+    from seeds.seed_users import SEED_USERS
+
+    assert SEED_USERS, "seed list unexpectedly empty"
+    assert all(entry.get("auth_issuer") == "dev" for entry in SEED_USERS)
+
+
+def test_login_merges_placeholder_row_into_legacy_row(client, db_session):
+    """First sign-in race: the browser's API call lands before /login and
+    get_current_user provisions a `{sub}@oidc.invalid` placeholder. When the
+    ID token then arrives, the legacy row is adopted and the placeholder is
+    deleted -- the user ends up on the account that holds their role."""
+    unique = uuid.uuid4().hex[:8]
+    email = f"legacy_race_{unique}@calricula.com"
+    legacy = User(
+        email=email,
+        auth_subject=f"fb_legacy_{unique}",
+        auth_issuer=None,
+        full_name="Legacy Chair",
+        role=UserRole.CURRICULUM_CHAIR,
+    )
+    db_session.add(legacy)
+    db_session.commit()
+    db_session.refresh(legacy)
+    legacy_id = legacy.id
+
+    new_sub = f"logto_{unique}"
+    # (b) the access-token request wins the race and provisions a placeholder.
+    assert client.get(PROTECTED_URL, headers=_bearer(_tok(sub=new_sub))).status_code == 200
+    placeholder = _by_subject(new_sub)
+    assert placeholder.email == f"{new_sub}@oidc.invalid"
+    placeholder_id = placeholder.id
+
+    # (a) /login arrives second with the verified email.
+    resp = client.post(
+        LOGIN_URL,
+        headers=_bearer(_tok(aud=CLIENT_ID, sub=new_sub, email=email, email_verified=True)),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["user"]["id"] == str(legacy_id)
+    assert resp.json()["user"]["role"] == UserRole.CURRICULUM_CHAIR.value
+    relinked = _reload(legacy_id)
+    assert relinked.auth_subject == new_sub
+    assert relinked.auth_issuer == ISS
+    assert relinked.email == email
+    with Session(engine) as session:
+        assert session.exec(select(User).where(User.id == placeholder_id)).first() is None
+    # Exactly one row owns the subject now.
+    assert _by_subject(new_sub).id == legacy_id
+
+
+def test_login_keeps_placeholder_when_legacy_match_is_ambiguous(client, db_session):
+    """Two NULL-issuer rows sharing the address: neither is adopted (the same
+    rule as the plain re-link), so the placeholder is kept and repaired."""
+    unique = uuid.uuid4().hex[:8]
+    email = f"legacy_dup_{unique}@calricula.com"
+    ids = []
+    for n in (1, 2):
+        row = User(
+            email=email,
+            auth_subject=f"fb_legacy_{unique}_{n}",
+            auth_issuer=None,
+            full_name=f"Legacy {n}",
+            role=UserRole.ADMIN,
+        )
+        db_session.add(row)
+        db_session.commit()
+        db_session.refresh(row)
+        ids.append(row.id)
+
+    new_sub = f"logto_{unique}"
+    assert client.get(PROTECTED_URL, headers=_bearer(_tok(sub=new_sub))).status_code == 200
+    placeholder_id = _by_subject(new_sub).id
+
+    resp = client.post(
+        LOGIN_URL,
+        headers=_bearer(_tok(aud=CLIENT_ID, sub=new_sub, email=email, email_verified=True)),
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["user"]["id"] == str(placeholder_id)
+    assert resp.json()["user"]["role"] == UserRole.FACULTY.value
+    # Placeholder kept, its email repaired from the verified claim.
+    assert _by_subject(new_sub).id == placeholder_id
+    assert _by_subject(new_sub).email == email
+    for legacy_id, n in zip(ids, (1, 2)):
+        untouched = _reload(legacy_id)
+        assert untouched.auth_subject == f"fb_legacy_{unique}_{n}"
+        assert untouched.auth_issuer is None
+
+
+def test_login_abandons_merge_when_placeholder_has_dependants(client, db_session, caplog):
+    """If something already references the placeholder row, deleting it is
+    refused: fall back to keeping (and repairing) the placeholder, leave the
+    legacy row for the deployer, and say so in the log."""
+    unique = uuid.uuid4().hex[:8]
+    email = f"legacy_dep_{unique}@calricula.com"
+    legacy = User(
+        email=email,
+        auth_subject=f"fb_legacy_{unique}",
+        auth_issuer=None,
+        full_name="Legacy Admin",
+        role=UserRole.ADMIN,
+    )
+    db_session.add(legacy)
+    db_session.commit()
+    db_session.refresh(legacy)
+    legacy_id = legacy.id
+
+    new_sub = f"logto_{unique}"
+    assert client.get(PROTECTED_URL, headers=_bearer(_tok(sub=new_sub))).status_code == 200
+    placeholder_id = _by_subject(new_sub).id
+    # A dependant row pointing at the placeholder (any FK to users.id will do).
+    division = Division(name=f"Division {unique}", dean_id=placeholder_id)
+    db_session.add(division)
+    db_session.commit()
+    db_session.refresh(division)
+
+    try:
+        with caplog.at_level("WARNING", logger="app.api.routes.auth"):
+            resp = client.post(
+                LOGIN_URL,
+                headers=_bearer(
+                    _tok(aud=CLIENT_ID, sub=new_sub, email=email, email_verified=True)
+                ),
+            )
+
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["user"]["id"] == str(placeholder_id)
+        # Placeholder survives with its email repaired; the legacy row is untouched.
+        kept = _reload(placeholder_id)
+        assert kept.email == email
+        assert kept.auth_subject == new_sub
+        untouched = _reload(legacy_id)
+        assert untouched.auth_subject == f"fb_legacy_{unique}"
+        assert untouched.auth_issuer is None
+        assert untouched.role == UserRole.ADMIN
+        assert any(
+            "Legacy re-link skipped" in rec.getMessage() and str(placeholder_id) in rec.getMessage()
+            for rec in caplog.records
+        )
+    finally:
+        with Session(engine) as session:
+            row = session.exec(select(Division).where(Division.id == division.id)).first()
+            if row is not None:
+                session.delete(row)
+                session.commit()
 
 
 # =============================================================================

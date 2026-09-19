@@ -17,8 +17,14 @@ from app.models.department import Department
 
 
 # Test users data. auth_subject matches app/core/oidc.py's dev-token map, so a
-# dev-* token resolves to the seeded account. These are placeholders: real
-# accounts must be created in the OIDC provider (Logto) separately.
+# dev-* token resolves to the seeded account. These are placeholders for
+# development only: never load them into a production database.
+#
+# auth_issuer is "dev" (never NULL): POST /api/auth/login adopts any row whose
+# auth_issuer IS NULL on a verified-email match (AUTH_LEGACY_RELINK), and a
+# seeded ADMIN row at admin@calricula.com must not be adoptable by whoever can
+# present that address through the deployer's Logto tenant. The dev-token
+# lookup is by auth_subject alone, so the issuer value does not affect it.
 SEED_USERS = [
     {
         "email": "faculty@calricula.com",
@@ -26,6 +32,7 @@ SEED_USERS = [
         "role": UserRole.FACULTY,
         "department_code": "MATH",
         "auth_subject": "test_faculty_001",
+        "auth_issuer": "dev",
     },
     {
         "email": "faculty2@calricula.com",
@@ -33,6 +40,7 @@ SEED_USERS = [
         "role": UserRole.FACULTY,
         "department_code": "ENGL",
         "auth_subject": "test_faculty_002",
+        "auth_issuer": "dev",
     },
     {
         "email": "faculty3@calricula.com",
@@ -40,6 +48,7 @@ SEED_USERS = [
         "role": UserRole.FACULTY,
         "department_code": "CS",
         "auth_subject": "test_faculty_003",
+        "auth_issuer": "dev",
     },
     {
         "email": "chair@calricula.com",
@@ -47,6 +56,7 @@ SEED_USERS = [
         "role": UserRole.CURRICULUM_CHAIR,
         "department_code": None,
         "auth_subject": "test_chair_001",
+        "auth_issuer": "dev",
     },
     {
         "email": "articulation@calricula.com",
@@ -54,6 +64,7 @@ SEED_USERS = [
         "role": UserRole.ARTICULATION_OFFICER,
         "department_code": None,
         "auth_subject": "test_articulation_001",
+        "auth_issuer": "dev",
     },
     {
         "email": "admin@calricula.com",
@@ -61,6 +72,7 @@ SEED_USERS = [
         "role": UserRole.ADMIN,
         "department_code": None,
         "auth_subject": "test_admin_001",
+        "auth_issuer": "dev",
     },
     {
         "email": "demo@calricula.com",
@@ -68,6 +80,7 @@ SEED_USERS = [
         "role": UserRole.FACULTY,
         "department_code": None,  # General faculty, no specific department
         "auth_subject": "test_demo_001",
+        "auth_issuer": "dev",
     },
 ]
 

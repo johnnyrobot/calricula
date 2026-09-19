@@ -11,6 +11,7 @@ backends are separate deployables.
 `verify_id_token` is used only by POST /api/auth/login.
 """
 
+import logging
 import threading
 from typing import Optional
 
@@ -19,6 +20,8 @@ from jwt import PyJWKClient
 from jwt.exceptions import PyJWKSetError
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class AuthError(Exception):
@@ -114,6 +117,11 @@ def _verify(token: str, audience: Optional[str]) -> dict:
     except jwt.exceptions.PyJWTError as e:
         raise AuthError(401, "invalid or expired token") from e
     except Exception as e:
+        # Still the safe direction (401, never accept), but an exception that
+        # is not PyJWT's is more likely a programming error than a bad token,
+        # so leave a trace. Class name only: never the token or the message,
+        # which can echo token contents.
+        logger.debug("token verification failed: %s", type(e).__name__)
         raise AuthError(401, "invalid or expired token") from e
 
 

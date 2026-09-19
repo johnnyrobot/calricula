@@ -7,6 +7,7 @@ Provides endpoints for:
 - POST /api/auth/logout - Logout (client-side only, for logging purposes)
 """
 
+import logging
 from typing import Optional
 import uuid
 
@@ -14,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import ConfigDict, BaseModel, computed_field
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
 from app.core.config import settings
@@ -30,6 +32,8 @@ from app.core.deps import (
 from app.core.oidc import AuthError, resolve_dev_token, verify_bearer, verify_id_token
 from app.models.user import User, UserRole
 from app.models.department import Department
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 security = HTTPBearer(auto_error=False)
@@ -110,6 +114,70 @@ def get_user_profile(user: User, session: Session) -> UserProfileResponse:
     )
 
 
+def find_legacy_row(session: Session, email: str) -> Optional[User]:
+    """The single pre-migration row (auth_issuer NULL) owning `email`, or None.
+
+    `email` must already be a *verified* address (deps.verified_email). Only an
+    unambiguous match is returned: a row that already names an issuer is never
+    re-pointed, so a later subject cannot claim someone else's account, and two
+    NULL-issuer rows sharing an address are left for the deployer to resolve.
+    """
+    legacy = session.exec(
+        select(User).where(
+            User.auth_issuer.is_(None),
+            func.lower(User.email) == email.lower(),
+        )
+    ).all()
+    return legacy[0] if len(legacy) == 1 else None
+
+
+def relink_legacy_row(
+    session: Session,
+    legacy: User,
+    placeholder: Optional[User],
+    subject: str,
+    issuer: Optional[str],
+) -> User:
+    """Point `legacy` at the OIDC subject that just proved its email.
+
+    `placeholder` is the row get_current_user may already have provisioned for
+    the same subject from an access token: on a first sign-in the browser asks
+    for the profile (this route) and for an API token at the same time, and
+    when the API call lands first it creates a `{sub}@oidc.invalid` row before
+    /login has had a chance to adopt the legacy one. That row carries nothing
+    the legacy row lacks, so it is deleted and the legacy row takes the
+    subject. If the delete is refused because something already references
+    the placeholder, the merge is abandoned: the placeholder is kept, the
+    legacy row is left untouched for the deployer to reconcile, and a warning
+    names both ids.
+
+    Returns the row the subject ends up on.
+    """
+    if placeholder is not None:
+        placeholder_id = placeholder.id
+        legacy_id = legacy.id
+        try:
+            session.delete(placeholder)
+            session.flush()
+        except IntegrityError:
+            session.rollback()
+            logger.warning(
+                "Legacy re-link skipped for subject %s: placeholder user %s already "
+                "has dependants; legacy user %s left unlinked",
+                subject,
+                placeholder_id,
+                legacy_id,
+            )
+            return session.exec(select(User).where(User.id == placeholder_id)).one()
+
+    legacy.auth_subject = subject
+    legacy.auth_issuer = issuer
+    session.add(legacy)
+    session.commit()
+    session.refresh(legacy)
+    return legacy
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -130,7 +198,9 @@ async def login(
     2. Verifies it (app/core/oidc.py), or resolves a documented dev-* token
        when AUTH_DEV_MODE is on
     3. Links the token's subject to a user: by `auth_subject`, or once by
-       verified-email match against a pre-migration row (`auth_issuer` NULL)
+       verified-email match against a pre-migration row (`auth_issuer` NULL);
+       a placeholder row the access-token path provisioned for the same
+       subject moments earlier is folded into the legacy row
     4. Provisions a FACULTY user if neither matched, then returns the profile
        with role and department info
 
@@ -194,28 +264,25 @@ async def login(
     # 1. Already linked to this subject.
     user = session.exec(select(User).where(User.auth_subject == subject)).first()
 
-    if user is None and email and settings.AUTH_LEGACY_RELINK:
+    if (
+        email
+        and settings.AUTH_LEGACY_RELINK
+        and (user is None or is_provisional_email(user.email))
+    ):
         # 2. One-time re-link of a pre-migration row: its auth_subject still
         # holds the retired provider's uid and its auth_issuer is NULL. Only a
         # *verified* email is proof of ownership (see deps.verified_email), and
-        # only an unambiguous match is adopted -- a row that already names an
-        # issuer is never re-pointed, so a later subject cannot claim someone
-        # else's account. Deployers close this window with
-        # AUTH_LEGACY_RELINK=false once every legacy user has signed in.
-        legacy = session.exec(
-            select(User).where(
-                User.auth_issuer.is_(None),
-                func.lower(User.email) == email.lower(),
-            )
-        ).all()
+        # only an unambiguous match is adopted (find_legacy_row). Deployers
+        # close this window with AUTH_LEGACY_RELINK=false once every legacy
+        # user has signed in.
+        #
+        # A subject that already has a row is still eligible while that row is
+        # only a placeholder from the access-token path: the legacy row is the
+        # real account, and the placeholder is folded away (relink_legacy_row).
+        legacy = find_legacy_row(session, email)
 
-        if len(legacy) == 1:
-            user = legacy[0]
-            user.auth_subject = subject
-            user.auth_issuer = issuer
-            session.add(user)
-            session.commit()
-            session.refresh(user)
+        if legacy is not None:
+            user = relink_legacy_row(session, legacy, user, subject, issuer)
 
     if user is None:
         # 3. First sign-in: provision with the default FACULTY role.
@@ -301,9 +368,6 @@ async def logout(
     - 401: Not authenticated
     """
     # Log the logout event (in production, you might log to analytics)
-    import logging
-
-    logger = logging.getLogger(__name__)
     logger.info("User logged out: %s", current_user.id)
 
     return LogoutResponse(
