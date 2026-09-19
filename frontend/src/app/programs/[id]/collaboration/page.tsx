@@ -13,10 +13,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { WorkspaceShell } from '@johnnyrobot/workspace-ui';
-// The package's own `import './theme/tokens.css'` is dropped by bundlers: its
-// `sideEffects: ["*.css"]` glob does not match `dist/theme/tokens.css`. Load
-// the stylesheet through the package's `./tokens.css` export instead; the
-// `--ax-*` overrides in globals.css win regardless of order (`:where(:root)`).
+// Next (Turbopack, 16.2) does not emit the stylesheet the package imports
+// from its own entry (`dist/index.js` → `./theme/tokens.css`) even with the
+// 0.1.1 `sideEffects` fix or `transpilePackages`; the built CSS lacked every
+// `.ax-*` rule. Load it through the package's `./tokens.css` export instead.
+// The `--ax-*` overrides in globals.css win regardless of order (`:where(:root)`).
 import '@johnnyrobot/workspace-ui/tokens.css';
 import PageShell from '@/components/layout/PageShell';
 import { useAuth } from '@/contexts/AuthContext';
@@ -131,9 +132,13 @@ export default function ProgramCollaborationPage() {
   // Shared workspace shell inputs (ready state only). The context is
   // memoised on the program revision (the shell keys its chat panel on
   // `context.context_id`). The adapter is memoised on `getToken`, which the
-  // AuthProvider only recreates when auth state itself changes (token
-  // refreshes live in refs), so it is stable for the page's lifetime in
-  // practice — the shell reads it through a ref anyway.
+  // AuthProvider recreates on each of its renders, so the adapter can be
+  // remade on those renders too. That is harmless: the adapter holds no
+  // state and reads tokens at call time through the captured function; the
+  // shell reads the adapter through a ref and keys the chat panel on
+  // `context_id`, so an in-flight run is never aborted by a new adapter
+  // identity. (A ref-backed `getToken` would keep one adapter for the page's
+  // lifetime, but `react-hooks/refs` rejects reading a ref inside useMemo.)
   const hostContext = useMemo<WorkspaceHostContext | null>(() => {
     if (!program || !status?.enabled) return null;
     return {
@@ -175,12 +180,15 @@ export default function ProgramCollaborationPage() {
           </div>
         )}
 
+        {/* Ready: the shell's own ContextHeader carries campus, program and
+            revision plus the standalone control, so the banner is reduced to
+            the "Back to program" link (outage isolation, AX-21). */}
         {!embedDisabled && program && resolution.state === 'ready' && (
           <ContextBanner
             campusLabel={resolution.campus_label}
             programTitle={program.title}
             revisionLabel={resolution.revision_label}
-            standaloneUrl={standaloneUrl}
+            standaloneUrl={null}
             workspaceId={resolution.workspace_id}
             backHref={`/programs/${program.id}`}
           />
@@ -209,6 +217,9 @@ export default function ProgramCollaborationPage() {
               adapter={adapter}
               context={hostContext}
               labels={{ title: resolution.workspace_title, assistantName: 'ApplicationX' }}
+              // No dead focusable control when APPLICATIONX_STANDALONE_URL is unset.
+              showOpenStandalone={Boolean(standaloneUrl)}
+              onOpenStandalone={standaloneUrl ? adapter.openStandalone : undefined}
             />
           </div>
         )}

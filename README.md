@@ -77,6 +77,10 @@ A traditional academic "catalog of record" interface — parchment ground, a dee
 - A GitHub token with the `read:packages` scope. The frontend depends on the
   private package `@johnnyrobot/workspace-ui` (GitHub Packages), so building
   it from source needs one even if you never enable the ApplicationX embed.
+  The package inherits the `applicationx` repository's permissions: your
+  account (or, for CI, the `calricula` repository via "Manage Actions access"
+  or the `WORKSPACE_UI_READ_TOKEN` secret) must have been granted read access
+  to it. Pull requests from forks cannot build the frontend.
   See [Installing the shared workspace package](docs/APPLICATIONX-EMBED.md#installing-the-shared-workspace-package).
 
 ### 1. Clone and Configure
@@ -350,8 +354,11 @@ createdb calricula
 ### Using Docker Compose
 
 ```bash
-# Build production images (needs ./.npm_token — a GitHub read:packages token —
-# or NPM_TOKEN_FILE=<path>; see docs/APPLICATIONX-EMBED.md)
+# Build production images. The frontend build needs ./.npm_token (or
+# NPM_TOKEN_FILE=<path>): a GitHub read:packages token for an account that has
+# been granted access to the private @johnnyrobot/workspace-ui package
+# (it inherits the applicationx repository's permissions). See
+# docs/APPLICATIONX-EMBED.md "Installing the shared workspace package".
 docker-compose -f docker-compose.prod.yml build
 
 # Start services

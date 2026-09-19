@@ -71,9 +71,8 @@ jobs:
     name: Frontend (build + jest)
     runs-on: ubuntu-latest
     # `@johnnyrobot/workspace-ui` is installed from GitHub Packages
-    # (frontend/.npmrc maps the scope); `packages: read` lets GITHUB_TOKEN
-    # download it. See docs/APPLICATIONX-EMBED.md "Installing the shared
-    # workspace package".
+    # (frontend/.npmrc maps the scope). See docs/APPLICATIONX-EMBED.md
+    # "Installing the shared workspace package" for the one-time access setup.
     permissions:
       contents: read
       packages: read
@@ -89,9 +88,13 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Authenticate to GitHub Packages
         # The token is written to the runner's ~/.npmrc only, never into the
-        # repository. WORKSPACE_UI_READ_TOKEN (a fine-grained PAT with
-        # read:packages) is only needed if GITHUB_TOKEN cannot read the
-        # package, e.g. when the package lives under another owner.
+        # repository. The package is published from the `applicationx` repo
+        # and inherits its permissions, so this repo's GITHUB_TOKEN cannot
+        # read it until the owner either grants johnnyrobot/calricula access
+        # in the package settings ("Manage Actions access") or stores a
+        # fine-grained PAT with read:packages as the WORKSPACE_UI_READ_TOKEN
+        # repository secret (preferred when present). Fork PRs get neither
+        # and cannot build the frontend.
         env:
           NODE_AUTH_TOKEN: ${{ secrets.WORKSPACE_UI_READ_TOKEN || secrets.GITHUB_TOKEN }}
         run: echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc

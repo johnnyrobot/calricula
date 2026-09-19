@@ -222,7 +222,22 @@ NPM_TOKEN_FILE=/somewhere/npm_token docker compose build frontend
 ### CI
 
 The frontend job in `.github/workflows/ci.yml` requests `packages: read` and
-authenticates with `GITHUB_TOKEN`, which can read packages published by the
-same owner. Forks or a package under another owner can set the repository
-secret `WORKSPACE_UI_READ_TOKEN` (a `read:packages` token); the workflow
-prefers it when present.
+authenticates with `WORKSPACE_UI_READ_TOKEN` if that repository secret exists,
+else with `GITHUB_TOKEN`.
+
+**Required setup step (once, by the package owner).** The package is
+published from the `applicationx` repository and inherits that repository's
+permissions, so Calricula's own `GITHUB_TOKEN` cannot read it until one of
+these is done:
+
+1. In the package's settings on GitHub (Packages → `workspace-ui` →
+   Package settings → **Manage Actions access**), add the
+   `johnnyrobot/calricula` repository with **read** access; or
+2. Create a fine-grained personal access token with the `read:packages`
+   permission and store it as the `calricula` repository secret
+   **`WORKSPACE_UI_READ_TOKEN`**.
+
+Until one of them is in place the frontend CI job fails at `npm ci` with
+`E401`. Pull requests from forks cannot build the frontend either way:
+GitHub does not expose repository secrets to fork PRs and the fork's
+`GITHUB_TOKEN` has no access to the package.

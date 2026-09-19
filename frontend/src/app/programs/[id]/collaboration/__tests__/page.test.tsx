@@ -126,13 +126,32 @@ test('both tokens missing: session_expired', async () => {
   expect(screen.getByRole('link', { name: 'Sign in again' })).toHaveAttribute('href', '/login');
 });
 
-test('ready state: "Open in ApplicationX" links to the resolved workspace (M-8)', async () => {
+test('ready state: one "Open in ApplicationX" control (the shell\'s), opening the resolved workspace (M-8)', async () => {
   status.mockReturnValue({ status: { enabled: true, standalone_url: 'https://ax.example.edu/' }, loading: false });
   getProgram.mockResolvedValueOnce(program('v1'));
   resolveContext.mockResolvedValue({ ...ready('Rev 1'), workspace_id: 'ws 1/2' });
+  const open = jest.spyOn(window, 'open').mockImplementation(() => null);
   render(<ProgramCollaborationPage />);
   await screen.findByRole('region', { name: 'Workspace context' });
-  expect(screen.getByRole('link', { name: /Open in ApplicationX/ })).toHaveAttribute('href', 'https://ax.example.edu/workspaces/ws%201%2F2');
+  await screen.findByRole('region', { name: 'CS workspace' });
+  // The banner no longer duplicates the shell's control.
+  expect(screen.queryByRole('link', { name: /Open in ApplicationX/ })).toBeNull();
+  const buttons = screen.getAllByRole('button', { name: /Open in ApplicationX/ });
+  expect(buttons).toHaveLength(1);
+  fireEvent.click(buttons[0]);
+  expect(open).toHaveBeenCalledWith('https://ax.example.edu/workspaces/ws%201%2F2', '_blank', 'noopener');
+  open.mockRestore();
+});
+
+test('ready state without a standalone URL: no "Open in ApplicationX" control anywhere', async () => {
+  status.mockReturnValue({ status: { enabled: true, standalone_url: null }, loading: false });
+  getProgram.mockResolvedValueOnce(program('v1'));
+  resolveContext.mockResolvedValue(ready('Rev 1'));
+  render(<ProgramCollaborationPage />);
+  await screen.findByRole('region', { name: 'CS workspace' });
+  expect(screen.queryByRole('button', { name: /Open in ApplicationX/ })).toBeNull();
+  expect(screen.queryByRole('link', { name: /Open in ApplicationX/ })).toBeNull();
+  expect(screen.getAllByRole('link', { name: 'Back to program' })).toHaveLength(1);
 });
 
 test('embed reported disabled after a ready resolution: banner and workspace placeholder are hidden (M-10)', async () => {
