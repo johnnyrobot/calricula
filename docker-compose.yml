@@ -48,6 +48,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      # @johnnyrobot/workspace-ui is a private GitHub Packages dependency; the
+      # build reads a `read:packages` token from ./.npm_token (gitignored) as a
+      # BuildKit secret. See docs/APPLICATIONX-EMBED.md.
+      secrets:
+        - npm_token
     container_name: calricula-frontend
     environment:
       - NODE_ENV=development
@@ -79,3 +84,8 @@ volumes:
 networks:
   default:
     name: calricula-network
+
+secrets:
+  # Build-time only: GitHub token with `read:packages` (never committed).
+  npm_token:
+    file: ${NPM_TOKEN_FILE:-./.npm_token}

@@ -8,15 +8,28 @@ FROM node:20-alpine AS deps
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json* ./
+# Copy package files (.npmrc maps @johnnyrobot to GitHub Packages; it holds
+# no credentials)
+COPY package.json package-lock.json* .npmrc ./
+
+# `@johnnyrobot/workspace-ui` is a private package on GitHub Packages, so both
+# installs need a token with `read:packages`. It is passed as a BuildKit
+# secret, written to the build user's ~/.npmrc for the duration of the RUN and
+# removed in the same layer, so it never lands in the image:
+#   docker build --secret id=npm_token,src=/path/to/token-file .
+# See docs/APPLICATIONX-EMBED.md "Installing the shared workspace package".
 
 # Install production dependencies only
-RUN npm ci --only=production
+RUN --mount=type=secret,id=npm_token sh -c ' \
+    test -s /run/secrets/npm_token || { echo "npm_token secret missing: pass --secret id=npm_token,src=<file> (read:packages token)" >&2; exit 1; }; \
+    echo "//npm.pkg.github.com/:_authToken=$(cat /run/secrets/npm_token)" > ~/.npmrc && \
+    npm ci --only=production; status=$?; rm -f ~/.npmrc; exit $status'
 
 # Install all dependencies for build
-RUN cp -R node_modules /prod_node_modules && \
-    npm ci
+RUN --mount=type=secret,id=npm_token sh -c ' \
+    cp -R node_modules /prod_node_modules && \
+    echo "//npm.pkg.github.com/:_authToken=$(cat /run/secrets/npm_token)" > ~/.npmrc && \
+    npm ci; status=$?; rm -f ~/.npmrc; exit $status'
 
 # --- Stage 2: Builder ---
 FROM node:20-alpine AS builder

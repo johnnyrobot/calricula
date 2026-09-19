@@ -10,6 +10,9 @@
 !.env.example
 !.env.*.example
 *.pem
+# GitHub Packages read token for the frontend Docker build (BuildKit secret
+# `npm_token`, see docs/APPLICATIONX-EMBED.md) — never commit it
+.npm_token
 # Credential files a deployer may leave behind (any provider) — never commit
 serviceAccountKey.json
 serviceAccountkey.json

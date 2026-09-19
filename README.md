@@ -74,6 +74,10 @@ A traditional academic "catalog of record" interface — parchment ground, a dee
 
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) (recommended)
 - OR: Python 3.11+, Node.js 18+, PostgreSQL 16+
+- A GitHub token with the `read:packages` scope. The frontend depends on the
+  private package `@johnnyrobot/workspace-ui` (GitHub Packages), so building
+  it from source needs one even if you never enable the ApplicationX embed.
+  See [Installing the shared workspace package](docs/APPLICATIONX-EMBED.md#installing-the-shared-workspace-package).
 
 ### 1. Clone and Configure
 
@@ -84,6 +88,10 @@ cd calricula
 
 # Create environment file from template
 cp .env.example .env
+
+# GitHub token with read:packages for the frontend image build (gitignored;
+# passed to Docker as a BuildKit secret, never stored in the image)
+printf '%s' "<your token>" > .npm_token
 ```
 
 ### 2. Configure Environment Variables
@@ -213,6 +221,9 @@ app for employer and career collaboration, inside its own layout. It is off by
 default. To enable it, set the `APPLICATIONX_*` variables (see `.env.example`)
 and read [docs/APPLICATIONX-EMBED.md](docs/APPLICATIONX-EMBED.md) for the
 two-token contract, the allowlisted operations and the local stub upstream.
+The embedded chat shell is the shared package `@johnnyrobot/workspace-ui`,
+installed from GitHub Packages (a `read:packages` token is needed to build the
+frontend; see that document).
 
 ---
 
@@ -307,8 +318,10 @@ uvicorn app.main:app --reload --port 8000
 ```bash
 cd frontend
 
-# Install dependencies
-npm install
+# Install dependencies. @johnnyrobot/workspace-ui comes from GitHub Packages:
+# put "//npm.pkg.github.com/:_authToken=<token>" in ~/.npmrc (read:packages),
+# or pass it to this one command as shown. Never add it to frontend/.npmrc.
+env "npm_config_//npm.pkg.github.com/:_authToken=$(gh auth token)" npm install
 
 # Start development server
 npm run dev
@@ -337,7 +350,8 @@ createdb calricula
 ### Using Docker Compose
 
 ```bash
-# Build production images
+# Build production images (needs ./.npm_token — a GitHub read:packages token —
+# or NPM_TOKEN_FILE=<path>; see docs/APPLICATIONX-EMBED.md)
 docker-compose -f docker-compose.prod.yml build
 
 # Start services
@@ -445,6 +459,13 @@ rm -rf node_modules .next
 npm install
 npm run dev
 ```
+
+**Error**: `npm error 401 Unauthorized` / `E401` for `@johnnyrobot/workspace-ui`
+
+The shared workspace package lives on GitHub Packages and the install had no
+usable `read:packages` token. Locally, add the token to `~/.npmrc`; in Docker,
+pass it as the `npm_token` BuildKit secret (`./.npm_token` with compose). See
+[docs/APPLICATIONX-EMBED.md](docs/APPLICATIONX-EMBED.md#installing-the-shared-workspace-package).
 
 **Docker-specific**: If modules are missing in Docker:
 
