@@ -2,7 +2,7 @@
 """
 validate_auth.py - Staging auth validation for Calricula.
 
-Exercises the real Firebase-backed auth dependency (`get_current_user`) over
+Exercises the real Logto/OIDC-backed auth dependency (`get_current_user`) over
 HTTP against a running staging API:
 
   1. Public health endpoint        GET  /health                       -> 200
@@ -11,14 +11,15 @@ HTTP against a running staging API:
   4. Protected endpoint, w/ token  GET  /api/courses  (Bearer <tok>)   -> 2xx
 
 Reads config from the environment (no secrets hardcoded):
-  API_BASE_URL        base URL of the staging API, e.g. https://staging-api.example.org
-  FIREBASE_ID_TOKEN   a valid Firebase ID token for a provisioned staging user
+  API_BASE_URL   base URL of the staging API, e.g. https://staging-api.example.org
+  OIDC_ID_TOKEN  a valid Logto access token (or a documented dev-* token when the
+                 staging API runs with AUTH_DEV_MODE=true) for a provisioned staging user
 
 Prints a table of endpoint / expected / actual and exits non-zero on any FAIL.
 
 Usage:
   API_BASE_URL=https://staging-api.example.org \
-  FIREBASE_ID_TOKEN=eyJhbG... \
+  OIDC_ID_TOKEN=eyJhbG... \
     python scripts/staging/validate_auth.py
 """
 import os
@@ -45,7 +46,7 @@ def _ok(actual: int, expected) -> bool:
 
 def main() -> int:
     base = os.getenv("API_BASE_URL")
-    token = os.getenv("FIREBASE_ID_TOKEN")
+    token = os.getenv("OIDC_ID_TOKEN")
 
     if not base:
         print("ERROR: API_BASE_URL is required "
@@ -54,8 +55,9 @@ def main() -> int:
     base = base.rstrip("/")
 
     if not token:
-        print("ERROR: FIREBASE_ID_TOKEN is required (a valid Firebase ID token "
-              "for a provisioned staging user).", file=sys.stderr)
+        print("ERROR: OIDC_ID_TOKEN is required (a valid Logto access token, or "
+              "a documented dev-* token when AUTH_DEV_MODE=true, for a "
+              "provisioned staging user).", file=sys.stderr)
         return 2
 
     auth_header = {"Authorization": f"Bearer {token}"}

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-**Calricula** is an AI-assisted curriculum-management platform: faculty create, modify, and route Course Outlines of Record (CORs) and Programs through approval workflows, with California community-college compliance (PCAH 8th ed., Title 5) embedded in the UI. Full-stack: Next.js App Router frontend, FastAPI backend, PostgreSQL 16, Google Gemini for AI + RAG, Firebase auth.
+**Calricula** is an AI-assisted curriculum-management platform: faculty create, modify, and route Course Outlines of Record (CORs) and Programs through approval workflows, with California community-college compliance (PCAH 8th ed., Title 5) embedded in the UI. Full-stack: Next.js App Router frontend, FastAPI backend, PostgreSQL 16, Google Gemini for AI + RAG, Logto (OIDC) auth.
 
 ## Architecture
 
@@ -43,6 +43,7 @@ CI (`.github/workflows/ci.yml`): backend `pytest` against a Postgres 16 service 
 - SQLModel models; DB sessions via `Depends(get_session)`; schema is managed by **Alembic migrations** (`alembic upgrade head`), not by table auto-create at runtime.
 - Reskin via `luminous-*` classes, not per-component overrides. The design is **light-only** — do not reintroduce dark mode.
 - Use the unified `google-genai` client (the legacy `google-generativeai` SDK was removed).
+- Identity: users are keyed by `auth_subject` (OIDC `sub`) + `auth_issuer`; never reintroduce Firebase.
 - Commit trailer required on every commit: `Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>`.
 
 ## Gotchas & Constraints
@@ -50,7 +51,7 @@ CI (`.github/workflows/ci.yml`): backend `pytest` against a Postgres 16 service 
 - **Public, source-only repo** (maintainer does not host it → FERPA/privacy/ops are the deployer's concern). **Never put any real personal/maintainer email into code, docs, or configs** — it leaks through GitHub squash-merge author identity. Use `<noreply@anthropic.com>` in trailers.
 - **WCAG 2.2 AA is required** (regulated public tool). On parchment, use `gold-ink` (`#7E6018`, ~5.3:1) for small text; decorative gold `#9A7B2E` is for rules/borders only (3:1).
 - **Dev ports are shifted** to avoid clashes: FE 3001, BE 8001, DB 5433. Prod compose uses 3000/8000.
-- **Never commit secrets:** `.env`, `serviceAccountKey.json` are gitignored (`serviceAccountKey.json` at repo root is a placeholder). Firebase + `GOOGLE_API_KEY` come from `.env`; `NEXT_PUBLIC_AUTH_DEV_MODE=true` bypasses Firebase for local dev.
+- **Never commit secrets:** `.env` is gitignored. Logto secrets (`LOGTO_APP_SECRET`, `LOGTO_COOKIE_SECRET`) + `GOOGLE_API_KEY` come from `.env`; `NEXT_PUBLIC_AUTH_DEV_MODE=true` bypasses Logto for local dev. Test users unchanged.
 - **`pytest` enforces a coverage floor** (`--cov-fail-under=45`) — a change that drops coverage below it fails. Backend tests need Postgres (default `:5433`).
 - License is **BSD-3-Clause with branding requirements** — don't strip/rename "Calricula" UI branding without an exemption.
 - Test users use password `Test123!` (`faculty@`, `chair@`, `articulation@`, `admin@calricula.com`).

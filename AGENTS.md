@@ -1,18 +1,18 @@
 # AGENTS.md
 
-**Calricula** — an intelligent curriculum-management system for California community colleges: author and route Course Outlines of Record (CORs) and Programs through approval workflows, with Title 5 / PCAH compliance built into the UI. Stack: **Next.js (App Router, `next` 16.2.9) + TypeScript + Tailwind v3** frontend, **Python FastAPI + SQLModel** backend (entry `app.main:app`), **PostgreSQL 16**, **Firebase** auth, **Google Gemini** (`google-genai`, 2.5 Flash + File Search RAG).
+**Calricula** — an intelligent curriculum-management system for California community colleges: author and route Course Outlines of Record (CORs) and Programs through approval workflows, with Title 5 / PCAH compliance built into the UI. Stack: **Next.js (App Router, `next` 16.2.9) + TypeScript + Tailwind v3** frontend, **Python FastAPI + SQLModel** backend (entry `app.main:app`), **PostgreSQL 16**, **Logto (OIDC)** auth, **Google Gemini** (`google-genai`, 2.5 Flash + File Search RAG).
 
 ## Setup
 
 ```bash
-cp .env.example .env          # DATABASE_URL, GOOGLE_API_KEY, FIREBASE_*; set NEXT_PUBLIC_AUTH_DEV_MODE=true for no-Firebase local dev
+cp .env.example .env          # DATABASE_URL, GOOGLE_API_KEY, OIDC_*/LOGTO_*; set NEXT_PUBLIC_AUTH_DEV_MODE=true for no-Logto local dev
 ```
 
 - Docker path: Docker Desktop only.
 - Native path: Python 3.11+, Node.js 18+, PostgreSQL 16+.
   - Backend: `cd backend && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt`
   - Frontend: `cd frontend && npm install`
-- Firebase service-account JSON goes at the repo root as `serviceAccountKey.json` (gitignored; the committed one is a 3-byte placeholder).
+- Logto tenant setup (traditional web app + API resource) is documented in `docs/AUTH-LOGTO.md`; not needed for `AUTH_DEV_MODE`/`NEXT_PUBLIC_AUTH_DEV_MODE` local dev.
 
 ## Build & Run
 
@@ -42,7 +42,7 @@ API docs: `http://localhost:8001/docs` (dev) / `:8000/docs` (prod).
 
 ## Code Style
 
-- **Backend:** FastAPI + SQLModel with type hints; DB session via `Depends(get_session)`; settings in `app/core/config.py`; schema changes go through **Alembic migrations**, never runtime table creation. Use the unified `google-genai` client (legacy `google-generativeai` was removed).
+- **Backend:** FastAPI + SQLModel with type hints; DB session via `Depends(get_session)`; settings in `app/core/config.py`; schema changes go through **Alembic migrations**, never runtime table creation. Use the unified `google-genai` client (legacy `google-generativeai` was removed). Users are keyed by `auth_subject` (OIDC `sub`) + `auth_issuer`; never reintroduce Firebase.
 - **Frontend:** TypeScript + App Router under `src/`. Style through the shared **`luminous-*` component classes** (Tailwind v3) rather than one-off utilities — that keeps the academic "catalog of record" theme consistent. The app is **light-only**; do not reintroduce dark mode.
 - **Accessibility is a hard requirement (WCAG 2.2 AA):** use `gold-ink` (`#7E6018`) for small text on parchment; reserve decorative gold (`#9A7B2E`) for rules/borders.
 
@@ -55,5 +55,5 @@ API docs: `http://localhost:8001/docs` (dev) / `:8000/docs` (prod).
 ## Security & Data
 
 - The repo is **public and source-only** — assume any committed content is world-readable; FERPA/privacy/hosting are the deployer's responsibility, so keep student data and secrets out of the tree entirely.
-- **Secrets** (`.env`, `serviceAccountKey.json`) are gitignored — supply `GOOGLE_API_KEY` and Firebase config via `.env`. `NEXT_PUBLIC_AUTH_DEV_MODE=true` is a local-only Firebase bypass; keep it `false` in production.
+- **Secrets** (`.env`) are gitignored — supply `GOOGLE_API_KEY` and Logto config (`LOGTO_APP_SECRET`, `LOGTO_COOKIE_SECRET`, etc.) via `.env`. `NEXT_PUBLIC_AUTH_DEV_MODE=true` is a local-only Logto bypass; keep it `false` in production.
 - License is **BSD-3-Clause with branding requirements** — do not remove or rename "Calricula" UI branding without an exemption.

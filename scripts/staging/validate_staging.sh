@@ -12,10 +12,10 @@
 # script exits non-zero if ANY step failed.
 #
 # Required env (see docs/STAGING_VALIDATION.md):
-#   DATABASE_URL        fresh staging DB (mutated by the migration step)
-#   API_BASE_URL        staging API base URL
-#   FIREBASE_ID_TOKEN   valid Firebase ID token for a staging user
-#   GOOGLE_API_KEY      live Gemini key
+#   DATABASE_URL    fresh staging DB (mutated by the migration step)
+#   API_BASE_URL    staging API base URL
+#   OIDC_ID_TOKEN   valid Logto access token (or dev-* token) for a staging user
+#   GOOGLE_API_KEY  live Gemini key
 #
 # Skip flags (env): SKIP_MIGRATIONS=1  SKIP_AUTH=1  SKIP_AI=1
 # AI flags (env):   AI_SKIP_RAG=1  -> basic generate only (cheaper)

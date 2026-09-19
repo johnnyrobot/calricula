@@ -7,9 +7,14 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/serviceAccountKey.json
+      # Logto / OIDC (ADR-0001) -- see docs/AUTH-LOGTO.md. Values come from
+      # .env via env_file above; listed here for visibility.
+      - OIDC_ISSUER=${OIDC_ISSUER}
+      - OIDC_AUDIENCE=${OIDC_AUDIENCE}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
+      - OIDC_JWKS_URL=${OIDC_JWKS_URL}
+      - AUTH_LEGACY_RELINK=${AUTH_LEGACY_RELINK:-true}
     volumes:
-      - ../infrastructure/shared/firebase-service-account.json:/app/serviceAccountKey.json:ro
       - calricula_uploads:/app/uploads
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -30,13 +35,20 @@ services:
       dockerfile: Dockerfile.prod
       args:
         - NEXT_PUBLIC_API_URL=https://calricula.com
-        - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
-        - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
-        - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+        - NEXT_PUBLIC_LOGTO_ENABLED=${NEXT_PUBLIC_LOGTO_ENABLED:-false}
     container_name: calricula-frontend
     restart: unless-stopped
+    env_file: .env
     environment:
       - API_URL=http://calricula-backend:8000
+      - API_BASE_URL=http://calricula-backend:8000
+      - LOGTO_ENDPOINT=${LOGTO_ENDPOINT}
+      - LOGTO_APP_ID=${LOGTO_APP_ID}
+      - LOGTO_APP_SECRET=${LOGTO_APP_SECRET}
+      - LOGTO_COOKIE_SECRET=${LOGTO_COOKIE_SECRET}
+      - LOGTO_BASE_URL=${LOGTO_BASE_URL:-https://calricula.com}
+      - LOGTO_API_RESOURCE=${LOGTO_API_RESOURCE}
+      - LOGTO_APPLICATIONX_RESOURCE=${LOGTO_APPLICATIONX_RESOURCE}
     deploy:
       resources:
         limits:

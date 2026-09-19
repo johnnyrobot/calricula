@@ -50,9 +50,9 @@ including:
   privacy law) is **your** responsibility as the operating institution — not the
   responsibility of this project's authors/distributors. Provide your own
   privacy policy and terms of service for your deployment.
-- **Secrets.** Supply your own credentials (Gemini/Google API key, Firebase
-  service account, database credentials) via the environment. Never commit them.
-  `.env` files are gitignored by design.
+- **Secrets.** Supply your own credentials (Gemini/Google API key, Logto app
+  secret and cookie secret, database credentials) via the environment. Never
+  commit them. `.env` files are gitignored by design.
 - **Trusted hosts.** Set `ALLOWED_HOSTS` to your real hostnames in production.
   The app **refuses to boot** in `ENVIRONMENT=production` if `ALLOWED_HOSTS` is a
   wildcard/empty or if `AUTH_DEV_MODE`/`DEMO_MODE` are enabled (fail-closed
@@ -63,7 +63,8 @@ including:
 - **Validate before going live.** Run the checks in
   [`docs/STAGING_VALIDATION.md`](./docs/STAGING_VALIDATION.md) (migrations, auth,
   AI/RAG, health) against a staging environment before exposing an instance to
-  users.
+  users. See [`docs/AUTH-LOGTO.md`](./docs/AUTH-LOGTO.md) for identity-provider
+  (Logto) tenant setup.
 
 See [`RELEASE_CHECKLIST.md`](./RELEASE_CHECKLIST.md) for the full
 pre-deployment checklist.

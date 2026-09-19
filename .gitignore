@@ -10,10 +10,8 @@
 !.env.example
 !.env.*.example
 *.pem
-serviceAccountKey.json
-serviceAccountkey.json
-serviceaccount.json
-firebase-credentials.json
+# Generic patterns for any deployer-supplied service-account-style credential
+# file (e.g. a cloud provider key mounted for a future integration).
 *-service-account.json
 
 # ===========================================
@@ -39,7 +37,7 @@ eggs/
 lib/
 lib64/
 # The bare `lib/` rule above (Python packaging) also matches frontend/src/lib,
-# which holds real TypeScript source (api.ts, swr.ts, firebase.ts). Re-include it.
+# which holds real TypeScript source (api.ts, swr.ts, logto.ts). Re-include it.
 !frontend/src/lib/
 !frontend/src/lib/**
 parts/
