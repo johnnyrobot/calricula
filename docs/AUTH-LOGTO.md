@@ -145,9 +145,19 @@ The frontend holds every API token request until `/login` has settled, so
 on first sign-in the re-link runs before any other call. Should an API call
 reach the backend first anyway (another client, a stale tab), the backend
 provisions a placeholder row for the subject and `/login` then folds that
-placeholder into the legacy row. If the placeholder already has dependants
-by then, the merge is abandoned and the backend logs
-`Legacy re-link skipped ...` with both row ids for you to reconcile.
+placeholder into the legacy row. Should deleting that placeholder be refused
+(it is moments old and normally has no dependants), the merge is abandoned
+and the backend logs `Legacy re-link skipped ...` with both row ids for you
+to reconcile.
+
+**Databases seeded before this migration.** `seed_users` skips rows that
+already exist, so seed accounts created by an earlier checkout still have
+`auth_issuer IS NULL` and *are* adoptable by email match. Stamp them before
+anyone signs in through Logto (the seeded subjects all start with `test_`):
+
+```sql
+UPDATE users SET auth_issuer = 'dev' WHERE auth_issuer IS NULL AND auth_subject LIKE 'test\_%';
+```
 
 **Cutover.** When you turn `AUTH_LEGACY_RELINK` off, also make sure no row
 still has `auth_issuer IS NULL` — NULL means "adoptable by email match", and

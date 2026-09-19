@@ -340,6 +340,10 @@ docker-compose -f docker-compose.prod.yml exec backend alembic upgrade head
 
 # Load reference data (first time only). Not `seeds.seed_all`: that one also
 # creates the dev test users, courses and demo data (docs/AUTH-LOGTO.md §6).
+# seed_departments loads a reference division/department list; courses require
+# a department, so edit that list for your college first (the entries are in
+# backend/seeds/seed_departments.py) or maintain the tables directly afterwards.
+docker-compose -f docker-compose.prod.yml exec backend python -m seeds.seed_departments
 docker-compose -f docker-compose.prod.yml exec backend python -m seeds.seed_top_codes
 docker-compose -f docker-compose.prod.yml exec backend python -m seeds.seed_ccn_standards
 

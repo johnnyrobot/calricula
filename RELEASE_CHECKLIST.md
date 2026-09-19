@@ -72,7 +72,7 @@ they can complete their FERPA / privacy review:
   - [ ] 🔴 **Logto cutover gate** (manual, [`docs/STAGING_VALIDATION.md`](docs/STAGING_VALIDATION.md) §2b): against a real tenant, sign-in → `/dashboard` → an authenticated API call → sign-out; one legacy-row re-link (`AUTH_LEGACY_RELINK=true`, a NULL-issuer row adopted, no `@oidc.invalid` duplicate); a cancelled callback lands on `/login` with a message; `email_verified` is `true` on the ID tokens of **every** connector in use. The browser-side Logto path has no automated coverage — this run is the only evidence it works. Blocks cutover, not a source release.
   - [ ] Alembic migrations applied to a fresh prod-shaped DB (not the test `create_all` path) + a rollback rehearsal — `scripts/staging/validate_migrations.sh`.
   - [ ] AI features exercised with a live key — `python scripts/staging/validate_ai.py`.
-  - [ ] **File Search Stores RAG smoke test** — `cd backend && GOOGLE_API_KEY=… python -m scripts.smoke_test_file_search` (store create → upload → grounded query → citations), also wrapped by `validate_ai.py`. *Currently the only unverified production code path.*
+  - [ ] **File Search Stores RAG smoke test** — `cd backend && GOOGLE_API_KEY=… python -m scripts.smoke_test_file_search` (store create → upload → grounded query → citations), also wrapped by `validate_ai.py`. *Unverified production code path, alongside the browser-side Logto flow covered by the cutover gate above.*
   - [ ] One-shot: `scripts/staging/validate_staging.sh` runs all of the above with a go/no-go summary.
 - [ ] Playwright E2E (currently opt-in) run green against staging; consider gating in CI.
 - [ ] Load / performance check at expected concurrency.

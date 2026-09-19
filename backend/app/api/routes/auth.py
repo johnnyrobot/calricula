@@ -145,10 +145,11 @@ def relink_legacy_row(
     backend before this route (the current frontend holds its token requests
     until /login has settled, but another client or a stale tab need not)
     creates a `{sub}@oidc.invalid` row before /login has had a chance to
-    adopt the legacy one. That row carries nothing
-    the legacy row lacks, so it is deleted and the legacy row takes the
-    subject. If the delete is refused because something already references
-    the placeholder, the merge is abandoned: the placeholder is kept, the
+    adopt the legacy one. That row is moments old and carries nothing the
+    legacy row lacks, so it is deleted and the legacy row takes the subject.
+    Normally nothing references it yet; should the delete be refused anyway
+    (a FK without ON DELETE behaviour -- note notifications cascade or null
+    out on their own), the merge is abandoned: the placeholder is kept, the
     legacy row is left untouched for the deployer to reconcile, and a warning
     names both ids.
 

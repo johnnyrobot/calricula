@@ -14,8 +14,12 @@
 #   Stop:     docker compose -f docker-compose.prod.yml down
 #
 # First-time setup (reference data only -- seeds.seed_all also creates the
-# dev test users and demo content and must not be run in production):
+# dev test users and demo content and must not be run in production).
+# seed_departments loads a reference division/department list that courses
+# depend on; edit it for your college (backend/seeds/seed_departments.py) or
+# maintain the tables directly afterwards:
 #   docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
+#   docker compose -f docker-compose.prod.yml exec backend python -m seeds.seed_departments
 #   docker compose -f docker-compose.prod.yml exec backend python -m seeds.seed_top_codes
 #   docker compose -f docker-compose.prod.yml exec backend python -m seeds.seed_ccn_standards
 #
