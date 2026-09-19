@@ -5,7 +5,7 @@
  * token — degrades to `enabled: false` rather than surfacing an error, since
  * ApplicationX embedding is an enhancement, not a hard dependency.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getStatus, AXStatus } from '@/lib/applicationx/client';
 
@@ -53,6 +53,17 @@ export function useApplicationXStatus(): UseApplicationXStatusResult {
   const [status, setStatus] = useState<AXStatus | null>(cache?.value ?? null);
   const [loading, setLoading] = useState(!cache);
 
+  // `getToken` is a plain function recreated on every AuthProvider render
+  // (not memoized), so it can't be a dependency without refetching on every
+  // render. Read it through a ref instead — that keeps the fetch effect below
+  // scoped to `isAuthenticated` changes while always calling the latest
+  // `getToken`. The ref is written in its own effect (not during render,
+  // which React disallows) and read from the fetch effect's async callback.
+  const getTokenRef = useRef(getToken);
+  useEffect(() => {
+    getTokenRef.current = getToken;
+  });
+
   useEffect(() => {
     if (!isAuthenticated) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; syncs status state to the isAuthenticated external condition (no data-fetch library in use)
@@ -72,7 +83,7 @@ export function useApplicationXStatus(): UseApplicationXStatusResult {
     setLoading(true);
 
     if (!inFlight) {
-      inFlight = fetchStatus(() => getToken()).then((value) => {
+      inFlight = fetchStatus(() => getTokenRef.current()).then((value) => {
         cache = { value, fetchedAt: Date.now() };
         inFlight = null;
         return value;
@@ -88,7 +99,6 @@ export function useApplicationXStatus(): UseApplicationXStatusResult {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- getToken is stable per AuthProvider render; re-running on isAuthenticated is sufficient
   }, [isAuthenticated]);
 
   return { status, loading };

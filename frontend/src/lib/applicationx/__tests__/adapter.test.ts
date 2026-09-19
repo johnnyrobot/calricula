@@ -86,6 +86,34 @@ test('request maps chat.cancel to path_params', async () => {
   expect(mockOp).toHaveBeenCalledWith({ calricula: 'ctok', applicationx: 'atok' }, 'chat.cancel', { run_id: 'r1' }, null, signal);
 });
 
+test('request sends sources.list with empty path_params and a null body', async () => {
+  mockOp.mockResolvedValue({ sources: [] });
+  const adapter = createBrokeredAdapter({ getToken, router, standaloneUrl: null });
+  const signal = new AbortController().signal;
+
+  await adapter.request('sources.list', {}, signal);
+
+  expect(mockOp).toHaveBeenCalledWith({ calricula: 'ctok', applicationx: 'atok' }, 'sources.list', {}, null, signal);
+});
+
+test('request sends sources.health with source_id as a path param and a null body', async () => {
+  mockOp.mockResolvedValue({ status: 'ok' });
+  const adapter = createBrokeredAdapter({ getToken, router, standaloneUrl: null });
+  const signal = new AbortController().signal;
+
+  await adapter.request('sources.health', { source_id: 'bls' }, signal);
+
+  expect(mockOp).toHaveBeenCalledWith({ calricula: 'ctok', applicationx: 'atok' }, 'sources.health', { source_id: 'bls' }, null, signal);
+});
+
+test('request rejects sources.health without a source_id instead of sending it', async () => {
+  const adapter = createBrokeredAdapter({ getToken, router, standaloneUrl: null });
+  const signal = new AbortController().signal;
+
+  await expect(adapter.request('sources.health', {}, signal)).rejects.toMatchObject({ code: 'missing_source_id' });
+  expect(mockOp).not.toHaveBeenCalled();
+});
+
 test('request rejects an unknown operation', async () => {
   const adapter = createBrokeredAdapter({ getToken, router, standaloneUrl: null });
   const signal = new AbortController().signal;

@@ -36,6 +36,10 @@ function unknownOperationError(operation: string): Error {
   return Object.assign(new Error(`unknown operation: ${operation}`), { code: 'unknown_operation' });
 }
 
+function missingSourceIdError(): Error {
+  return Object.assign(new Error('sources.health requires a source_id'), { code: 'missing_source_id' });
+}
+
 async function resolveTokens(getToken: GetToken): Promise<AXTokens | null> {
   const [calricula, applicationx] = await Promise.all([getToken(), getToken('applicationx')]);
   if (!calricula || !applicationx) return null;
@@ -60,11 +64,18 @@ export function createBrokeredAdapter({ getToken, router, standaloneUrl }: Creat
 
       switch (operation) {
         case 'chat.messages':
-        case 'sources.list':
-        case 'sources.health':
           return op<T>(tokens, operation, {}, parameters, signal);
         case 'chat.cancel':
           return op<T>(tokens, operation, { run_id: parameters.run_id as string }, null, signal);
+        // GET /v1/sources — no path params, no body.
+        case 'sources.list':
+          return op<T>(tokens, operation, {}, null, signal);
+        // GET /v1/sources/{source_id}/health — source_id is a required path
+        // param at the broker (backend/app/services/applicationx_broker.py);
+        // reject client-side rather than send a request the broker will 400.
+        case 'sources.health':
+          if (!parameters.source_id) throw missingSourceIdError();
+          return op<T>(tokens, operation, { source_id: String(parameters.source_id) }, null, signal);
         default:
           throw unknownOperationError(operation);
       }
