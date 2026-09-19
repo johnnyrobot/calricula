@@ -206,6 +206,14 @@ DB_PASSWORD=your-secure-password-here
 DB_NAME=calricula
 ```
 
+#### ApplicationX companion (optional)
+
+Calricula can host the staff workspace of ApplicationX, a separate companion
+app for employer and career collaboration, inside its own layout. It is off by
+default. To enable it, set the `APPLICATIONX_*` variables (see `.env.example`)
+and read [docs/APPLICATIONX-EMBED.md](docs/APPLICATIONX-EMBED.md) for the
+two-token contract, the allowlisted operations and the local stub upstream.
+
 ---
 
 ## Logto Setup

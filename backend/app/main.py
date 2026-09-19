@@ -192,7 +192,7 @@ async def health_check_pool():
 # API Routes
 # =============================================================================
 
-from app.api.routes import auth, courses, departments, approvals, programs, ai, export, reference, compliance, workflow, elumen, documents, notifications, cross_listings, lmi, dashboard, bls, qcew
+from app.api.routes import auth, courses, departments, approvals, programs, ai, export, reference, compliance, workflow, elumen, documents, notifications, cross_listings, lmi, dashboard, bls, qcew, applicationx
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
@@ -247,6 +247,9 @@ app.include_router(qcew.router, prefix="/api/qcew", tags=["QCEW County Data"])
 
 # Dashboard routes
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
+
+# ApplicationX broker routes (embedded staff workspace)
+app.include_router(applicationx.router, prefix="/api/applicationx", tags=["ApplicationX"])
 
 
 @app.get("/", tags=["Root"])

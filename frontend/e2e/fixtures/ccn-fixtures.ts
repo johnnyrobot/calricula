@@ -18,6 +18,11 @@ export const TEST_USERS = {
     password: 'Test123!',
     role: 'CurriculumChair',
   },
+  articulation: {
+    email: 'articulation@calricula.com',
+    password: 'Test123!',
+    role: 'ArticulationOfficer',
+  },
   admin: {
     email: 'admin@calricula.com',
     password: 'Test123!',

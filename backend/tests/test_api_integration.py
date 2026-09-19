@@ -51,22 +51,6 @@ def db_session():
 
 
 @pytest.fixture
-def test_user_faculty(db_session):
-    """Create a faculty test user."""
-    unique_id = uuid.uuid4().hex[:8]
-    user = User(
-        email=f"integration_faculty_{unique_id}@test.edu",
-        auth_subject=f"integration_faculty_uid_{unique_id}",
-        full_name="Integration Test Faculty",
-        role=UserRole.FACULTY
-    )
-    db_session.add(user)
-    db_session.commit()
-    db_session.refresh(user)
-    return user
-
-
-@pytest.fixture
 def test_user_chair(db_session):
     """Create a curriculum chair test user."""
     unique_id = uuid.uuid4().hex[:8]
@@ -96,20 +80,6 @@ def test_user_admin(db_session):
     db_session.commit()
     db_session.refresh(user)
     return user
-
-
-@pytest.fixture
-def test_department(db_session):
-    """Create a test department."""
-    unique_id = uuid.uuid4().hex[:4]
-    dept = Department(
-        name=f"Integration Test Department {unique_id}",
-        code=f"INT{unique_id}",
-    )
-    db_session.add(dept)
-    db_session.commit()
-    db_session.refresh(dept)
-    return dept
 
 
 @pytest.fixture
