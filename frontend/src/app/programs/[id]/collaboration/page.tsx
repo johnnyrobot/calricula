@@ -9,15 +9,22 @@
 // current. One AbortController per load; a late response for a superseded
 // context is ignored.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { WorkspaceShell } from '@johnnyrobot/workspace-ui';
+// The package's own `import './theme/tokens.css'` is dropped by bundlers: its
+// `sideEffects: ["*.css"]` glob does not match `dist/theme/tokens.css`. Load
+// the stylesheet through the package's `./tokens.css` export instead; the
+// `--ax-*` overrides in globals.css win regardless of order (`:where(:root)`).
+import '@johnnyrobot/workspace-ui/tokens.css';
 import PageShell from '@/components/layout/PageShell';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApplicationXStatus } from '@/hooks/useApplicationXStatus';
 import { api, type ProgramDetail } from '@/lib/api';
+import { createBrokeredAdapter } from '@/lib/applicationx/adapter';
 import { missingTokenResolution, resolveContext, SESSION_EXPIRED_RESOLUTION } from '@/lib/applicationx/client';
-import type { HostResolution } from '@/lib/applicationx/types';
+import type { HostResolution, WorkspaceHostContext } from '@/lib/applicationx/types';
 import { ContextBanner, HostStatePanel } from '@/components/applicationx';
 
 type PageResolution = HostResolution | { state: 'loading' };
@@ -26,6 +33,7 @@ const SESSION_EXPIRED: HostResolution = SESSION_EXPIRED_RESOLUTION;
 
 export default function ProgramCollaborationPage() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const { getToken, isAuthenticated, loading: authLoading, user } = useAuth();
   const { status } = useApplicationXStatus();
   // `null` status means "not known yet" — only a definite `enabled: false`
@@ -120,6 +128,28 @@ export default function ProgramCollaborationPage() {
 
   const standaloneUrl = status?.standalone_url ?? null;
 
+  // Shared workspace shell inputs (ready state only). The context is
+  // memoised on the program revision (the shell keys its chat panel on
+  // `context.context_id`). The adapter is memoised on `getToken`, which the
+  // AuthProvider only recreates when auth state itself changes (token
+  // refreshes live in refs), so it is stable for the page's lifetime in
+  // practice — the shell reads it through a ref anyway.
+  const hostContext = useMemo<WorkspaceHostContext | null>(() => {
+    if (!program || !status?.enabled) return null;
+    return {
+      host: 'calricula',
+      organization_ref: status.organization_ref ?? '',
+      campus_ref: status.campus_ref ?? '',
+      program_ref: { source_app: 'calricula', external_id: program.id, revision: program.updated_at },
+      workspace_id: null,
+      context_id: `${program.id}:${program.updated_at}`,
+    };
+  }, [program, status]);
+  const adapter = useMemo(
+    () => createBrokeredAdapter({ getToken, router, standaloneUrl }),
+    [getToken, router, standaloneUrl],
+  );
+
   return (
     <PageShell>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -172,10 +202,15 @@ export default function ProgramCollaborationPage() {
           </>
         )}
 
-        {!embedDisabled && resolution.state === 'ready' && (
-          <section aria-label="Workspace" className="luminous-card mt-6">
-            <p className="text-sm text-ink-soft">Workspace ready. Chat arrives with the shared package.</p>
-          </section>
+        {!embedDisabled && resolution.state === 'ready' && hostContext && (
+          <div className="luminous-card mt-6">
+            {/* The shell's root is a labelled <section>; this page owns <main> and the <h1>. */}
+            <WorkspaceShell
+              adapter={adapter}
+              context={hostContext}
+              labels={{ title: resolution.workspace_title, assistantName: 'ApplicationX' }}
+            />
+          </div>
         )}
       </div>
     </PageShell>

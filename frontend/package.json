@@ -18,6 +18,7 @@
   "dependencies": {
     "@headlessui/react": "^2.2.10",
     "@heroicons/react": "^2.1.1",
+    "@johnnyrobot/workspace-ui": "0.1.0",
     "@logto/next": "^4.2.11",
     "clsx": "^2.1.0",
     "framer-motion": "^12.42.0",

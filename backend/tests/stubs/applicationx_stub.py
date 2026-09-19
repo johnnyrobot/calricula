@@ -6,8 +6,9 @@ Implements just enough of the ApplicationX host API for the Calricula broker
 (app/services/applicationx_broker.py) to exercise every host state:
 
     POST /v1/host-contexts/resolve   ready | mapping_required | access_required
-    POST /v1/chat/messages           202 with a run id
-    GET  /v1/chat/runs/{id}/events   SSE: status, answer (one citation), done
+    POST /v1/chat/messages           202 with run, conversation and message ids
+    GET  /v1/chat/runs/{id}/events   SSE: status, answer (one citation), done;
+                                     each payload carries the turn's context_id
     POST /v1/chat/runs/{id}/cancel   200 {run_id, status: cancelled}
     GET  /v1/sources                 a single source
 
@@ -107,15 +108,31 @@ async def resolve(request: Request, authorization: str | None = Header(default=N
     }
 
 
+# run_id -> context_id of the turn that started it. Every event payload
+# carries `context_id`: the shared workspace shell (useChat) drops frames
+# tagged with another context, and frames without one are "another context".
+_RUN_CONTEXTS: dict[str, str] = {}
+
+
 @app.post("/v1/chat/messages", status_code=202)
 async def messages(request: Request):
     body = await request.json()
-    return {"run_id": str(uuid.uuid4()), "accepted": True, "context_id": body.get("context_id")}
+    run_id = str(uuid.uuid4())
+    context_id = str(body.get("context_id") or "")
+    _RUN_CONTEXTS[run_id] = context_id
+    return {
+        "run_id": run_id,
+        "accepted": True,
+        "context_id": context_id,
+        "conversation_id": str(body.get("conversation_id") or uuid.uuid4()),
+        "message_id": str(uuid.uuid4()),
+    }
 
 
 def _events(run_id: str) -> list[tuple[int, str, dict]]:
+    context_id = _RUN_CONTEXTS.get(run_id, "")
     return [
-        (1, "status", {"run_id": run_id, "status": "thinking"}),
+        (1, "status", {"run_id": run_id, "context_id": context_id, "status": "thinking"}),
         (
             2,
             "answer",
@@ -138,9 +155,10 @@ def _events(run_id: str) -> list[tuple[int, str, dict]]:
                 "clarification": None,
                 "completeness": "complete",
                 "run_id": run_id,
+                "context_id": context_id,
             },
         ),
-        (3, "done", {"run_id": run_id, "status": "answer ready"}),
+        (3, "done", {"run_id": run_id, "context_id": context_id, "status": "answer ready"}),
     ]
 
 

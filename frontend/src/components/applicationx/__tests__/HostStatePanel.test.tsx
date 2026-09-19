@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
+import { WorkspaceShell } from '@johnnyrobot/workspace-ui';
 import { HostStatePanel } from '../HostStatePanel';
-import type { HostFailure } from '@/lib/applicationx/types';
+import type { HostFailure, WorkspaceHostAdapter, WorkspaceHostContext } from '@/lib/applicationx/types';
 
 const failure = (state: HostFailure['state'], overrides: Partial<HostFailure> = {}): HostFailure => ({
   state,
@@ -95,5 +96,52 @@ describe('HostStatePanel', () => {
     render(<HostStatePanel resolution={forced} onRetry={jest.fn()} standaloneUrl={null} />);
     expect(screen.queryByText(/SECRET WORKSPACE/)).toBeNull();
     expect(screen.queryByText(/ws-1/)).toBeNull();
+  });
+});
+
+// Task 8 smoke test: the shared shell is embeddable inside Calricula's card
+// without competing landmarks — it renders a labelled <section>, never a
+// <main>, and its ask box is a labelled textbox.
+describe('WorkspaceShell (shared package) inside a luminous-card', () => {
+  const context: WorkspaceHostContext = {
+    host: 'calricula',
+    organization_ref: 'lamc',
+    campus_ref: 'LAMC',
+    program_ref: { source_app: 'calricula', external_id: 'p1', revision: '2026-09-19T00:00:00Z' },
+    workspace_id: null,
+    context_id: 'p1:2026-09-19T00:00:00Z',
+  };
+  const adapter: WorkspaceHostAdapter = {
+    resolveContext: async () => ({
+      state: 'ready',
+      workspace_id: 'w1',
+      workspace_title: 'CS workspace',
+      program_title: 'Computer Science',
+      campus_label: 'LAMC',
+      revision_label: 'Revision 1',
+      api_version: '1.0.0',
+    }),
+    request: async () => {
+      throw new Error('not used');
+    },
+    async *subscribe() {},
+    navigateToProgram: jest.fn(),
+    openStandalone: jest.fn(),
+  };
+
+  test('renders a labelled section with a labelled chat textbox and no <main>', async () => {
+    const { container } = render(
+      <div className="luminous-card">
+        <WorkspaceShell adapter={adapter} context={context} />
+      </div>,
+    );
+    const region = await screen.findByRole('region', { name: 'CS workspace' });
+    expect(region.tagName).toBe('SECTION');
+    expect(region.closest('.luminous-card')).not.toBeNull();
+    expect(container.querySelector('main')).toBeNull();
+    expect(container.querySelector('h1')).toBeNull();
+    expect(screen.getByRole('textbox', { name: 'Ask about classes, programs and campus services' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    expect(region).toHaveTextContent('Computer Science');
   });
 });
