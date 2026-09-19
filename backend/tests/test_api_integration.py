@@ -56,7 +56,7 @@ def test_user_faculty(db_session):
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"integration_faculty_{unique_id}@test.edu",
-        firebase_uid=f"integration_faculty_uid_{unique_id}",
+        auth_subject=f"integration_faculty_uid_{unique_id}",
         full_name="Integration Test Faculty",
         role=UserRole.FACULTY
     )
@@ -72,7 +72,7 @@ def test_user_chair(db_session):
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"integration_chair_{unique_id}@test.edu",
-        firebase_uid=f"integration_chair_uid_{unique_id}",
+        auth_subject=f"integration_chair_uid_{unique_id}",
         full_name="Integration Test Chair",
         role=UserRole.CURRICULUM_CHAIR
     )
@@ -88,7 +88,7 @@ def test_user_admin(db_session):
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"integration_admin_{unique_id}@test.edu",
-        firebase_uid=f"integration_admin_uid_{unique_id}",
+        auth_subject=f"integration_admin_uid_{unique_id}",
         full_name="Integration Test Admin",
         role=UserRole.ADMIN
     )
@@ -203,8 +203,8 @@ class TestCourseAPIIntegration:
     def test_list_courses_authenticated(self, client, test_user_faculty, test_course):
         """Test listing courses with authentication."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     "/api/courses",
                     headers={"Authorization": "Bearer test_token"}
@@ -219,8 +219,8 @@ class TestCourseAPIIntegration:
     def test_get_course_by_id(self, client, test_user_faculty, test_course):
         """Test getting a single course by ID."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     f"/api/courses/{test_course.id}",
                     headers={"Authorization": "Bearer test_token"}
@@ -237,8 +237,8 @@ class TestCourseAPIIntegration:
         """Test getting a course that doesn't exist."""
         fake_id = str(uuid.uuid4())
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     f"/api/courses/{fake_id}",
                     headers={"Authorization": "Bearer test_token"}
@@ -261,8 +261,8 @@ class TestCourseAPIIntegration:
         }
 
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     "/api/courses",
                     json=course_data,
@@ -288,8 +288,8 @@ class TestCourseAPIIntegration:
         }
 
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.put(
                     f"/api/courses/{test_course.id}",
                     json=update_data,
@@ -302,8 +302,8 @@ class TestCourseAPIIntegration:
     def test_filter_courses_by_status(self, client, test_user_faculty, test_course):
         """Test filtering courses by status."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     "/api/courses?status=Draft",
                     headers={"Authorization": "Bearer test_token"}
@@ -317,8 +317,8 @@ class TestCourseAPIIntegration:
     def test_search_courses(self, client, test_user_faculty, test_course):
         """Test searching courses by query."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     "/api/courses?search=Integration",
                     headers={"Authorization": "Bearer test_token"}
@@ -336,8 +336,8 @@ class TestProgramAPIIntegration:
     def test_list_programs(self, client, test_user_faculty, test_program):
         """Test listing programs."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     "/api/programs",
                     headers={"Authorization": "Bearer test_token"}
@@ -349,8 +349,8 @@ class TestProgramAPIIntegration:
     def test_get_program_by_id(self, client, test_user_faculty, test_program):
         """Test getting a single program by ID."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     f"/api/programs/{test_program.id}",
                     headers={"Authorization": "Bearer test_token"}
@@ -370,8 +370,8 @@ class TestDepartmentAPIIntegration:
     def test_list_departments(self, client, test_department, test_user_faculty):
         """Test listing departments."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     "/api/departments",
                     headers={"Authorization": "Bearer test_token"}
@@ -384,8 +384,8 @@ class TestDepartmentAPIIntegration:
     def test_get_department_by_id(self, client, test_department, test_user_faculty):
         """Test getting a single department by ID."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     f"/api/departments/{test_department.id}",
                     headers={"Authorization": "Bearer test_token"}
@@ -406,8 +406,8 @@ class TestComplianceAPIIntegration:
     def test_compliance_audit(self, client, test_user_faculty, test_course):
         """Test the compliance audit endpoint."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     "/api/compliance/audit",
                     json={"course_id": str(test_course.id)},
@@ -421,8 +421,8 @@ class TestComplianceAPIIntegration:
     def test_unit_validation(self, client, test_user_faculty):
         """Test the unit validation endpoint."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     "/api/compliance/validate-units",
                     json={
@@ -442,8 +442,8 @@ class TestComplianceAPIIntegration:
     def test_cb_diagnostic_questions(self, client, test_user_faculty):
         """Test getting CB code diagnostic questions."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     "/api/compliance/cb-diagnostic-questions",
                     headers={"Authorization": "Bearer test_token"}
@@ -467,8 +467,8 @@ class TestWorkflowAPIIntegration:
         db_session.commit()
 
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     f"/api/courses/{test_course.id}/submit",
                     headers={"Authorization": "Bearer test_token"}
@@ -484,8 +484,8 @@ class TestWorkflowAPIIntegration:
         db_session.commit()
 
         with patch("app.core.deps.get_current_user", return_value=test_user_chair):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_chair.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_chair.auth_subject}
                 response = client.post(
                     f"/api/courses/{test_course.id}/approve",
                     headers={"Authorization": "Bearer test_token"}
@@ -501,8 +501,8 @@ class TestWorkflowAPIIntegration:
         db_session.commit()
 
         with patch("app.core.deps.get_current_user", return_value=test_user_chair):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_chair.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_chair.auth_subject}
                 response = client.post(
                     f"/api/courses/{test_course.id}/return",
                     json={"comment": "Please revise the SLOs."},
@@ -554,8 +554,8 @@ class TestErrorHandling:
     def test_invalid_uuid_format(self, client, test_user_faculty):
         """Test handling of invalid UUID format."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     "/api/courses/not-a-valid-uuid",
                     headers={"Authorization": "Bearer test_token"}
@@ -565,8 +565,8 @@ class TestErrorHandling:
     def test_missing_required_fields(self, client, test_user_faculty):
         """Test handling of missing required fields in POST."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 # Missing required fields
                 response = client.post(
                     "/api/courses",
@@ -594,8 +594,8 @@ class TestPagination:
     def test_course_list_pagination(self, client, test_user_faculty):
         """Test course list pagination parameters."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     "/api/courses?page=1&limit=10",
                     headers={"Authorization": "Bearer test_token"}
@@ -610,8 +610,8 @@ class TestPagination:
     def test_program_list_pagination(self, client, test_user_faculty):
         """Test program list pagination parameters."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     "/api/programs?page=1&limit=5",
                     headers={"Authorization": "Bearer test_token"}

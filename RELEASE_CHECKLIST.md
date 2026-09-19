@@ -14,7 +14,7 @@ Legend: `[x]` done · `[~]` in progress / partial · `[ ]` not started · 🔴 b
 - [x] Fail-closed prod guard: app refuses to boot if `ENVIRONMENT=production` and `AUTH_DEV_MODE`/`DEMO_MODE` are on (WS-4).
 - [x] **`ALLOWED_HOSTS` must not be `["*"]` in production.** Prod guard fails closed on a wildcard host (merged). *Deploy must set real hostnames* — e.g. `ALLOWED_HOSTS='["calricula.com","api.calricula.com"]'`.
 - [x] Real secrets (`backend/.env`, `frontend/.env.local`) are gitignored; only `*.example` committed (verified).
-- [x] **No secrets in git history** (distributor-side): history secret scan run, no committed credentials. *(Adopter-side: each deploying institution must still set its own Gemini key, Firebase service account, and DB creds via the deploy environment — never baked into images — and rotate them per its own policy.)*
+- [x] **No secrets in git history** (distributor-side): history secret scan run, no committed credentials. *(Adopter-side: each deploying institution must still set its own Gemini key, Logto app secret/cookie secret, and DB creds via the deploy environment — never baked into images — and rotate them per its own policy.)*
 - [ ] CORS `CORS_ORIGINS` restricted to the real frontend origin(s) in prod (currently a dev-oriented default).
 - [ ] Rate limiting (`core/rate_limiter.py`) reviewed/tuned for public traffic.
 - [ ] Security pass: dependency audit clean (or accepted), basic pentest / OWASP review of auth + file-upload + AI endpoints.
@@ -36,10 +36,12 @@ they can complete their FERPA / privacy review:
 
 - [ ] **Data inventory for adopters.** Document the PII the app stores so an
   institution can map it to its FERPA/privacy program: auth identities
-  (Firebase UID, email, display name, role in the `users` table; JIT-provisioned
-  on first sign-in), curriculum content (courses, programs, SLOs, uploaded
-  reference documents), AI chat history, and any documents sent to the Gemini /
-  File Search Stores RAG service (note the third-party data flow to Google).
+  (OIDC subject + issuer, email, display name, role in the `users` table;
+  JIT-provisioned on first sign-in — see `docs/AUTH-LOGTO.md`), curriculum
+  content (courses, programs, SLOs, uploaded reference documents), AI chat
+  history, and any documents sent to the Gemini / File Search Stores RAG
+  service (note the third-party data flow to Google, and to the deployer's
+  Logto tenant for identity).
 - [ ] **FERPA note for adopters.** State plainly that the adopter is the data
   controller and must satisfy FERPA (access controls, retention, disclosure)
   for their instance; the project ships role-based access controls but the
@@ -66,10 +68,11 @@ they can complete their FERPA / privacy review:
 - [x] **Coverage gates** live as ratchet floors (backend `--cov-fail-under`, frontend `coverageThreshold`). Raise the floors over time.
 - [x] Frontend React-Compiler hook warnings (`set-state-in-effect` ×27 etc.) resolved; any left as warnings are documented in `eslint.config.mjs`.
 - [~] 🔴 **End-to-end staging validation** against a production-like environment. A documented runbook + runnable scripts now exist — [`docs/STAGING_VALIDATION.md`](docs/STAGING_VALIDATION.md) and [`scripts/staging/`](scripts/staging/) — run them against a real staging deploy before launch:
-  - [ ] Real Firebase auth flow (sign-in, JIT provisioning) — `python scripts/staging/validate_auth.py`.
+  - [ ] Real Logto (OIDC) auth flow (sign-in, JIT provisioning) — `python scripts/staging/validate_auth.py`.
+  - [ ] 🔴 **Logto cutover gate** (manual, [`docs/STAGING_VALIDATION.md`](docs/STAGING_VALIDATION.md) §2b): against a real tenant, sign-in → `/dashboard` → an authenticated API call → sign-out; one legacy-row re-link (`AUTH_LEGACY_RELINK=true`, a NULL-issuer row adopted, no `@oidc.invalid` duplicate); a cancelled callback lands on `/login` with a message; `email_verified` is `true` on the ID tokens of **every** connector in use. The browser-side Logto path has no automated coverage — this run is the only evidence it works. Blocks cutover, not a source release.
   - [ ] Alembic migrations applied to a fresh prod-shaped DB (not the test `create_all` path) + a rollback rehearsal — `scripts/staging/validate_migrations.sh`.
   - [ ] AI features exercised with a live key — `python scripts/staging/validate_ai.py`.
-  - [ ] **File Search Stores RAG smoke test** — `cd backend && GOOGLE_API_KEY=… python -m scripts.smoke_test_file_search` (store create → upload → grounded query → citations), also wrapped by `validate_ai.py`. *Currently the only unverified production code path.*
+  - [ ] **File Search Stores RAG smoke test** — `cd backend && GOOGLE_API_KEY=… python -m scripts.smoke_test_file_search` (store create → upload → grounded query → citations), also wrapped by `validate_ai.py`. *Unverified production code path, alongside the browser-side Logto flow covered by the cutover gate above.*
   - [ ] One-shot: `scripts/staging/validate_staging.sh` runs all of the above with a go/no-go summary.
 - [ ] Playwright E2E (currently opt-in) run green against staging; consider gating in CI.
 - [ ] Load / performance check at expected concurrency.

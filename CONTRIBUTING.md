@@ -10,7 +10,7 @@ By participating you agree to abide by our [Code of Conduct](./CODE_OF_CONDUCT.m
 
 ## Tech stack
 
-- **Backend** — Python 3.11, FastAPI, SQLModel, PostgreSQL, Alembic, Pydantic v2; Google `google-genai` (Gemini); Firebase Admin for auth.
+- **Backend** — Python 3.11, FastAPI, SQLModel, PostgreSQL, Alembic, Pydantic v2; Google `google-genai` (Gemini); Logto (OIDC) for auth.
 - **Frontend** — Next.js 16 (App Router), React 19, TypeScript, Tailwind, Jest + Testing Library, Playwright (E2E).
 
 See [`README.md`](./README.md) for a fuller overview.
@@ -33,7 +33,7 @@ uvicorn app.main:app --reload
 ```bash
 cd frontend
 npm ci
-cp .env.example .env.local  # fill in Firebase / API config (never commit)
+cp .env.local.example .env.local  # fill in Logto / API config (never commit); NEXT_PUBLIC_AUTH_DEV_MODE=true needs no Logto tenant
 npm run dev                 # http://localhost:3000
 npm test                    # jest
 npm run build               # production build

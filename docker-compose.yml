@@ -27,13 +27,15 @@ services:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/calricula
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - GEMINI_FILE_SEARCH_STORE_NAME=${GEMINI_FILE_SEARCH_STORE_NAME:-calricula-knowledge-base}
-      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID}
-      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/serviceAccountKey.json
+      - OIDC_ISSUER=${OIDC_ISSUER}
+      - OIDC_AUDIENCE=${OIDC_AUDIENCE}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID}
+      - OIDC_JWKS_URL=${OIDC_JWKS_URL}
+      - AUTH_LEGACY_RELINK=${AUTH_LEGACY_RELINK:-true}
       - AUTH_DEV_MODE=${AUTH_DEV_MODE:-false}
       - BLS_API_KEY=${BLS_API_KEY}
     volumes:
       - ./backend:/app
-      - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
     ports:
       - "8001:8000"
     depends_on:
@@ -50,10 +52,16 @@ services:
     environment:
       - NODE_ENV=development
       - API_URL=http://backend:8000
+      - API_BASE_URL=http://backend:8000
       - NEXT_PUBLIC_API_URL=http://localhost:8001
-      - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
-      - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
-      - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+      - NEXT_PUBLIC_LOGTO_ENABLED=${NEXT_PUBLIC_LOGTO_ENABLED:-false}
+      - LOGTO_ENDPOINT=${LOGTO_ENDPOINT}
+      - LOGTO_APP_ID=${LOGTO_APP_ID}
+      - LOGTO_APP_SECRET=${LOGTO_APP_SECRET}
+      - LOGTO_COOKIE_SECRET=${LOGTO_COOKIE_SECRET}
+      - LOGTO_BASE_URL=${LOGTO_BASE_URL:-http://localhost:3001}
+      - LOGTO_API_RESOURCE=${LOGTO_API_RESOURCE}
+      - LOGTO_APPLICATIONX_RESOURCE=${LOGTO_APPLICATIONX_RESOURCE}
       - NEXT_PUBLIC_AUTH_DEV_MODE=${NEXT_PUBLIC_AUTH_DEV_MODE:-false}
     volumes:
       - ./frontend:/app

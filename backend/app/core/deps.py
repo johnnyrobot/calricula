@@ -14,12 +14,63 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlmodel import Session, select
 
+from app.core.config import settings
 from app.core.database import get_session
-from app.core.firebase import verify_firebase_token
+from app.core.oidc import AuthError, verify_bearer
 from app.models.user import User, UserRole
 
 # Security scheme for Swagger UI
 security = HTTPBearer(auto_error=False)
+
+
+# Placeholder email domain for a user provisioned from a token that carries no
+# usable email claim (an API access token normally carries none). `.invalid` is
+# reserved by RFC 2606 and can never be delivered to; POST /api/auth/login
+# replaces it with the real address once an ID token proves one.
+PROVISIONAL_EMAIL_DOMAIN = "oidc.invalid"
+
+# Display name stored when the token carries no usable name. /api/auth/login
+# repairs it when an ID token later supplies one.
+PROVISIONAL_FULL_NAME = "New User"
+
+# Shared 403 text for a non-demo identity on a demo deployment. /api/auth/login
+# raises it for the token's verified email, get_current_user for the stored one.
+DEMO_MODE_DETAIL = (
+    "Demo mode only allows access to users with 'demo' in their email address"
+)
+
+
+def verified_email(claims: dict) -> Optional[str]:
+    """The token's email address, but only when the provider vouches for it.
+
+    An unverified `email` claim is attacker-chosen text: at many providers a
+    user can set it to anyone's address without proving control. Calricula
+    stores the email on the user row and shows it to other users in workflow
+    and approval responses, and matches on it when adopting a pre-migration
+    row, so an unverified claim must never be used for either.
+    """
+    if claims.get("email_verified") is True:
+        return claims.get("email")
+    return None
+
+
+def is_provisional_email(email: Optional[str]) -> bool:
+    """True for an address this app synthesised because no email was known."""
+    return bool(email) and email.endswith("@" + PROVISIONAL_EMAIL_DOMAIN)
+
+
+def provisioning_email(claims: dict, subject: str) -> str:
+    """The email to store for a newly provisioned user. users.email is NOT
+    NULL, so a token with no verified email claim gets an undeliverable
+    placeholder rather than failing the request (or storing a guess)."""
+    return verified_email(claims) or f"{subject}@{PROVISIONAL_EMAIL_DOMAIN}"
+
+
+def provisioning_name(claims: dict) -> str:
+    """Display name from the token, falling back to the verified email's local
+    part -- never to an unverified one, which is equally attacker-chosen."""
+    email = verified_email(claims)
+    return claims.get("name") or (email.split("@")[0] if email else PROVISIONAL_FULL_NAME)
 
 
 async def get_current_user(
@@ -31,9 +82,14 @@ async def get_current_user(
 
     This dependency:
     1. Extracts the Bearer token from the Authorization header
-    2. Verifies the token with Firebase Admin SDK
-    3. Looks up the user in our database by firebase_uid
-    4. Returns the User object
+    2. Verifies it as an OIDC access token for this API (app/core/oidc.py),
+       or as a documented dev-* token when AUTH_DEV_MODE is on
+    3. Looks up the user in our database by auth_subject (the `sub` claim)
+    4. Returns the User object, auto-provisioning one on first contact
+
+    Access tokens are scoped to the API resource and carry no profile claims,
+    so the email/name used when provisioning are only present for dev tokens;
+    POST /api/auth/login is where an ID token supplies the real profile.
 
     Usage:
         @router.get("/protected")
@@ -42,7 +98,8 @@ async def get_current_user(
 
     Raises:
         HTTPException 401: If no token provided or token is invalid
-        HTTPException 404: If user not found in database
+        HTTPException 403: In demo mode, if the subject has not signed in yet
+        HTTPException 503: If no provider is configured (fails closed)
     """
     # Check if credentials were provided
     if credentials is None:
@@ -52,14 +109,21 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Extract the token
+    # Extract and verify the token
     token = credentials.credentials
 
-    # Verify the token with Firebase
-    decoded_token = verify_firebase_token(token)
-    firebase_uid = decoded_token.get("uid")
+    try:
+        claims = verify_bearer(token)
+    except AuthError as e:
+        raise HTTPException(
+            status_code=e.status,
+            detail=e.detail,
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
-    if not firebase_uid:
+    subject = claims.get("sub")
+
+    if not subject:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token: missing user ID",
@@ -67,25 +131,39 @@ async def get_current_user(
         )
 
     # Look up user in database
-    statement = select(User).where(User.firebase_uid == firebase_uid)
+    statement = select(User).where(User.auth_subject == subject)
     user = session.exec(statement).first()
 
+    if user and settings.DEMO_MODE and "demo" not in (user.email or "").lower():
+        # A demo deployment admits demo accounts only, and it re-checks on
+        # every request: a row that predates DEMO_MODE (or was provisioned
+        # before it was switched on) must not keep its access.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=DEMO_MODE_DETAIL,
+        )
+
     if not user:
-        # Auto-provision: Create new user with default FACULTY role
-        email = decoded_token.get("email")
-        name = decoded_token.get("name") or (email.split("@")[0] if email else "New User")
+        # Demo mode gates who may have an account at all, and that gate lives
+        # in POST /api/auth/login (which sees the ID token's verified email).
+        # Provisioning here would let a protected route create the very account
+        # /login just refused, so refuse instead.
+        if settings.DEMO_MODE:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Demo mode: demo users must sign in first",
+            )
 
         user = User(
-            email=email,
-            full_name=name,
+            email=provisioning_email(claims, subject),
+            full_name=provisioning_name(claims),
             role=UserRole.FACULTY,  # Default role
-            firebase_uid=firebase_uid,
+            auth_subject=subject,
+            auth_issuer=claims.get("iss"),
         )
         session.add(user)
         session.commit()
         session.refresh(user)
-
-        print(f"Auto-provisioned new user: {email} with role FACULTY")
 
     return user
 

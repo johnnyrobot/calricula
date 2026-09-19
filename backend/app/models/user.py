@@ -1,5 +1,5 @@
 """
-User model with Firebase UID integration and role-based access control.
+User model keyed by OIDC subject, with role-based access control.
 """
 
 import uuid
@@ -33,13 +33,20 @@ class User(UserBase, table=True):
     """
     User model for database storage.
 
-    Links to Firebase via firebase_uid for authentication.
+    Identity comes from the OIDC provider (Logto, ADR-0001): `auth_subject` is
+    the token's `sub` claim and is the only key authentication looks up;
+    `auth_issuer` records which issuer minted it ("dev" for the documented
+    dev-mode tokens). A NULL `auth_issuer` marks a pre-migration row whose
+    subject still belongs to the retired provider -- POST /api/auth/login
+    adopts such a row once, on a verified email match.
+
     Supports role-based access control with the UserRole enum.
     """
     __tablename__ = "users"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    firebase_uid: str = Field(unique=True, index=True)
+    auth_subject: str = Field(unique=True, index=True)
+    auth_issuer: Optional[str] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
@@ -49,13 +56,15 @@ class User(UserBase, table=True):
 
 class UserCreate(UserBase):
     """Schema for creating a new user."""
-    firebase_uid: str
+    auth_subject: str
+    auth_issuer: Optional[str] = None
 
 
 class UserRead(UserBase):
     """Schema for reading user data."""
     id: uuid.UUID
-    firebase_uid: str
+    auth_subject: str
+    auth_issuer: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

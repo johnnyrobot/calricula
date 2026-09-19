@@ -51,7 +51,7 @@ def test_user_faculty(db_session):
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"ccn_test_faculty_{unique_id}@test.edu",
-        firebase_uid=f"ccn_test_faculty_uid_{unique_id}",
+        auth_subject=f"ccn_test_faculty_uid_{unique_id}",
         full_name="CCN Test Faculty User",
         role=UserRole.FACULTY
     )
@@ -254,8 +254,8 @@ class TestCCNMatchEndpointIntegration:
     ):
         """Test that CCN match endpoint finds a matching standard."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     "/api/compliance/ccn-match",
                     json={
@@ -277,8 +277,8 @@ class TestCCNMatchEndpointIntegration:
     ):
         """Test that CCN match returns no match for non-matching discipline."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     "/api/compliance/ccn-match",
                     json={
@@ -303,8 +303,8 @@ class TestCCNMatchEndpointIntegration:
     ):
         """Test CCN match with SLO data included."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     "/api/compliance/ccn-match",
                     json={
@@ -350,8 +350,8 @@ class TestCCNNonMatchJustificationIntegration:
     ):
         """Test that justification is persisted to the database."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     "/api/compliance/ccn-non-match-justification",
                     json={
@@ -383,8 +383,8 @@ class TestCCNNonMatchJustificationIntegration:
         """Test that re-submitting justification updates the existing one."""
         # Create initial justification
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
 
                 # First submission
                 response1 = client.post(
@@ -436,8 +436,8 @@ class TestCCNNonMatchJustificationIntegration:
         db_session.commit()
 
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     f"/api/compliance/ccn-non-match-justification/{test_course.id}",
                     headers={"Authorization": "Bearer test_token"}
@@ -455,8 +455,8 @@ class TestCCNNonMatchJustificationIntegration:
         fake_course_id = str(uuid.uuid4())
 
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.get(
                     f"/api/compliance/ccn-non-match-justification/{fake_course_id}",
                     headers={"Authorization": "Bearer test_token"}
@@ -489,8 +489,8 @@ class TestCCNAdoptionIntegration:
     ):
         """Test adopting a CCN standard for a course."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     "/api/compliance/ccn-adopt",
                     json={
@@ -524,8 +524,8 @@ class TestCCNAdoptionIntegration:
         fake_course_id = str(uuid.uuid4())
 
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     "/api/compliance/ccn-adopt",
                     json={
@@ -544,8 +544,8 @@ class TestCCNAdoptionIntegration:
         fake_standard_id = str(uuid.uuid4())
 
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     "/api/compliance/ccn-adopt",
                     json={

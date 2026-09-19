@@ -24,7 +24,7 @@ assignees: ''
 <!-- Check all that apply. -->
 - [ ] Backend (API / compliance / AI)
 - [ ] Frontend (UI)
-- [ ] Auth (Firebase)
+- [ ] Auth (Logto / OIDC)
 - [ ] Data / migrations
 - [ ] Other:
 

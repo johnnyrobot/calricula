@@ -4,7 +4,7 @@
 #
 # Prerequisites:
 #   1. Copy .env.production.example to .env and configure all variables
-#   2. Place serviceAccountKey.json in project root
+#   2. Set up a Logto tenant per docs/AUTH-LOGTO.md and set the OIDC_*/LOGTO_* variables
 #   3. Set DOMAIN in .env to your domain (e.g., calricula.example.com)
 #
 # Usage:
@@ -13,9 +13,15 @@
 #   Logs:     docker compose -f docker-compose.prod.yml logs -f
 #   Stop:     docker compose -f docker-compose.prod.yml down
 #
-# First-time setup:
+# First-time setup (reference data only -- seeds.seed_all also creates the
+# dev test users and demo content and must not be run in production).
+# seed_departments loads a reference division/department list that courses
+# depend on; edit it for your college (backend/seeds/seed_departments.py) or
+# maintain the tables directly afterwards:
 #   docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
-#   docker compose -f docker-compose.prod.yml exec backend python -m seeds.seed_all
+#   docker compose -f docker-compose.prod.yml exec backend python -m seeds.seed_departments
+#   docker compose -f docker-compose.prod.yml exec backend python -m seeds.seed_top_codes
+#   docker compose -f docker-compose.prod.yml exec backend python -m seeds.seed_ccn_standards
 #
 # Estimated resources: 1-2 vCPU, 2GB RAM (light usage, ~25 users)
 
@@ -107,15 +113,16 @@ services:
       # Google AI
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:?GOOGLE_API_KEY is required}
       - GEMINI_FILE_SEARCH_STORE_NAME=${GEMINI_FILE_SEARCH_STORE_NAME:-calricula-knowledge-base}
-      # Firebase
-      - FIREBASE_PROJECT_ID=${FIREBASE_PROJECT_ID:?FIREBASE_PROJECT_ID is required}
-      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/serviceAccountKey.json
+      # Logto / OIDC (ADR-0001) -- see docs/AUTH-LOGTO.md
+      - OIDC_ISSUER=${OIDC_ISSUER:?OIDC_ISSUER is required}
+      - OIDC_AUDIENCE=${OIDC_AUDIENCE:?OIDC_AUDIENCE is required}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:?OIDC_CLIENT_ID is required}
+      - OIDC_JWKS_URL=${OIDC_JWKS_URL}
+      - AUTH_LEGACY_RELINK=${AUTH_LEGACY_RELINK:-true}
       # Production settings
       - ENVIRONMENT=production
       - LOG_LEVEL=${LOG_LEVEL:-info}
     volumes:
-      # Mount service account key (read-only)
-      - ./serviceAccountKey.json:/app/serviceAccountKey.json:ro
       # Persistent storage for uploads
       - uploads_data:/app/uploads
     # Backend not exposed externally - Caddy proxies to it
@@ -152,15 +159,24 @@ services:
       args:
         # API URL should match your domain for client-side requests
         - NEXT_PUBLIC_API_URL=https://calricula.com
-        - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
-        - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
-        - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+        # Advertise Logto sign-in to the browser; baked in at build time like
+        # every other NEXT_PUBLIC_ variable.
+        - NEXT_PUBLIC_LOGTO_ENABLED=${NEXT_PUBLIC_LOGTO_ENABLED:-false}
     container_name: calricula-frontend-prod
     restart: unless-stopped
     environment:
       - NODE_ENV=production
       # Internal API URL for server-side requests
       - API_URL=http://backend:8000
+      - API_BASE_URL=http://backend:8000
+      # Logto (server-only; see docs/AUTH-LOGTO.md)
+      - LOGTO_ENDPOINT=${LOGTO_ENDPOINT}
+      - LOGTO_APP_ID=${LOGTO_APP_ID}
+      - LOGTO_APP_SECRET=${LOGTO_APP_SECRET}
+      - LOGTO_COOKIE_SECRET=${LOGTO_COOKIE_SECRET}
+      - LOGTO_BASE_URL=${LOGTO_BASE_URL:-https://calricula.com}
+      - LOGTO_API_RESOURCE=${LOGTO_API_RESOURCE}
+      - LOGTO_APPLICATIONX_RESOURCE=${LOGTO_APPLICATIONX_RESOURCE}
     # Frontend not exposed externally - Caddy proxies to it
     expose:
       - "3000"

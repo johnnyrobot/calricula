@@ -1,60 +1,85 @@
 /**
  * Tests for AuthContext — the security-critical auth state machine.
  *
- * Covers both runtime paths:
- *  - the development bypass (localStorage DEV_AUTH_BYPASS) used for local/demo
- *    builds, including the mock-user password gate and session persistence, and
- *  - the real Firebase path, including JIT profile fetch, 401/404 handling,
- *    login/logout, and token retrieval.
+ * Covers all three runtime modes:
+ *  - 'dev'   the development identity picker (localStorage DEV_AUTH_BYPASS),
+ *            including the mock-user password gate and session persistence,
+ *  - 'logto' the OIDC path, where the provider bootstraps from the same-origin
+ *            route handlers `/api/auth/session` and `/api/auth/token`, holds
+ *            the access token in memory only, and signs out on a dead session,
+ *  - 'none'  a locked-down build with nothing configured, which must fail
+ *            closed rather than bypass authentication.
  *
- * Firebase is fully mocked; the profile fetch uses a stubbed global.fetch.
+ * There is no SDK to mock: the browser never speaks to Logto directly, so the
+ * two server routes are stubbed through `global.fetch`.
  */
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-// --- Mock the firebase wrapper module -------------------------------------
-jest.mock('@/lib/firebase', () => ({
-  auth: {},
-  signIn: jest.fn(),
-  signOut: jest.fn(),
-  onAuthChange: jest.fn(),
-  getIdToken: jest.fn(),
-  isFirebaseConfigured: jest.fn(),
-}));
+import { AuthProvider, useAuth, refreshDelaySeconds } from '../AuthContext';
 
-import {
-  signIn,
-  signOut,
-  onAuthChange,
-  getIdToken,
-  isFirebaseConfigured,
-} from '@/lib/firebase';
-import { AuthProvider, useAuth } from '../AuthContext';
+const PROFILE = {
+  id: 'u-1',
+  email: 'real@calricula.com',
+  full_name: 'Real User',
+  role: 'Admin' as const,
+  department_name: 'Mathematics',
+};
 
-const mockSignIn = signIn as jest.Mock;
-const mockSignOut = signOut as jest.Mock;
-const mockOnAuthChange = onAuthChange as jest.Mock;
-const mockGetIdToken = getIdToken as jest.Mock;
-const mockIsConfigured = isFirebaseConfigured as jest.Mock;
+interface RouteSpec {
+  session?: { status?: number; body?: unknown };
+  /** `GET /api/auth/token` with no `resource=` or `resource=calricula`. */
+  token?: { status?: number; body?: unknown };
+  /** `GET /api/auth/token?resource=applicationx`. */
+  applicationxToken?: { status?: number; body?: unknown };
+}
+
+/**
+ * Route `fetch` by URL to the auth endpoints. The spec is read on every call,
+ * so a test can mutate it to change what a later request sees.
+ */
+function mockAuthRoutes(options: RouteSpec) {
+  const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    const spec = url.includes('/api/auth/session')
+      ? options.session
+      : url.includes('resource=applicationx')
+        ? options.applicationxToken
+        : options.token;
+    const status = spec?.status ?? 200;
+    return {
+      ok: status >= 200 && status < 300,
+      status,
+      json: async () => spec?.body ?? {},
+    };
+  });
+  global.fetch = fetchMock as unknown as typeof fetch;
+  return fetchMock;
+}
 
 // A test consumer that renders the context and exposes the auth methods via
 // buttons so tests can drive them through real user interactions.
 function Consumer() {
   const auth = useAuth();
   const [tokenOut, setTokenOut] = React.useState<string>('');
+  const [appTokenOut, setAppTokenOut] = React.useState<string>('');
   return (
     <div>
+      <span data-testid="mode">{auth.mode}</span>
       <span data-testid="user">{auth.user ? auth.user.email : 'none'}</span>
       <span data-testid="role">{auth.user?.role ?? ''}</span>
       <span data-testid="authed">{String(auth.isAuthenticated)}</span>
+      <span data-testid="configured">{String(auth.isConfigured)}</span>
       <span data-testid="loading">{String(auth.loading)}</span>
       <span data-testid="error">{auth.error ?? ''}</span>
       <span data-testid="token">{tokenOut}</span>
+      <span data-testid="app-token">{appTokenOut}</span>
       <button onClick={() => auth.login('faculty@calricula.com', 'Test123!').catch(() => {})}>good-login</button>
       <button onClick={() => auth.login('faculty@calricula.com', 'wrong').catch(() => {})}>bad-login</button>
       <button onClick={() => auth.logout().catch(() => {})}>logout</button>
       <button onClick={() => auth.clearError()}>clear-error</button>
+      <button onClick={() => auth.signInWithProvider()}>provider-signin</button>
       <button
         onClick={async () => {
           const t = await auth.getToken();
@@ -63,50 +88,108 @@ function Consumer() {
       >
         get-token
       </button>
+      <button
+        onClick={async () => {
+          const t = await auth.getToken('applicationx');
+          setAppTokenOut(t ?? 'null');
+        }}
+      >
+        get-app-token
+      </button>
     </div>
   );
 }
 
-const renderAuth = () =>
+/**
+ * A descendant that asks for a bearer token in its own mount effect — the
+ * ordering that matters, because React runs child effects before the
+ * provider's own. Mirrors `useUserCourses({ autoFetch: true })`.
+ */
+function EagerTokenConsumer() {
+  const { getToken } = useAuth();
+  const [eager, setEager] = React.useState<string>('');
+  React.useEffect(() => {
+    let cancelled = false;
+    void getToken().then((t) => {
+      if (!cancelled) setEager(t ?? 'null');
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Deliberately mount-only, like the real hook's static dependency list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <span data-testid="eager-token">{eager}</span>;
+}
+
+const renderAuth = (children?: React.ReactNode) =>
   render(
     <AuthProvider>
       <Consumer />
+      {children}
     </AuthProvider>
   );
 
 let logSpy: jest.SpyInstance;
 let warnSpy: jest.SpyInstance;
 let errorSpy: jest.SpyInstance;
+let assignMock: jest.Mock;
+const realLocation = window.location;
 
 beforeEach(() => {
   jest.clearAllMocks();
   window.localStorage.clear();
   window.sessionStorage.clear();
-  // Quiet the (intentional) auth diagnostic logging, including the
-  // console.error the profile-fetch catch emits on the expected 401 path.
+  delete process.env.NEXT_PUBLIC_LOGTO_ENABLED;
+  delete process.env.NEXT_PUBLIC_AUTH_DEV_MODE;
+  delete process.env.NEXT_PUBLIC_DEMO_MODE;
+  // Quiet the (intentional) auth diagnostic logging.
   logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
   warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
   errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
-  // Default: Firebase reports "not connected" until a test opts in.
-  mockIsConfigured.mockReturnValue(false);
-  // Default onAuthChange: no user, returns an unsubscribe fn.
-  mockOnAuthChange.mockImplementation((cb: (u: unknown) => void) => {
-    cb(null);
-    return jest.fn();
+  // jsdom does not implement navigation; capture it instead.
+  assignMock = jest.fn();
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    writable: true,
+    value: { ...realLocation, assign: assignMock, href: realLocation.href },
   });
+  global.fetch = jest.fn(async () => {
+    throw new Error('unexpected fetch');
+  }) as unknown as typeof fetch;
 });
 
 afterEach(() => {
   logSpy.mockRestore();
   warnSpy.mockRestore();
   errorSpy.mockRestore();
+  Object.defineProperty(window, 'location', {
+    configurable: true,
+    writable: true,
+    value: realLocation,
+  });
+});
+
+describe('refreshDelaySeconds', () => {
+  it('refreshes a minute before expiry, never sooner than 30s', () => {
+    expect(refreshDelaySeconds(3600)).toBe(3540);
+    expect(refreshDelaySeconds(120)).toBe(60);
+    expect(refreshDelaySeconds(60)).toBe(30);
+    expect(refreshDelaySeconds(0)).toBe(30);
+  });
 });
 
 describe('Dev bypass mode (localStorage override)', () => {
   beforeEach(() => {
     // Opt into the runtime dev bypass the way a developer would.
     window.localStorage.setItem('DEV_AUTH_BYPASS', 'true');
-    mockIsConfigured.mockReturnValue(false);
+  });
+
+  it('reports dev mode and a configured build', async () => {
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'));
+    expect(screen.getByTestId('mode')).toHaveTextContent('dev');
+    expect(screen.getByTestId('configured')).toHaveTextContent('true');
   });
 
   it('logs in a known dev user with a valid password and persists the session', async () => {
@@ -119,10 +202,10 @@ describe('Dev bypass mode (localStorage override)', () => {
     await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('faculty@calricula.com'));
     expect(screen.getByTestId('role')).toHaveTextContent('Faculty');
     expect(screen.getByTestId('authed')).toHaveTextContent('true');
-    // Session is persisted for reloads.
+    // Session is persisted for reloads (a mock profile, never a token).
     expect(window.sessionStorage.getItem('dev_user')).toContain('faculty@calricula.com');
-    // Real Firebase signIn must NOT have been called in bypass mode.
-    expect(mockSignIn).not.toHaveBeenCalled();
+    // No auth route was called in dev mode.
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid dev password and records an error', async () => {
@@ -160,6 +243,8 @@ describe('Dev bypass mode (localStorage override)', () => {
     await user.click(screen.getByText('logout'));
     await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('none'));
     expect(window.sessionStorage.getItem('dev_user')).toBeNull();
+    // Dev logout must not navigate to the provider sign-out route.
+    expect(assignMock).not.toHaveBeenCalled();
   });
 
   it('restores a persisted dev session from sessionStorage on mount', async () => {
@@ -189,141 +274,425 @@ describe('Dev bypass mode (localStorage override)', () => {
 
     await user.click(screen.getByText('get-token'));
     await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('dev-faculty-001'));
-    // Should NOT have reached for a real Firebase token.
-    expect(mockGetIdToken).not.toHaveBeenCalled();
+    // Should NOT have reached for a provider access token.
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('signInWithProvider is inert in dev mode', async () => {
+    const user = userEvent.setup();
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'));
+    await user.click(screen.getByText('provider-signin'));
+    expect(assignMock).not.toHaveBeenCalled();
   });
 });
 
-describe('Firebase mode', () => {
+describe('Logto mode', () => {
   beforeEach(() => {
-    // No dev bypass; Firebase reports configured.
-    mockIsConfigured.mockReturnValue(true);
+    process.env.NEXT_PUBLIC_LOGTO_ENABLED = 'true';
   });
 
-  it('fetches the user profile (JIT) when Firebase reports a signed-in user', async () => {
-    const fbUser = { getIdToken: jest.fn().mockResolvedValue('fb-id-token') };
-    mockOnAuthChange.mockImplementation((cb: (u: unknown) => void) => {
-      cb(fbUser);
-      return jest.fn();
+  it('loads the profile and the access token from the server routes', async () => {
+    const fetchMock = mockAuthRoutes({
+      session: { body: { signedIn: true, profile: PROFILE } },
+      token: { body: { access_token: 'at-1', expires_in: 3600 } },
     });
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ id: 'u1', email: 'real@calricula.com', full_name: 'Real User', role: 'Admin' }),
-    }) as unknown as typeof fetch;
 
+    const user = userEvent.setup();
     renderAuth();
 
     await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('real@calricula.com'));
+    expect(screen.getByTestId('mode')).toHaveTextContent('logto');
     expect(screen.getByTestId('role')).toHaveTextContent('Admin');
     expect(screen.getByTestId('authed')).toHaveTextContent('true');
-    // The profile request carried the firebase ID token as a bearer.
-    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
-    expect(init.headers.Authorization).toBe('Bearer fb-id-token');
+
+    // The session route is same-origin and uncacheable; no token is in the URL.
+    const [sessionUrl, sessionInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(sessionUrl).toBe('/api/auth/session');
+    expect(sessionInit).toMatchObject({ cache: 'no-store', credentials: 'same-origin' });
+
+    await user.click(screen.getByText('get-token'));
+    await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('at-1'));
+
+    // The access token is held in memory only.
+    expect(JSON.stringify(window.localStorage)).not.toContain('at-1');
+    expect(JSON.stringify(window.sessionStorage)).not.toContain('at-1');
   });
 
-  it('leaves the user unauthenticated when Firebase reports no user', async () => {
-    mockOnAuthChange.mockImplementation((cb: (u: unknown) => void) => {
-      cb(null);
-      return jest.fn();
+  it('stays signed out when the session route reports no session', async () => {
+    const fetchMock = mockAuthRoutes({ session: { body: { signedIn: false } } });
+    renderAuth();
+
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'));
+    expect(screen.getByTestId('user')).toHaveTextContent('none');
+    expect(screen.getByTestId('authed')).toHaveTextContent('false');
+    // No point asking for an access token.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces the demo-account gate (backend 403) as an error', async () => {
+    mockAuthRoutes({ session: { body: { signedIn: false, error: 'forbidden' } } });
+    renderAuth();
+
+    await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent(/demo account/i));
+    expect(screen.getByTestId('authed')).toHaveTextContent('false');
+  });
+
+  it('does not authenticate when the token route reports a dead session (204)', async () => {
+    mockAuthRoutes({
+      session: { body: { signedIn: true, profile: PROFILE } },
+      token: { status: 204 },
     });
     renderAuth();
+
     await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'));
     expect(screen.getByTestId('user')).toHaveTextContent('none');
     expect(screen.getByTestId('authed')).toHaveTextContent('false');
   });
 
-  it('does not authenticate when the profile fetch returns 401', async () => {
-    const fbUser = { getIdToken: jest.fn().mockResolvedValue('fb-id-token') };
-    mockOnAuthChange.mockImplementation((cb: (u: unknown) => void) => {
-      cb(fbUser);
-      return jest.fn();
-    });
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: false,
-      status: 401,
-      json: async () => ({ detail: 'expired' }),
-    }) as unknown as typeof fetch;
-
+  it('stays signed out when the session route itself fails', async () => {
+    mockAuthRoutes({ session: { status: 502, body: { signedIn: false } } });
     renderAuth();
+
     await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'));
-    expect(screen.getByTestId('user')).toHaveTextContent('none');
     expect(screen.getByTestId('authed')).toHaveTextContent('false');
   });
 
-  it('logs in through Firebase and loads the profile', async () => {
-    mockOnAuthChange.mockImplementation((cb: (u: unknown) => void) => {
-      cb(null);
-      return jest.fn();
+  it('getToken fetches on demand when no token is cached yet', async () => {
+    mockAuthRoutes({
+      session: { body: { signedIn: false } },
+      token: { body: { access_token: 'at-lazy', expires_in: 3600 } },
     });
-    mockSignIn.mockResolvedValue({ user: { getIdToken: jest.fn().mockResolvedValue('login-token') } });
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ id: 'u9', email: 'login@calricula.com', full_name: 'L', role: 'Faculty' }),
-    }) as unknown as typeof fetch;
+    const user = userEvent.setup();
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'));
 
+    await user.click(screen.getByText('get-token'));
+    await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('at-lazy'));
+  });
+
+  it('mints a token for a child that asks during its own mount effect, only once the session route has settled', async () => {
+    // React runs child effects before the provider's: the token fetcher must
+    // exist from the first render, not be installed by the provider's effect.
+    // But `/api/auth/session` runs the backend `/login` (which re-links a
+    // legacy account); a token request that reached the API first would make
+    // it provision a fresh placeholder account instead. So the child's request
+    // must be held until the session route has answered.
+    let releaseSession: () => void = () => {};
+    const sessionPending = new Promise<void>((resolve) => {
+      releaseSession = resolve;
+    });
+    const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/auth/session')) {
+        await sessionPending;
+        return { ok: true, status: 200, json: async () => ({ signedIn: true, profile: PROFILE }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ access_token: 'at-eager', expires_in: 3600 }),
+      };
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const urls = () => fetchMock.mock.calls.map(([url]) => String(url));
+    const tokenCalls = () => urls().filter((url) => url.includes('/api/auth/token')).length;
+
+    renderAuth(<EagerTokenConsumer />);
+
+    // The session request has left; the child's token request has not.
+    await waitFor(() => expect(urls()).toContain('/api/auth/session'));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(tokenCalls()).toBe(0);
+    expect(screen.getByTestId('eager-token')).toHaveTextContent('');
+
+    // Once /login has run server-side, the queued request goes out and the
+    // child still gets a real token — without ever waiting on `loading`.
+    await act(async () => {
+      releaseSession();
+    });
+    await waitFor(() => expect(screen.getByTestId('eager-token')).toHaveTextContent('at-eager'));
+    expect(urls()[0]).toBe('/api/auth/session');
+    expect(tokenCalls()).toBeGreaterThanOrEqual(1);
+  });
+
+  it('opens the token gate even when the session route itself fails', async () => {
+    // A network failure on /api/auth/session must not leave every queued
+    // getToken() hanging forever; the token route then fails closed on its own.
+    const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/auth/session')) throw new Error('network down');
+      return { ok: false, status: 204, json: async () => ({}) };
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    renderAuth(<EagerTokenConsumer />);
+
+    await waitFor(() => expect(screen.getByTestId('eager-token')).toHaveTextContent('null'));
+    expect(screen.getByTestId('authed')).toHaveTextContent('false');
+  });
+
+  it('refreshes the access token before it expires', async () => {
+    jest.useFakeTimers();
+    try {
+      const fetchMock = mockAuthRoutes({
+        session: { body: { signedIn: true, profile: PROFILE } },
+        token: { body: { access_token: 'at-1', expires_in: 120 } },
+      });
+      const tokenCalls = () =>
+        fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/auth/token')).length;
+
+      renderAuth();
+      await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+      expect(tokenCalls()).toBe(1);
+
+      // refreshDelaySeconds(120) === 60
+      await act(async () => {
+        jest.advanceTimersByTime(60_000);
+      });
+      await waitFor(() => expect(tokenCalls()).toBe(2));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('signs the user out when a scheduled refresh comes back non-200', async () => {
+    jest.useFakeTimers();
+    try {
+      const spec: RouteSpec = {
+        session: { body: { signedIn: true, profile: PROFILE } },
+        token: { body: { access_token: 'at-1', expires_in: 120 } },
+      };
+      mockAuthRoutes(spec);
+
+      renderAuth();
+      await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+
+      // The session died while the tab was open.
+      spec.token = { status: 204 };
+      await act(async () => {
+        jest.advanceTimersByTime(60_000);
+      });
+
+      await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('false'));
+      expect(screen.getByTestId('user')).toHaveTextContent('none');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('re-mints a token that has entered its refresh margin', async () => {
+    // A frozen tab's timer never fires, so getToken must notice staleness too.
+    const spec: RouteSpec = {
+      session: { body: { signedIn: true, profile: PROFILE } },
+      token: { body: { access_token: 'at-old', expires_in: 40 } },
+    };
+    const fetchMock = mockAuthRoutes(spec);
+    const user = userEvent.setup();
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+
+    const before = fetchMock.mock.calls.length;
+    // refreshDelaySeconds(40) === 30, so the cached copy is stale by now.
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 31_000);
+    try {
+      spec.token = { body: { access_token: 'at-new', expires_in: 3600 } };
+
+      await user.click(screen.getByText('get-token'));
+      await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('at-new'));
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(before);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('reports a backend outage rather than failing silently', async () => {
+    mockAuthRoutes({ session: { status: 502, body: { signedIn: false, error: 'profile_unavailable' } } });
+    renderAuth();
+
+    await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent(/Could not reach the Calricula server/i));
+    expect(screen.getByTestId('authed')).toHaveTextContent('false');
+  });
+
+  it('reports a server that advertises Logto but is not configured', async () => {
+    mockAuthRoutes({ session: { status: 404, body: { error: 'logto_not_configured' } } });
+    renderAuth();
+
+    await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent(/not configured/i));
+  });
+
+  it('refuses password sign-in', async () => {
+    mockAuthRoutes({ session: { body: { signedIn: false } } });
     const user = userEvent.setup();
     renderAuth();
     await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'));
 
     await user.click(screen.getByText('good-login'));
-    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('login@calricula.com'));
-    expect(mockSignIn).toHaveBeenCalledWith('faculty@calricula.com', 'Test123!');
+    await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent(/Password sign-in is disabled/i));
+    expect(screen.getByTestId('authed')).toHaveTextContent('false');
   });
 
-  it('records and rethrows an error when Firebase login fails', async () => {
-    mockOnAuthChange.mockImplementation((cb: (u: unknown) => void) => {
-      cb(null);
-      return jest.fn();
-    });
-    mockSignIn.mockRejectedValue(new Error('auth/wrong-password'));
-
+  it('signInWithProvider navigates to the server sign-in route', async () => {
+    mockAuthRoutes({ session: { body: { signedIn: false } } });
     const user = userEvent.setup();
     renderAuth();
     await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'));
 
-    await user.click(screen.getByText('good-login'));
-    await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent('auth/wrong-password'));
-    expect(screen.getByTestId('authed')).toHaveTextContent('false');
+    await user.click(screen.getByText('provider-signin'));
+    expect(assignMock).toHaveBeenCalledWith('/sign-in');
   });
 
-  it('logout calls Firebase signOut and clears the user', async () => {
-    const fbUser = { getIdToken: jest.fn().mockResolvedValue('fb-id-token') };
-    mockOnAuthChange.mockImplementation((cb: (u: unknown) => void) => {
-      cb(fbUser);
-      return jest.fn();
+  it('logout clears state and navigates to the server sign-out route', async () => {
+    mockAuthRoutes({
+      session: { body: { signedIn: true, profile: PROFILE } },
+      token: { body: { access_token: 'at-1', expires_in: 3600 } },
     });
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ id: 'u1', email: 'real@calricula.com', full_name: 'R', role: 'Admin' }),
-    }) as unknown as typeof fetch;
-    mockSignOut.mockResolvedValue(undefined);
-
     const user = userEvent.setup();
     renderAuth();
     await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
 
     await user.click(screen.getByText('logout'));
     await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('none'));
-    expect(mockSignOut).toHaveBeenCalled();
+    expect(assignMock).toHaveBeenCalledWith('/sign-out');
+
+    // The cached token is dropped, so a later getToken re-asks the server
+    // rather than handing out a token the session no longer backs.
+    mockAuthRoutes({ token: { status: 204 } });
+    await user.click(screen.getByText('get-token'));
+    await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('null'));
   });
 
-  it('getToken delegates to Firebase getIdToken', async () => {
-    mockOnAuthChange.mockImplementation((cb: (u: unknown) => void) => {
-      cb(null);
-      return jest.fn();
+  it('getToken("applicationx") fetches the resource-scoped route and caches it separately from the calricula token', async () => {
+    const fetchMock = mockAuthRoutes({
+      session: { body: { signedIn: true, profile: PROFILE } },
+      token: { body: { access_token: 'at-calricula', expires_in: 3600 } },
+      applicationxToken: { body: { access_token: 'at-appx', expires_in: 3600 } },
     });
-    mockGetIdToken.mockResolvedValue('fresh-token');
+    const user = userEvent.setup();
+    renderAuth();
 
+    await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+
+    await user.click(screen.getByText('get-app-token'));
+    await waitFor(() => expect(screen.getByTestId('app-token')).toHaveTextContent('at-appx'));
+
+    const appTokenCall = fetchMock.mock.calls.find(([url]) =>
+      String(url).includes('/api/auth/token?resource=applicationx')
+    );
+    expect(appTokenCall).toBeDefined();
+
+    await user.click(screen.getByText('get-token'));
+    await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('at-calricula'));
+
+    // Both stay cached independently — asking for one did not clobber the other.
+    expect(screen.getByTestId('app-token')).toHaveTextContent('at-appx');
+  });
+
+  it('getToken("applicationx") returns null on 204 without signing the user out', async () => {
+    mockAuthRoutes({
+      session: { body: { signedIn: true, profile: PROFILE } },
+      token: { body: { access_token: 'at-calricula', expires_in: 3600 } },
+      applicationxToken: { status: 204 },
+    });
+    const user = userEvent.setup();
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+
+    await user.click(screen.getByText('get-app-token'));
+    await waitFor(() => expect(screen.getByTestId('app-token')).toHaveTextContent('null'));
+
+    // A missing/dead ApplicationX resource must not break Calricula sign-in.
+    expect(screen.getByTestId('authed')).toHaveTextContent('true');
+    expect(screen.getByTestId('user')).toHaveTextContent('real@calricula.com');
+  });
+
+  it('getToken("applicationx") returns null on 404 (resource not configured) without signing the user out', async () => {
+    mockAuthRoutes({
+      session: { body: { signedIn: true, profile: PROFILE } },
+      token: { body: { access_token: 'at-calricula', expires_in: 3600 } },
+      applicationxToken: { status: 404, body: { error: 'resource_not_configured' } },
+    });
+    const user = userEvent.setup();
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+
+    await user.click(screen.getByText('get-app-token'));
+    await waitFor(() => expect(screen.getByTestId('app-token')).toHaveTextContent('null'));
+
+    expect(screen.getByTestId('authed')).toHaveTextContent('true');
+  });
+
+  it('does not schedule a background refresh for the applicationx token', async () => {
+    jest.useFakeTimers();
+    try {
+      const fetchMock = mockAuthRoutes({
+        session: { body: { signedIn: true, profile: PROFILE } },
+        token: { body: { access_token: 'at-calricula', expires_in: 3600 } },
+        applicationxToken: { body: { access_token: 'at-appx', expires_in: 60 } },
+      });
+      renderAuth();
+      await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+
+      const timersAfterCalricula = jest.getTimerCount();
+
+      await act(async () => {
+        fireEvent.click(screen.getByText('get-app-token'));
+        await Promise.resolve();
+      });
+      await waitFor(() => expect(screen.getByTestId('app-token')).toHaveTextContent('at-appx'));
+
+      // Minting the on-demand ApplicationX token adds no scheduled timer.
+      expect(jest.getTimerCount()).toBe(timersAfterCalricula);
+
+      const appTokenCalls = () =>
+        fetchMock.mock.calls.filter(([url]) => String(url).includes('resource=applicationx')).length;
+      expect(appTokenCalls()).toBe(1);
+
+      await act(async () => {
+        jest.advanceTimersByTime(120_000);
+      });
+      // No background refresh ever fires for the applicationx resource.
+      expect(appTokenCalls()).toBe(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('No provider configured', () => {
+  const realNodeEnv = process.env.NODE_ENV;
+
+  afterEach(() => {
+    Object.defineProperty(process.env, 'NODE_ENV', { configurable: true, value: realNodeEnv });
+  });
+
+  it('falls back to the dev picker in a non-production build', async () => {
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId('mode')).toHaveTextContent('dev'));
+    expect(window.localStorage.getItem('DEV_AUTH_BYPASS')).toBe('true');
+  });
+
+  it('fails closed in a production build (no bypass, nobody signed in)', async () => {
+    Object.defineProperty(process.env, 'NODE_ENV', { configurable: true, value: 'production' });
+    renderAuth();
+
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'));
+    expect(screen.getByTestId('mode')).toHaveTextContent('none');
+    expect(screen.getByTestId('configured')).toHaveTextContent('false');
+    expect(screen.getByTestId('authed')).toHaveTextContent('false');
+    expect(window.localStorage.getItem('DEV_AUTH_BYPASS')).toBeNull();
+  });
+
+  it('getToken yields nothing when no provider is configured', async () => {
+    Object.defineProperty(process.env, 'NODE_ENV', { configurable: true, value: 'production' });
     const user = userEvent.setup();
     renderAuth();
     await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'));
 
     await user.click(screen.getByText('get-token'));
-    await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('fresh-token'));
-    expect(mockGetIdToken).toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('null'));
   });
 });
 

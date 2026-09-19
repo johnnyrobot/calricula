@@ -53,9 +53,19 @@ class Settings(BaseSettings):
     # e.g. ALLOWED_HOSTS='["calricula.com","api.calricula.com"]'.
     ALLOWED_HOSTS: List[str] = ["*"]
 
-    # Firebase
-    FIREBASE_PROJECT_ID: Optional[str] = None
-    FIREBASE_SERVICE_ACCOUNT_PATH: Optional[str] = None
+    # OIDC (Logto) -- ADR-0001. The only authentication provider; tokens are
+    # verified in app/core/oidc.py and consumed by app/core/deps.py.
+    OIDC_ISSUER: Optional[str] = None  # https://<logto-endpoint>/oidc
+    OIDC_AUDIENCE: Optional[str] = None  # Calricula's own API resource indicator
+    OIDC_CLIENT_ID: Optional[str] = None  # Calricula web app id; the ID token's `aud`
+    OIDC_JWKS_URL: Optional[str] = None  # defaults to OIDC_ISSUER + "/jwks"
+    OIDC_ALGORITHMS: List[str] = ["ES384", "RS256"]
+
+    # One-time adoption of a pre-migration user row (auth_issuer IS NULL) by a
+    # Logto subject, on a verified email match, at POST /api/auth/login.
+    # Deployers should set this to false once every Firebase-era user has
+    # signed in at least once: it narrows sign-in to subject matching alone.
+    AUTH_LEGACY_RELINK: bool = True
 
     # Development/Testing
     AUTH_DEV_MODE: bool = False  # Enable dev auth bypass (for automated testing)
@@ -124,6 +134,33 @@ class Settings(BaseSettings):
                     f"{self.ALLOWED_HOSTS!r}). Set the real trusted hostnames to "
                     "defend against Host-header attacks, e.g. "
                     "ALLOWED_HOSTS='[\"calricula.com\",\"api.calricula.com\"]'."
+                )
+
+            missing_oidc = [
+                name
+                for name, value in (
+                    ("OIDC_ISSUER", self.OIDC_ISSUER),
+                    ("OIDC_AUDIENCE", self.OIDC_AUDIENCE),
+                    ("OIDC_CLIENT_ID", self.OIDC_CLIENT_ID),
+                )
+                if not value
+            ]
+            if missing_oidc:
+                raise ValueError(
+                    "Refusing to start in production without OIDC configured: "
+                    f"missing {', '.join(missing_oidc)}. Set these to the Logto "
+                    "tenant issuer (OIDC_ISSUER), Calricula's own API resource "
+                    "indicator (OIDC_AUDIENCE), and Calricula's web application "
+                    "id (OIDC_CLIENT_ID)."
+                )
+
+            if self.OIDC_AUDIENCE == self.OIDC_CLIENT_ID:
+                raise ValueError(
+                    "Refusing to start in production with OIDC_AUDIENCE equal to "
+                    "OIDC_CLIENT_ID: the API resource indicator must differ from "
+                    "the client id. If they are the same value, an ID token "
+                    "(minted for the browser) satisfies the access-token "
+                    "audience check and would authorize API calls."
                 )
         return self
 

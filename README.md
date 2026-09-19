@@ -63,7 +63,7 @@ A traditional academic "catalog of record" interface — parchment ground, a dee
 | Frontend | Next.js 15 (App Router) + Tailwind CSS + Academic Design System |
 | Backend | Python FastAPI + PostgreSQL + SQLModel ORM |
 | AI | Google Gemini 2.5 Flash with File Search API for RAG |
-| Auth | Firebase Authentication (Email/Password) |
+| Auth | Logto (OIDC) |
 | Deployment | Docker Compose |
 
 ---
@@ -147,26 +147,33 @@ GOOGLE_API_KEY=AIzaSy...your-api-key
 GEMINI_FILE_SEARCH_STORE_NAME=calricula-knowledge-base
 ```
 
-#### Firebase Authentication
+#### Logto / OIDC Authentication
+
+Full tenant setup (application, API resource, redirect URIs) is in
+[`docs/AUTH-LOGTO.md`](docs/AUTH-LOGTO.md). Summary of the variables:
 
 ```env
-# Get from: Firebase Console > Project Settings > General
-FIREBASE_PROJECT_ID=your-project-id
+# Backend — Logto tenant issuer and Calricula's own API resource
+OIDC_ISSUER=https://your-tenant.logto.app/oidc
+OIDC_AUDIENCE=https://api.calricula.local
+OIDC_CLIENT_ID=your-logto-web-app-id
 
-# Path to service account key (download from Firebase Console)
-FIREBASE_SERVICE_ACCOUNT_PATH=./serviceAccountKey.json
+# Frontend — server-only, never prefixed NEXT_PUBLIC_
+LOGTO_ENDPOINT=https://your-tenant.logto.app/
+LOGTO_APP_ID=your-logto-web-app-id
+LOGTO_APP_SECRET=your-logto-app-secret
+LOGTO_COOKIE_SECRET=<openssl rand -base64 32>
+LOGTO_API_RESOURCE=https://api.calricula.local
 
-# Frontend config (get from Firebase Console > Your Apps > Web App)
-NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSy...
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+# Frontend — advertises Logto sign-in to the browser
+NEXT_PUBLIC_LOGTO_ENABLED=true
 ```
 
 ### Optional Variables
 
 #### Development Mode Auth Bypass
 
-For local development without Firebase setup:
+For local development without a Logto tenant:
 
 ```env
 # Enable dev mode auth bypass (creates mock user sessions)
@@ -201,45 +208,34 @@ DB_NAME=calricula
 
 ---
 
-## Firebase Setup
+## Logto Setup
 
-### 1. Create Firebase Project
+Calricula authenticates through [Logto](https://logto.io), a self-hostable
+OIDC provider (decision record: ADR-0001, summarised in
+[`docs/AUTH-LOGTO.md`](docs/AUTH-LOGTO.md) §0). The full walkthrough —
+creating the tenant, the "Traditional web" application, the API resource,
+connector email verification, and demo-mode tenant requirements — is in
+**[`docs/AUTH-LOGTO.md`](docs/AUTH-LOGTO.md)**. In short:
 
-1. Go to [Firebase Console](https://console.firebase.google.com)
-2. Click "Add project" and follow the wizard
-3. Enable Google Analytics (optional)
+1. Create a Logto tenant (self-hosted or Logto Cloud).
+2. Create a **"Traditional web" application** for Calricula with redirect URI
+   `http://localhost:3001/callback` and post sign-out URI
+   `http://localhost:3001/` (adjust for your domain in production).
+3. Create an **API resource** whose indicator becomes `OIDC_AUDIENCE` /
+   `LOGTO_API_RESOURCE`, e.g. `https://api.calricula.local`.
+4. Set the backend (`OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_CLIENT_ID`) and
+   frontend (`LOGTO_ENDPOINT`, `LOGTO_APP_ID`, `LOGTO_APP_SECRET`,
+   `LOGTO_COOKIE_SECRET`, `LOGTO_API_RESOURCE`) variables from `.env.example`.
+5. For local work with no tenant at all, set `AUTH_DEV_MODE=true` and
+   `NEXT_PUBLIC_AUTH_DEV_MODE=true` instead — no Logto setup required.
 
-### 2. Enable Email/Password Authentication
-
-1. Navigate to **Authentication** > **Sign-in method**
-2. Click **Email/Password** and enable it
-3. Click **Save**
-
-### 3. Download Service Account Key
-
-1. Go to **Project Settings** > **Service Accounts**
-2. Click **Generate New Private Key**
-3. Save as `serviceAccountKey.json` in the project root
-4. **Security**: Never commit this file to git (it's in `.gitignore`)
-
-### 4. Get Web App Configuration
-
-1. Go to **Project Settings** > **Your Apps**
-2. Click **Add App** > **Web** (</> icon)
-3. Register your app with a nickname
-4. Copy the `firebaseConfig` values to your `.env`:
-
-```env
-NEXT_PUBLIC_FIREBASE_API_KEY=<apiKey>
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=<authDomain>
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=<projectId>
-```
-
-### 5. Create Test Users (Optional)
-
-1. Go to **Authentication** > **Users**
-2. Click **Add User**
-3. Create users matching the test credentials above
+The seeded test users (`faculty@`, `chair@`, `admin@calricula.com`, ...) exist
+for dev mode only. They are stamped `auth_issuer = 'dev'`, so a Logto identity
+with one of those addresses gets its own fresh account rather than adopting
+the seeded one; do not create them in a production tenant, and do not load
+the seeds into a production database (`docs/AUTH-LOGTO.md` §6). Real users
+sign in through your tenant and are provisioned on first sign-in; assign
+roles in Calricula afterwards.
 
 ---
 
@@ -342,8 +338,14 @@ docker-compose -f docker-compose.prod.yml up -d
 # Run database migrations
 docker-compose -f docker-compose.prod.yml exec backend alembic upgrade head
 
-# Seed initial data (first time only)
-docker-compose -f docker-compose.prod.yml exec backend python -m seeds.seed_all
+# Load reference data (first time only). Not `seeds.seed_all`: that one also
+# creates the dev test users, courses and demo data (docs/AUTH-LOGTO.md §6).
+# seed_departments loads a reference division/department list; courses require
+# a department, so edit that list for your college first (the entries are in
+# backend/seeds/seed_departments.py) or maintain the tables directly afterwards.
+docker-compose -f docker-compose.prod.yml exec backend python -m seeds.seed_departments
+docker-compose -f docker-compose.prod.yml exec backend python -m seeds.seed_top_codes
+docker-compose -f docker-compose.prod.yml exec backend python -m seeds.seed_ccn_standards
 
 # View logs
 docker-compose -f docker-compose.prod.yml logs -f
@@ -360,16 +362,18 @@ Ensure these are set for production:
 ENVIRONMENT=production
 DB_PASSWORD=<strong-unique-password>
 GOOGLE_API_KEY=<production-api-key>
-FIREBASE_PROJECT_ID=<production-project>
+OIDC_ISSUER=<production-logto-tenant-issuer>
+OIDC_AUDIENCE=<production-api-resource-indicator>
+OIDC_CLIENT_ID=<production-logto-web-app-id>
 ```
 
 ### Security Checklist
 
 - [ ] Use strong, unique database password
-- [ ] Never commit `serviceAccountKey.json` to git
+- [ ] Never commit `.env` (or any Logto app secret / cookie secret) to git
 - [ ] Use HTTPS in production (configure nginx reverse proxy)
 - [ ] Set `NEXT_PUBLIC_AUTH_DEV_MODE=false` in production
-- [ ] Review Firebase security rules
+- [ ] Review the Logto tenant's connectors, MFA policy, and redirect URIs (`docs/AUTH-LOGTO.md`)
 - [ ] Enable rate limiting for AI endpoints
 
 ---
@@ -394,21 +398,31 @@ docker ps | grep postgres
 - Verify `POSTGRES_PASSWORD` matches in docker-compose and DATABASE_URL
 - For Docker, try removing the volume and recreating: `docker-compose down -v && docker-compose up`
 
-### Firebase Authentication Issues
+### Logto (OIDC) Authentication Issues
 
-**Error**: `Firebase: Error (auth/api-key-not-valid)`
+See the full troubleshooting table in [`docs/AUTH-LOGTO.md`](docs/AUTH-LOGTO.md). Common cases:
 
-- Verify `NEXT_PUBLIC_FIREBASE_API_KEY` is correct
-- Check the API key is not restricted to wrong domains
+**Error**: API returns `503 authentication not configured` / `authentication temporarily unavailable`
 
-**Error**: `Firebase ID token has invalid signature`
+- The backend has no `OIDC_ISSUER`/`OIDC_AUDIENCE` set, or can't reach the
+  Logto JWKS endpoint. Inside Docker, set `OIDC_JWKS_URL` to the Logto
+  service's internal address rather than relying on `localhost`.
 
-- Ensure `FIREBASE_PROJECT_ID` matches your Firebase project
-- Verify `serviceAccountKey.json` is from the same project
+**Error**: API returns `401 invalid or expired token`
 
-**Workaround for development without Firebase**:
+- The access token expired, was signed with an algorithm not in
+  `OIDC_ALGORITHMS`, or its `aud` doesn't match `OIDC_AUDIENCE`.
+
+**Error**: Backend refuses to boot with `OIDC_AUDIENCE equal to OIDC_CLIENT_ID`
+
+- `OIDC_AUDIENCE` (the API resource) and `OIDC_CLIENT_ID` (the web app id)
+  must be different Logto resources; using the same value would let an ID
+  token satisfy the access-token audience check.
+
+**Workaround for development without a Logto tenant**:
 
 ```env
+AUTH_DEV_MODE=true
 NEXT_PUBLIC_AUTH_DEV_MODE=true
 ```
 
