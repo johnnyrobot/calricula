@@ -53,9 +53,18 @@ class Settings(BaseSettings):
     # e.g. ALLOWED_HOSTS='["calricula.com","api.calricula.com"]'.
     ALLOWED_HOSTS: List[str] = ["*"]
 
-    # Firebase
+    # Firebase (removed in Task 2 of the Logto migration, ADR-0001)
     FIREBASE_PROJECT_ID: Optional[str] = None
     FIREBASE_SERVICE_ACCOUNT_PATH: Optional[str] = None
+
+    # OIDC (Logto) -- ADR-0001: replaces Firebase Authentication. Verified in
+    # app/core/oidc.py, added next to firebase.py; Task 2 switches
+    # get_current_user over to it and deletes the Firebase settings above.
+    OIDC_ISSUER: Optional[str] = None  # https://<logto-endpoint>/oidc
+    OIDC_AUDIENCE: Optional[str] = None  # Calricula's own API resource indicator
+    OIDC_CLIENT_ID: Optional[str] = None  # Calricula web app id; the ID token's `aud`
+    OIDC_JWKS_URL: Optional[str] = None  # defaults to OIDC_ISSUER + "/jwks"
+    OIDC_ALGORITHMS: List[str] = ["ES384", "RS256"]
 
     # Development/Testing
     AUTH_DEV_MODE: bool = False  # Enable dev auth bypass (for automated testing)
@@ -124,6 +133,24 @@ class Settings(BaseSettings):
                     f"{self.ALLOWED_HOSTS!r}). Set the real trusted hostnames to "
                     "defend against Host-header attacks, e.g. "
                     "ALLOWED_HOSTS='[\"calricula.com\",\"api.calricula.com\"]'."
+                )
+
+            missing_oidc = [
+                name
+                for name, value in (
+                    ("OIDC_ISSUER", self.OIDC_ISSUER),
+                    ("OIDC_AUDIENCE", self.OIDC_AUDIENCE),
+                    ("OIDC_CLIENT_ID", self.OIDC_CLIENT_ID),
+                )
+                if not value
+            ]
+            if missing_oidc:
+                raise ValueError(
+                    "Refusing to start in production without OIDC configured: "
+                    f"missing {', '.join(missing_oidc)}. Set these to the Logto "
+                    "tenant issuer (OIDC_ISSUER), Calricula's own API resource "
+                    "indicator (OIDC_AUDIENCE), and Calricula's web application "
+                    "id (OIDC_CLIENT_ID)."
                 )
         return self
 

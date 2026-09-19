@@ -192,13 +192,17 @@ def test_production_rejects_both_flags():
 
 @pytest.mark.unit
 def test_production_allows_flags_off():
-    # Real ALLOWED_HOSTS are required in production (wildcard fails closed, see
-    # the ALLOWED_HOSTS guard tests below), so supply concrete hostnames here.
+    # Real ALLOWED_HOSTS and OIDC settings are required in production
+    # (wildcard hosts and unconfigured OIDC both fail closed, see the guard
+    # tests below), so supply concrete values for both here.
     s = Settings(
         ENVIRONMENT="production",
         AUTH_DEV_MODE=False,
         DEMO_MODE=False,
         ALLOWED_HOSTS=["calricula.com", "api.calricula.com"],
+        OIDC_ISSUER="https://tenant.logto.app/oidc",
+        OIDC_AUDIENCE="https://api.calricula.com",
+        OIDC_CLIENT_ID="calricula-web-app",
     )
     assert s.ENVIRONMENT == "production"
     assert s.AUTH_DEV_MODE is False
@@ -264,8 +268,53 @@ def test_production_allows_real_allowed_hosts():
         AUTH_DEV_MODE=False,
         DEMO_MODE=False,
         ALLOWED_HOSTS=["calricula.com", "api.calricula.com"],
+        OIDC_ISSUER="https://tenant.logto.app/oidc",
+        OIDC_AUDIENCE="https://api.calricula.com",
+        OIDC_CLIENT_ID="calricula-web-app",
     )
     assert s.ALLOWED_HOSTS == ["calricula.com", "api.calricula.com"]
+
+
+# --- OIDC fail-closed guard (ADR-0001 Logto migration) -----------------------
+
+
+@pytest.mark.unit
+def test_production_rejects_missing_oidc_settings():
+    """Production refuses to boot without OIDC_ISSUER/AUDIENCE/CLIENT_ID set."""
+    with pytest.raises(ValidationError) as exc:
+        Settings(
+            ENVIRONMENT="production",
+            AUTH_DEV_MODE=False,
+            DEMO_MODE=False,
+            ALLOWED_HOSTS=["calricula.com"],
+        )
+    msg = str(exc.value)
+    assert "OIDC_ISSUER" in msg and "OIDC_AUDIENCE" in msg and "OIDC_CLIENT_ID" in msg
+
+
+@pytest.mark.unit
+def test_production_rejects_partial_oidc_settings():
+    """Production refuses to boot with only some of the OIDC settings set."""
+    with pytest.raises(ValidationError) as exc:
+        Settings(
+            ENVIRONMENT="production",
+            AUTH_DEV_MODE=False,
+            DEMO_MODE=False,
+            ALLOWED_HOSTS=["calricula.com"],
+            OIDC_ISSUER="https://tenant.logto.app/oidc",
+        )
+    msg = str(exc.value)
+    assert "OIDC_AUDIENCE" in msg and "OIDC_CLIENT_ID" in msg
+
+
+@pytest.mark.unit
+def test_development_allows_missing_oidc_settings():
+    """Non-production environments don't require OIDC to be configured (the
+    dev-* token map in oidc.resolve_dev_token covers local dev/test)."""
+    s = Settings(ENVIRONMENT="development", AUTH_DEV_MODE=True)
+    assert s.OIDC_ISSUER is None
+    assert s.OIDC_AUDIENCE is None
+    assert s.OIDC_CLIENT_ID is None
 
 
 @pytest.mark.unit

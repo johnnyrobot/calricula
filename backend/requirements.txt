@@ -16,8 +16,9 @@ alembic==1.13.1
 psycopg2-binary==2.9.9
 
 # Authentication
-firebase-admin==7.4.0
+firebase-admin==7.4.0  # removed in Task 2 of the Logto migration (ADR-0001)
 python-jose[cryptography]==3.4.0  # CVE-2024-33663/-33664 fixed >=3.4.0
+PyJWT[crypto]==2.14.0  # OIDC (Logto) access/ID token verification via JWKS
 
 # AI Integration
 google-genai>=1.0.0
