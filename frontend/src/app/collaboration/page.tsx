@@ -10,6 +10,7 @@
 // answer) hands off to WorkspaceSelector, which routes to a program page.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import PageShell from '@/components/layout/PageShell';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApplicationXStatus } from '@/hooks/useApplicationXStatus';
@@ -22,8 +23,11 @@ const ROOT_CONTEXT_ID = 'collaboration:root';
 type PageResolution = HostResolution | { state: 'loading' };
 
 export default function CollaborationPage() {
-  const { getToken, isAuthenticated, user } = useAuth();
+  const { getToken, isAuthenticated, loading: authLoading, user } = useAuth();
   const { status } = useApplicationXStatus();
+  // `null` status means "not known yet" — only a definite `enabled: false`
+  // short-circuits the broker call.
+  const embedDisabled = status !== null && !status.enabled;
   const [resolution, setResolution] = useState<PageResolution>({ state: 'loading' });
 
   // `getToken` is recreated on every AuthProvider render; read it through a
@@ -63,21 +67,22 @@ export default function CollaborationPage() {
   }, []);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!isAuthenticated || embedDisabled) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; resolve sets loading/result state (no data-fetch library in use)
     resolve();
     return () => controller.current?.abort();
-  }, [isAuthenticated, resolve]);
+  }, [isAuthenticated, embedDisabled, resolve]);
 
-  // Sign-out: abort in-flight work and never show stale host data.
+  // Sign-out: abort in-flight work and never show stale host data. Skipped
+  // while auth is still resolving on first mount (`user` is null then too).
   useEffect(() => {
-    if (user) return;
+    if (user || authLoading) return;
     controller.current?.abort();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs host state to the auth external condition
     setResolution({ state: 'session_expired', message: 'You have been signed out.', retryable: false });
-  }, [user]);
+  }, [user, authLoading]);
 
-  const showSelector = resolution.state === 'ready' || resolution.state === 'mapping_required';
+  const showSelector = !embedDisabled && (resolution.state === 'ready' || resolution.state === 'mapping_required');
 
   return (
     <PageShell>
@@ -87,7 +92,18 @@ export default function CollaborationPage() {
           Employer and career workspaces are provided by ApplicationX and scoped to a program.
         </p>
 
-        {resolution.state === 'loading' && (
+        {embedDisabled && (
+          <section className="luminous-card mt-6" aria-labelledby="embed-disabled-heading">
+            <h2 id="embed-disabled-heading" className="font-serif text-lg text-ink">
+              Employer &amp; Career Collaboration is not enabled for this college.
+            </h2>
+            <Link href="/programs" className="luminous-button-secondary mt-4 inline-flex">
+              Programs
+            </Link>
+          </section>
+        )}
+
+        {!embedDisabled && resolution.state === 'loading' && (
           <p role="status" className="mt-6 text-sm text-muted">
             Checking workspace access…
           </p>
@@ -95,7 +111,10 @@ export default function CollaborationPage() {
 
         {showSelector && <WorkspaceSelector />}
 
-        {!showSelector && resolution.state !== 'loading' && (
+        {!embedDisabled &&
+          resolution.state !== 'loading' &&
+          resolution.state !== 'ready' &&
+          resolution.state !== 'mapping_required' && (
           <HostStatePanel resolution={resolution} onRetry={resolve} standaloneUrl={status?.standalone_url ?? null} />
         )}
       </div>

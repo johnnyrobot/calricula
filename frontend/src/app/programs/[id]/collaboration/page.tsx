@@ -5,11 +5,13 @@
 // ===========================================
 // context_id = `${program.id}:${program.updated_at}` — a program edit
 // produces a new context, which is how the host detects `context_stale`.
-// One AbortController per context; a late response for a superseded
+// Every load (mount, Retry) refetches the program so the context is always
+// current. One AbortController per load; a late response for a superseded
 // context is ignored.
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import PageShell from '@/components/layout/PageShell';
 import { useAuth } from '@/contexts/AuthContext';
 import { useApplicationXStatus } from '@/hooks/useApplicationXStatus';
@@ -28,8 +30,11 @@ const SESSION_EXPIRED: HostResolution = {
 
 export default function ProgramCollaborationPage() {
   const { id } = useParams<{ id: string }>();
-  const { getToken, isAuthenticated, user } = useAuth();
+  const { getToken, isAuthenticated, loading: authLoading, user } = useAuth();
   const { status } = useApplicationXStatus();
+  // `null` status means "not known yet" — only a definite `enabled: false`
+  // short-circuits the broker call.
+  const embedDisabled = status !== null && !status.enabled;
   const [program, setProgram] = useState<ProgramDetail | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [resolution, setResolution] = useState<PageResolution>({ state: 'loading' });
@@ -40,15 +45,21 @@ export default function ProgramCollaborationPage() {
   useEffect(() => {
     getTokenRef.current = getToken;
   });
+  // The context we most recently asked for; results for any other context
+  // (a superseded load, or after sign-out) are dropped.
   const latestContext = useRef<string>('');
   const controller = useRef<AbortController | null>(null);
 
-  const resolve = useCallback(async (p: ProgramDetail) => {
-    const contextId = `${p.id}:${p.updated_at}`;
+  // Refetch the program, then resolve the host context keyed on the fresh
+  // `updated_at`. A program edit is a new context, so Retry (e.g. after
+  // `context_stale`) must go through here rather than reuse the cached
+  // program. One AbortController per load; starting a new load aborts the
+  // previous one.
+  const load = useCallback(async () => {
     controller.current?.abort();
     const ctl = new AbortController();
     controller.current = ctl;
-    latestContext.current = contextId;
+    setLoadError(null);
     setResolution({ state: 'loading' });
 
     const [calricula, applicationx] = await Promise.all([
@@ -60,6 +71,21 @@ export default function ProgramCollaborationPage() {
       setResolution(SESSION_EXPIRED);
       return;
     }
+
+    let p: ProgramDetail;
+    try {
+      api.setToken(calricula);
+      p = await api.getProgram(id);
+    } catch (err) {
+      if (ctl.signal.aborted) return;
+      setLoadError(err instanceof Error ? err.message : 'Failed to load program');
+      return;
+    }
+    if (ctl.signal.aborted) return;
+    setProgram(p);
+
+    const contextId = `${p.id}:${p.updated_at}`;
+    latestContext.current = contextId;
     try {
       const r = await resolveContext(
         { calricula, applicationx },
@@ -73,39 +99,24 @@ export default function ProgramCollaborationPage() {
         setResolution({ state: 'service_unavailable', message: 'ApplicationX is unavailable right now.', retryable: true });
       }
     }
-  }, []);
+  }, [id]);
 
-  // Load the program (title + updated_at for the context id), then resolve.
   useEffect(() => {
-    if (!isAuthenticated || !id) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getTokenRef.current();
-        if (token) api.setToken(token);
-        const p = await api.getProgram(id);
-        if (cancelled) return;
-        setProgram(p);
-        resolve(p);
-      } catch (err) {
-        if (cancelled) return;
-        setLoadError(err instanceof Error ? err.message : 'Failed to load program');
-      }
-    })();
-    return () => {
-      cancelled = true;
-      controller.current?.abort();
-    };
-  }, [id, isAuthenticated, resolve]);
+    if (!isAuthenticated || !id || embedDisabled) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- manual data-fetch effect; load sets loading/result state (no data-fetch library in use)
+    load();
+    return () => controller.current?.abort();
+  }, [id, isAuthenticated, embedDisabled, load]);
 
-  // Sign-out: abort in-flight work and never show stale host data.
+  // Sign-out: abort in-flight work and never show stale host data. Skipped
+  // while auth is still resolving on first mount (`user` is null then too).
   useEffect(() => {
-    if (user) return;
+    if (user || authLoading) return;
     controller.current?.abort();
     latestContext.current = '';
     // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs host state to the auth external condition
     setResolution(SESSION_EXPIRED);
-  }, [user]);
+  }, [user, authLoading]);
 
   const standaloneUrl = status?.standalone_url ?? null;
 
@@ -114,9 +125,23 @@ export default function ProgramCollaborationPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="font-serif text-2xl text-ink">Employer &amp; Career Collaboration</h1>
 
+        {embedDisabled && (
+          <section className="luminous-card mt-6" aria-labelledby="embed-disabled-heading">
+            <h2 id="embed-disabled-heading" className="font-serif text-lg text-ink">
+              Employer &amp; Career Collaboration is not enabled for this college.
+            </h2>
+            <Link href={`/programs/${id}`} className="luminous-button-secondary mt-4 inline-flex">
+              Back to program
+            </Link>
+          </section>
+        )}
+
         {loadError && (
           <div role="alert" className="luminous-card mt-6">
             <p className="text-sm text-ink">Could not load this program: {loadError}</p>
+            <button type="button" onClick={load} className="luminous-button-secondary mt-4">
+              Retry
+            </button>
           </div>
         )}
 
@@ -130,18 +155,14 @@ export default function ProgramCollaborationPage() {
           />
         )}
 
-        {!loadError && resolution.state === 'loading' && (
+        {!embedDisabled && !loadError && resolution.state === 'loading' && (
           <p role="status" className="mt-6 text-sm text-muted">
             Checking workspace access…
           </p>
         )}
 
-        {resolution.state !== 'loading' && resolution.state !== 'ready' && (
-          <HostStatePanel
-            resolution={resolution}
-            onRetry={() => program && resolve(program)}
-            standaloneUrl={standaloneUrl}
-          />
+        {!embedDisabled && resolution.state !== 'loading' && resolution.state !== 'ready' && (
+          <HostStatePanel resolution={resolution} onRetry={load} standaloneUrl={standaloneUrl} />
         )}
 
         {resolution.state === 'ready' && (
