@@ -93,7 +93,8 @@ def faculty_user(db_session) -> User:
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"test_faculty_{unique_id}@test.edu",
-        firebase_uid=f"test_faculty_uid_{unique_id}",
+        auth_subject=f"test_faculty_uid_{unique_id}",
+        auth_issuer="dev",
         full_name="Test Faculty User",
         role=UserRole.FACULTY
     )
@@ -109,7 +110,8 @@ def curriculum_chair(db_session) -> User:
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"test_chair_{unique_id}@test.edu",
-        firebase_uid=f"test_chair_uid_{unique_id}",
+        auth_subject=f"test_chair_uid_{unique_id}",
+        auth_issuer="dev",
         full_name="Test Curriculum Chair",
         role=UserRole.CURRICULUM_CHAIR
     )
@@ -125,7 +127,8 @@ def articulation_officer(db_session) -> User:
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"test_articulation_{unique_id}@test.edu",
-        firebase_uid=f"test_articulation_uid_{unique_id}",
+        auth_subject=f"test_articulation_uid_{unique_id}",
+        auth_issuer="dev",
         full_name="Test Articulation Officer",
         role=UserRole.ARTICULATION_OFFICER
     )
@@ -141,7 +144,8 @@ def admin_user(db_session) -> User:
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"test_admin_{unique_id}@test.edu",
-        firebase_uid=f"test_admin_uid_{unique_id}",
+        auth_subject=f"test_admin_uid_{unique_id}",
+        auth_issuer="dev",
         full_name="Test Admin User",
         role=UserRole.ADMIN
     )
@@ -337,12 +341,14 @@ def course_with_content(db_session, draft_course) -> Course:
 # =============================================================================
 
 @pytest.fixture
-def mock_firebase_auth():
-    """Mock Firebase authentication for testing."""
-    with patch("app.core.deps.verify_firebase_token") as mock:
+def mock_oidc_auth():
+    """Mock OIDC bearer-token verification (app/core/oidc.verify_bearer) as it
+    is looked up in app.core.deps."""
+    with patch("app.core.deps.verify_bearer") as mock:
         mock.return_value = {
-            "uid": "test_uid",
-            "email": "test@test.edu"
+            "sub": "test_uid",
+            "email": "test@test.edu",
+            "iss": "dev",
         }
         yield mock
 

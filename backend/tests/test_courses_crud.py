@@ -66,7 +66,7 @@ def faculty_user(db_session):
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"test_faculty_crud_{unique_id}@test.edu",
-        firebase_uid=f"test_faculty_uid_crud_{unique_id}",
+        auth_subject=f"test_faculty_uid_crud_{unique_id}",
         full_name="Test Faculty CRUD",
         role=UserRole.FACULTY
     )
@@ -83,7 +83,7 @@ def admin_user(db_session):
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"test_admin_crud_{unique_id}@test.edu",
-        firebase_uid=f"test_admin_uid_crud_{unique_id}",
+        auth_subject=f"test_admin_uid_crud_{unique_id}",
         full_name="Test Admin CRUD",
         role=UserRole.ADMIN
     )

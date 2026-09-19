@@ -1,15 +1,14 @@
 """
 Logto / generic OIDC access & ID token verification (ADR-0001).
 
-Calricula is moving from Firebase Authentication to Logto, a standard OIDC
-provider, so tokens are verified with a JSON Web Key Set (JWKS) and PyJWT --
-no vendor SDK. This module is modelled on the ApplicationX verifier
-(app/identity/oidc.py in the applicationx repo) but reimplemented here rather
-than imported, since the two backends are separate deployables.
+Calricula authenticates against Logto, a standard OIDC provider, so tokens are
+verified with a JSON Web Key Set (JWKS) and PyJWT -- no vendor SDK. This module
+is modelled on the ApplicationX verifier (app/identity/oidc.py in the
+applicationx repo) but reimplemented here rather than imported, since the two
+backends are separate deployables.
 
-This task adds the verifier next to the existing Firebase one
-(app/core/firebase.py); Task 2 switches `get_current_user` to call
-`verify_bearer` and removes firebase.py and the FIREBASE_* settings.
+`verify_bearer` is what app/core/deps.py calls for protected routes;
+`verify_id_token` is used only by POST /api/auth/login.
 """
 
 import threading
@@ -23,7 +22,7 @@ from app.core.config import settings
 
 
 class AuthError(Exception):
-    """Raised by the verifier; callers (Task 2's get_current_user) map
+    """Raised by the verifier; callers (get_current_user, /api/auth/login) map
     `status`/`detail` onto an HTTPException. Detail strings are constant and
     never include the token."""
 
@@ -33,10 +32,11 @@ class AuthError(Exception):
         super().__init__(detail)
 
 
-# Dev-mode token -> synthetic claims, copied from app/core/firebase.py's
-# dev_user_map (uid -> sub). Only ever consulted when settings.AUTH_DEV_MODE
-# is on. Kept in sync by hand until Task 2 deletes firebase.py, at which
-# point this becomes the single source of truth.
+# Dev-mode token -> synthetic claims for the seeded test users. Only ever
+# consulted when settings.AUTH_DEV_MODE is on. The `sub` values match
+# seeds/seed_users.py's auth_subject values, so a dev-* token resolves to the
+# seeded account rather than provisioning a new one. This is the single source
+# of truth for the dev bypass; the frontend AuthContext sends these strings.
 _DEV_TOKEN_MAP = {
     "dev-demo-001": {"sub": "test_demo_001", "email": "demo@calricula.com"},
     "dev-faculty-001": {"sub": "test_faculty_001", "email": "faculty@calricula.com"},
@@ -144,7 +144,15 @@ def resolve_dev_token(token: str) -> Optional[dict]:
     entry = _DEV_TOKEN_MAP.get(token)
     if entry is None:
         return None
-    return {"sub": entry["sub"], "email": entry["email"], "email_verified": True}
+    # iss="dev" so callers can record where a subject came from with a plain
+    # claims["iss"] read, and so a dev-provisioned row is never mistaken for a
+    # pre-migration row (auth_issuer NULL) by the /login re-link path.
+    return {
+        "sub": entry["sub"],
+        "email": entry["email"],
+        "email_verified": True,
+        "iss": "dev",
+    }
 
 
 def verify_bearer(token: str) -> dict:
@@ -152,9 +160,8 @@ def verify_bearer(token: str) -> dict:
     AUTH_DEV_MODE is on, otherwise a real Logto access token via JWKS.
 
     Fails closed: when the provider is unconfigured and AUTH_DEV_MODE is
-    off, this raises AuthError(503, ...) rather than accepting the token --
-    mirroring app/core/firebase.py's fail-closed rule. This is what Task 2's
-    get_current_user calls.
+    off, this raises AuthError(503, ...) rather than accepting the token. This
+    is what app/core/deps.py's get_current_user calls.
     """
     dev_claims = resolve_dev_token(token)
     if dev_claims is not None:

@@ -1,10 +1,10 @@
 """
 Tests for the provider-neutral OIDC verifier (app/core/oidc.py).
 
-ADR-0001: Logto (OIDC) replaces Firebase. This task adds the verifier next to
-the existing Firebase one; Task 2 switches `get_current_user` to call it and
-removes firebase.py. These tests need no database and mirror the ApplicationX
-verifier's test suite (backend/tests/test_oidc.py in the applicationx repo).
+ADR-0001: Logto (OIDC) is the only authentication provider. These tests need no
+database and mirror the ApplicationX verifier's test suite
+(backend/tests/test_oidc.py in the applicationx repo). The route-level contract
+built on this verifier is pinned in tests/test_auth_oidc_routes.py.
 """
 
 import time

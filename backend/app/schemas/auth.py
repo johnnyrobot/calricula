@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from pydantic import ConfigDict, BaseModel, Field, EmailStr
+from pydantic import ConfigDict, BaseModel, Field, EmailStr, computed_field
 
 from app.models.user import UserRole
 
@@ -25,7 +25,8 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     """Schema for creating a new user."""
-    firebase_uid: str = Field(description="Firebase UID from authentication")
+    auth_subject: str = Field(description="OIDC subject (`sub`) from the provider")
+    auth_issuer: Optional[str] = Field(None, description="OIDC issuer that minted the subject")
     role: UserRole = Field(default=UserRole.FACULTY, description="User role")
     department_id: Optional[uuid.UUID] = Field(None, description="Associated department")
 
@@ -40,13 +41,21 @@ class UserUpdate(BaseModel):
 class UserResponse(UserBase):
     """User response schema."""
     id: uuid.UUID
-    firebase_uid: str
+    auth_subject: str
     role: UserRole
     department_id: Optional[uuid.UUID]
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def firebase_uid(self) -> str:
+        """DEPRECATED read-only alias for `auth_subject`, kept for one release
+        so a client built against the pre-ADR-0001 response keeps working.
+        Remove once no client reads it."""
+        return self.auth_subject
 
 
 class UserProfileResponse(BaseModel):
@@ -67,15 +76,15 @@ class UserProfileResponse(BaseModel):
 # =============================================================================
 
 class TokenVerifyRequest(BaseModel):
-    """Request to verify Firebase token."""
-    token: str = Field(description="Firebase ID token")
+    """Request to verify an OIDC token."""
+    token: str = Field(description="OIDC ID token")
 
 
 class TokenVerifyResponse(BaseModel):
     """Response after token verification."""
     valid: bool = Field(description="Whether token is valid")
     user_id: Optional[uuid.UUID] = Field(None, description="User ID if valid")
-    firebase_uid: Optional[str] = Field(None, description="Firebase UID")
+    auth_subject: Optional[str] = Field(None, description="OIDC subject (`sub`)")
 
 
 class LoginResponse(BaseModel):

@@ -56,7 +56,7 @@ def faculty_user(session):
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"faculty_wf_{unique_id}@test.edu",
-        firebase_uid=f"test_faculty_uid_workflow_{unique_id}",
+        auth_subject=f"test_faculty_uid_workflow_{unique_id}",
         full_name="Test Faculty",
         role=UserRole.FACULTY
     )
@@ -72,7 +72,7 @@ def curriculum_chair(session):
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"chair_wf_{unique_id}@test.edu",
-        firebase_uid=f"test_chair_uid_workflow_{unique_id}",
+        auth_subject=f"test_chair_uid_workflow_{unique_id}",
         full_name="Test Chair",
         role=UserRole.CURRICULUM_CHAIR
     )
@@ -88,7 +88,7 @@ def articulation_officer(session):
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"articulation_wf_{unique_id}@test.edu",
-        firebase_uid=f"test_articulation_uid_workflow_{unique_id}",
+        auth_subject=f"test_articulation_uid_workflow_{unique_id}",
         full_name="Test Articulation Officer",
         role=UserRole.ARTICULATION_OFFICER
     )
@@ -104,7 +104,7 @@ def admin_user(session):
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"admin_wf_{unique_id}@test.edu",
-        firebase_uid=f"test_admin_uid_workflow_{unique_id}",
+        auth_subject=f"test_admin_uid_workflow_{unique_id}",
         full_name="Test Admin",
         role=UserRole.ADMIN
     )

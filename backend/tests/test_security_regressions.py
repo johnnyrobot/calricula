@@ -8,9 +8,11 @@ is meant to preserve/establish:
 - The Host header is validated by TrustedHostMiddleware (defense-in-depth that
   pairs with the Starlette BadHost fix, CVE-2026-48710).
 
-They are deliberately independent of whether Firebase is configured: in CI it is
-not, so a forged token fails closed with 503; with Firebase configured a forged
-token is rejected with 401. Either way it is never authorized (never 2xx).
+They are deliberately independent of whether an OIDC provider is configured: in
+CI it is not, so a forged token fails closed with 503; with a provider
+configured a forged token is rejected with 401. Either way it is never
+authorized (never 2xx). tests/test_auth_oidc_routes.py pins the configured
+case (401) exactly.
 """
 
 from fastapi import FastAPI
@@ -38,10 +40,10 @@ def test_protected_endpoint_rejects_missing_token():
 
 
 def test_protected_endpoint_rejects_forged_token():
-    """A forged (non-Firebase-signed) JWT is never authorized.
+    """A forged (not provider-signed) JWT is never authorized.
 
-    Accept any hard rejection: 401 (configured Firebase rejects it) or 503
-    (unconfigured Firebase fails closed). The invariant under test is that a
+    Accept any hard rejection: 401 (a configured provider rejects it) or 503
+    (an unconfigured provider fails closed). The invariant under test is that a
     forged credential never yields a 2xx.
     """
     forged = "eyJhbGciOiJSUzI1NiJ9.eyJ1aWQiOiJhdHRhY2tlciJ9.not_a_real_signature"

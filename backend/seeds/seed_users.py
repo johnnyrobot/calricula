@@ -16,57 +16,58 @@ from app.models.user import User, UserRole
 from app.models.department import Department
 
 
-# Test users data - firebase_uid is a placeholder since actual Firebase users
-# must be created separately via Firebase Console
+# Test users data. auth_subject matches app/core/oidc.py's dev-token map, so a
+# dev-* token resolves to the seeded account. These are placeholders: real
+# accounts must be created in the OIDC provider (Logto) separately.
 SEED_USERS = [
     {
         "email": "faculty@calricula.com",
         "full_name": "Dr. Maria Garcia",
         "role": UserRole.FACULTY,
         "department_code": "MATH",
-        "firebase_uid": "test_faculty_001",
+        "auth_subject": "test_faculty_001",
     },
     {
         "email": "faculty2@calricula.com",
         "full_name": "Prof. James Chen",
         "role": UserRole.FACULTY,
         "department_code": "ENGL",
-        "firebase_uid": "test_faculty_002",
+        "auth_subject": "test_faculty_002",
     },
     {
         "email": "faculty3@calricula.com",
         "full_name": "Dr. Sarah Johnson",
         "role": UserRole.FACULTY,
         "department_code": "CS",
-        "firebase_uid": "test_faculty_003",
+        "auth_subject": "test_faculty_003",
     },
     {
         "email": "chair@calricula.com",
         "full_name": "Dr. Robert Williams",
         "role": UserRole.CURRICULUM_CHAIR,
         "department_code": None,
-        "firebase_uid": "test_chair_001",
+        "auth_subject": "test_chair_001",
     },
     {
         "email": "articulation@calricula.com",
         "full_name": "Ms. Lisa Thompson",
         "role": UserRole.ARTICULATION_OFFICER,
         "department_code": None,
-        "firebase_uid": "test_articulation_001",
+        "auth_subject": "test_articulation_001",
     },
     {
         "email": "admin@calricula.com",
         "full_name": "Mr. David Martinez",
         "role": UserRole.ADMIN,
         "department_code": None,
-        "firebase_uid": "test_admin_001",
+        "auth_subject": "test_admin_001",
     },
     {
         "email": "demo@calricula.com",
         "full_name": "Demo User",
         "role": UserRole.FACULTY,
         "department_code": None,  # General faculty, no specific department
-        "firebase_uid": "test_demo_001",
+        "auth_subject": "test_demo_001",
     },
 ]
 
@@ -75,9 +76,8 @@ def seed_users():
     """
     Seed test users into the database.
 
-    Note: This creates user records in the database. The actual Firebase
-    authentication users must be created separately via Firebase Console
-    or the Firebase Admin SDK.
+    Note: This creates user records in the database. The matching accounts in
+    the OIDC provider (Logto) must be created separately.
 
     Password for all test users: Test123!
     """

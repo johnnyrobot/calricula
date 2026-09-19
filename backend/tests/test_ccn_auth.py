@@ -14,12 +14,12 @@ Tests cover:
 import pytest
 import uuid
 from decimal import Decimal
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 from sqlmodel import Session
-from firebase_admin import auth as fb_auth
 
+from app.core.oidc import AuthError
 from app.main import app
 from app.core.database import engine
 from app.models.user import User, UserRole
@@ -50,7 +50,7 @@ def test_user_faculty(db_session):
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"auth_test_faculty_{unique_id}@test.edu",
-        firebase_uid=f"auth_test_faculty_uid_{unique_id}",
+        auth_subject=f"auth_test_faculty_uid_{unique_id}",
         full_name="Auth Test Faculty User",
         role=UserRole.FACULTY
     )
@@ -66,7 +66,7 @@ def test_user_admin(db_session):
     unique_id = uuid.uuid4().hex[:8]
     user = User(
         email=f"auth_test_admin_{unique_id}@test.edu",
-        firebase_uid=f"auth_test_admin_uid_{unique_id}",
+        auth_subject=f"auth_test_admin_uid_{unique_id}",
         full_name="Auth Test Admin User",
         role=UserRole.ADMIN
     )
@@ -219,15 +219,15 @@ class TestInvalidTokenHandling:
     def test_ccn_match_with_invalid_token(self, client):
         """Test CCN match with an invalid/malformed token.
 
-        Simulate a *configured* Firebase that rejects the token. Without this,
-        an unconfigured Firebase (as in CI) fails closed with 503 before it ever
-        inspects the token, so we couldn't exercise the invalid-token -> 401 path.
+        The verifier is stubbed to reject the token the way a configured
+        provider would. Without this, an unconfigured provider (as in CI) fails
+        closed with 503 before it ever inspects the token, so we couldn't
+        exercise the invalid-token -> 401 path.
         """
-        with patch("app.core.firebase._firebase_app", MagicMock()), \
-             patch(
-                 "app.core.firebase.auth.verify_id_token",
-                 side_effect=fb_auth.InvalidIdTokenError("invalid token"),
-             ):
+        with patch(
+            "app.core.deps.verify_bearer",
+            side_effect=AuthError(401, "invalid or expired token"),
+        ):
             response = client.post(
                 "/api/compliance/ccn-match",
                 json={
@@ -269,13 +269,12 @@ class TestInvalidTokenHandling:
         assert response.status_code == 401
 
     def test_ccn_justification_with_invalid_token(self, client):
-        """Test CCN justification with invalid token (configured Firebase rejects it)."""
+        """Test CCN justification with invalid token (the verifier rejects it)."""
         fake_course_id = str(uuid.uuid4())
-        with patch("app.core.firebase._firebase_app", MagicMock()), \
-             patch(
-                 "app.core.firebase.auth.verify_id_token",
-                 side_effect=fb_auth.InvalidIdTokenError("invalid token"),
-             ):
+        with patch(
+            "app.core.deps.verify_bearer",
+            side_effect=AuthError(401, "invalid or expired token"),
+        ):
             response = client.post(
                 "/api/compliance/ccn-non-match-justification",
                 json={
@@ -297,13 +296,9 @@ class TestExpiredTokenHandling:
 
     def test_ccn_match_with_expired_token(self, client):
         """Test CCN match with an expired token."""
-        with patch("app.core.deps.verify_firebase_token") as mock_verify:
-            # Simulate Firebase rejecting an expired token
-            from fastapi import HTTPException, status
-            mock_verify.side_effect = HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has expired",
-            )
+        with patch("app.core.deps.verify_bearer") as mock_verify:
+            # Simulate the verifier rejecting an expired token
+            mock_verify.side_effect = AuthError(401, "invalid or expired token")
 
             response = client.post(
                 "/api/compliance/ccn-match",
@@ -321,12 +316,8 @@ class TestExpiredTokenHandling:
 
     def test_ccn_justification_with_expired_token(self, client):
         """Test CCN justification with expired token."""
-        with patch("app.core.deps.verify_firebase_token") as mock_verify:
-            from fastapi import HTTPException, status
-            mock_verify.side_effect = HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has expired",
-            )
+        with patch("app.core.deps.verify_bearer") as mock_verify:
+            mock_verify.side_effect = AuthError(401, "invalid or expired token")
 
             fake_course_id = str(uuid.uuid4())
             response = client.post(
@@ -353,11 +344,12 @@ class TestUserNotFound:
         """Valid token, no existing user: get_current_user JIT-provisions a
         FACULTY user (deps.py auto-provision), so the request succeeds rather
         than 404. This pins the intended auto-provisioning behavior."""
-        with patch("app.core.deps.verify_firebase_token") as mock_verify:
+        with patch("app.core.deps.verify_bearer") as mock_verify:
             # Token is valid; the user does not exist yet and will be created.
             mock_verify.return_value = {
-                "uid": "nonexistent_user_uid_12345",
-                "email": "ghost@example.com"
+                "sub": "nonexistent_user_uid_12345",
+                "email": "ghost@example.com",
+                "iss": "dev",
             }
 
             response = client.post(
@@ -386,8 +378,8 @@ class TestRoleBasedAccess:
     ):
         """Test that faculty users can use CCN match endpoint."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     "/api/compliance/ccn-match",
                     json={
@@ -405,8 +397,8 @@ class TestRoleBasedAccess:
     ):
         """Test that faculty can submit CCN non-match justification."""
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
                 response = client.post(
                     "/api/compliance/ccn-non-match-justification",
                     json={
@@ -423,8 +415,8 @@ class TestRoleBasedAccess:
     ):
         """Test that admin users can access all CCN endpoints."""
         with patch("app.core.deps.get_current_user", return_value=test_user_admin):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_admin.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_admin.auth_subject}
 
                 # Test CCN match
                 response = client.post(
@@ -458,12 +450,8 @@ class TestTokenRefreshScenarios:
     ):
         """Test that requests succeed with a refreshed token."""
         # First call with expired token fails
-        with patch("app.core.deps.verify_firebase_token") as mock_verify:
-            from fastapi import HTTPException, status
-            mock_verify.side_effect = HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token expired",
-            )
+        with patch("app.core.deps.verify_bearer") as mock_verify:
+            mock_verify.side_effect = AuthError(401, "invalid or expired token")
 
             response = client.post(
                 "/api/compliance/ccn-match",
@@ -478,8 +466,8 @@ class TestTokenRefreshScenarios:
 
         # Second call with valid token succeeds
         with patch("app.core.deps.get_current_user", return_value=test_user_faculty):
-            with patch("app.core.deps.verify_firebase_token") as mock_verify:
-                mock_verify.return_value = {"uid": test_user_faculty.firebase_uid}
+            with patch("app.core.deps.verify_bearer") as mock_verify:
+                mock_verify.return_value = {"sub": test_user_faculty.auth_subject}
 
                 response = client.post(
                     "/api/compliance/ccn-match",

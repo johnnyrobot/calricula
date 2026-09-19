@@ -53,13 +53,8 @@ class Settings(BaseSettings):
     # e.g. ALLOWED_HOSTS='["calricula.com","api.calricula.com"]'.
     ALLOWED_HOSTS: List[str] = ["*"]
 
-    # Firebase (removed in Task 2 of the Logto migration, ADR-0001)
-    FIREBASE_PROJECT_ID: Optional[str] = None
-    FIREBASE_SERVICE_ACCOUNT_PATH: Optional[str] = None
-
-    # OIDC (Logto) -- ADR-0001: replaces Firebase Authentication. Verified in
-    # app/core/oidc.py, added next to firebase.py; Task 2 switches
-    # get_current_user over to it and deletes the Firebase settings above.
+    # OIDC (Logto) -- ADR-0001. The only authentication provider; tokens are
+    # verified in app/core/oidc.py and consumed by app/core/deps.py.
     OIDC_ISSUER: Optional[str] = None  # https://<logto-endpoint>/oidc
     OIDC_AUDIENCE: Optional[str] = None  # Calricula's own API resource indicator
     OIDC_CLIENT_ID: Optional[str] = None  # Calricula web app id; the ID token's `aud`
