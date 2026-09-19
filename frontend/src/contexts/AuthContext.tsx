@@ -3,19 +3,29 @@
 // ===========================================
 // Authentication Context
 // ===========================================
-// Provides authentication state and methods to the entire app
-// Supports development mode for testing without Firebase
+// Provides authentication state and methods to the entire app.
+//
+// Three runtime modes:
+//   'dev'   — the local identity picker: a mock profile and a `dev-*` token the
+//             backend accepts only while AUTH_DEV_MODE is on. Wins over 'logto'.
+//   'logto' — OIDC via Logto. The session lives in an encrypted, HttpOnly
+//             cookie owned by the server route handlers; this provider holds
+//             only the short-lived API access token, in memory.
+//   'none'  — no authentication configured; nobody is signed in.
+//
+// Tokens are never written to localStorage, sessionStorage or a URL. The OIDC
+// ID token never reaches the browser at all: `/api/auth/session` exchanges it
+// for the profile server-side.
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User } from 'firebase/auth';
-import {
-  auth,
-  signIn,
-  signOut,
-  onAuthChange,
-  getIdToken,
-  isFirebaseConfigured
-} from '@/lib/firebase';
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  ReactNode,
+} from 'react';
 
 // ===========================================
 // Types
@@ -28,6 +38,21 @@ export interface UserProfile {
   role: 'Faculty' | 'CurriculumChair' | 'ArticulationOfficer' | 'Admin';
   department_id?: string;
   department_name?: string;
+}
+
+export type AuthMode = 'dev' | 'logto' | 'none';
+
+/** Body of `GET /api/auth/session` (see `src/app/api/auth/session/route.ts`). */
+interface SessionBody {
+  signedIn: boolean;
+  profile?: UserProfile;
+  error?: string;
+}
+
+/** Body of `GET /api/auth/token` (see `src/app/api/auth/token/route.ts`). */
+interface TokenBody {
+  access_token: string;
+  expires_in: number;
 }
 
 // Whether this build permits the runtime (localStorage) dev-auth override.
@@ -63,6 +88,11 @@ const isDevBypassEnabled = (): boolean => {
   return process.env.NEXT_PUBLIC_AUTH_DEV_MODE === 'true';
 };
 
+// Logto availability is advertised by its own public flag, which the deployer
+// sets alongside the server-only LOGTO_* variables. It is deliberately not
+// derived from them: a half-configured server still 404s every auth route.
+const isLogtoEnabled = (): boolean => process.env.NEXT_PUBLIC_LOGTO_ENABLED === 'true';
+
 // Demo mode detection helper
 // Enable demo mode if NEXT_PUBLIC_DEMO_MODE is set to 'true'
 // Demo mode allows public access with limited features and daily resets
@@ -70,13 +100,9 @@ const isDemoModeEnabled = (): boolean => {
   return process.env.NEXT_PUBLIC_DEMO_MODE === 'true';
 };
 
-// Auto-enable dev mode flag (set by timeout when Firebase hangs)
-let autoDevModeEnabled = false;
-
-// Check if auto dev mode was triggered
-const isAutoDevModeEnabled = (): boolean => {
-  return autoDevModeEnabled;
-};
+/** Seconds to wait before re-fetching a token that expires in `expiresIn` seconds. */
+export const refreshDelaySeconds = (expiresIn: number): number =>
+  Math.max(expiresIn - 60, 30);
 
 // Mock user profiles for development mode
 const DEV_USERS: Record<string, UserProfile> = {
@@ -128,9 +154,9 @@ const DEV_USERS: Record<string, UserProfile> = {
   },
 };
 
-interface AuthContextType {
-  // Firebase user (from Firebase Auth)
-  firebaseUser: User | null;
+export interface AuthContextType {
+  // Which sign-in mechanism this build is using
+  mode: AuthMode;
   // App user profile (from our database)
   user: UserProfile | null;
   // Loading states
@@ -140,14 +166,16 @@ interface AuthContextType {
   error: string | null;
   // Is user authenticated?
   isAuthenticated: boolean;
-  // Is Firebase configured?
+  // Is a sign-in mechanism configured?
   isConfigured: boolean;
   // Is demo mode enabled?
   isDemoMode: boolean;
-  // Auth methods
+  // Dev-mode sign-in (identity picker). Rejected in every other mode.
   login: (email: string, password: string) => Promise<void>;
+  // Logto sign-in: hands the browser to the server-side /sign-in route.
+  signInWithProvider: () => void;
   logout: () => Promise<void>;
-  // Get fresh ID token for API calls
+  // Get the bearer token for API calls (dev identity or Logto access token)
   getToken: () => Promise<string | null>;
   // Clear error
   clearError: () => void;
@@ -155,7 +183,7 @@ interface AuthContextType {
 
 // Default context value
 const defaultContext: AuthContextType = {
-  firebaseUser: null,
+  mode: 'none',
   user: null,
   loading: true,
   profileLoading: false,
@@ -164,6 +192,7 @@ const defaultContext: AuthContextType = {
   isConfigured: false,
   isDemoMode: false,
   login: async () => {},
+  signInWithProvider: () => {},
   logout: async () => {},
   getToken: async () => null,
   clearError: () => {},
@@ -180,222 +209,215 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+const DEV_LOGIN_HINT =
+  'Invalid email or password. Dev users: demo@calricula.com, faculty@calricula.com, chair@calricula.com, admin@calricula.com';
+
+const FORBIDDEN_MESSAGE =
+  'This deployment only admits demo accounts. Please sign in with a demo account.';
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isConfigured = isFirebaseConfigured();
+  // The Logto access token lives here and nowhere else: no web storage, no
+  // cookie the page script can read, no URL.
+  const tokenRef = useRef<string | null>(null);
+  const refreshRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set by the Logto effect so `getToken` can mint a token on demand if a
+  // consumer asks before (or after) the mount fetch has settled.
+  const fetchTokenRef = useRef<() => Promise<string | null>>(async () => null);
 
-  // Fetch user profile from backend
-  const fetchUserProfile = async (idToken: string): Promise<UserProfile | null> => {
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/api/auth/me`, {
-        headers: {
-          'Authorization': `Bearer ${idToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
+  // Dev bypass is checked on every render because it can be flipped at runtime
+  // via localStorage (only in builds where that is permitted).
+  const devModeActive = isDevBypassEnabled();
+  const mode: AuthMode = devModeActive ? 'dev' : isLogtoEnabled() ? 'logto' : 'none';
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Session expired. Please log in again.');
-        }
-        if (response.status === 404) {
-          throw new Error('User account not found. Please contact an administrator.');
-        }
-        throw new Error('Failed to fetch user profile');
-      }
-
-      const profile = await response.json();
-      return profile;
-    } catch (error) {
-      console.error('Failed to fetch user profile:', error);
-      throw error;
+  const clearRefresh = useCallback(() => {
+    if (refreshRef.current !== null) {
+      clearTimeout(refreshRef.current);
+      refreshRef.current = null;
     }
-  };
+  }, []);
 
-  // Listen to Firebase auth state changes
   useEffect(() => {
-    // Development bypass mode - restore session from storage
-    // IMPORTANT: Call isDevBypassEnabled() inside useEffect to check localStorage on each mount
-    const devBypassEnabled = isDevBypassEnabled();
-    console.log('[AUTH] Dev bypass enabled:', devBypassEnabled);
-
-    if (devBypassEnabled) {
+    // ---- Dev bypass: restore the picked identity from sessionStorage -------
+    if (mode === 'dev') {
       if (typeof window !== 'undefined') {
-        const storedUser = sessionStorage.getItem('dev_user');
+        const storedUser = window.sessionStorage.getItem('dev_user');
         if (storedUser) {
           try {
-            const devUser = JSON.parse(storedUser);
+            const devUser = JSON.parse(storedUser) as UserProfile;
             console.log('[DEV MODE] Restored session for:', devUser.email);
             // eslint-disable-next-line react-hooks/set-state-in-effect -- restoring a persisted dev session from sessionStorage (external store) on mount
             setUser(devUser);
-          } catch (e) {
+          } catch {
             console.warn('[DEV MODE] Failed to restore session');
           }
-        } else {
-          console.log('[DEV MODE] No stored user found in sessionStorage');
         }
       }
       setLoading(false);
       return;
     }
 
-    if (!isConfigured && isRuntimeBypassAllowed()) {
-      console.log('[AUTH] Firebase not configured - enabling dev mode automatically');
-      // Auto-enable dev mode when Firebase isn't configured (dev/demo builds only;
-      // a locked-down production build must not silently bypass authentication).
-      autoDevModeEnabled = true;
-      if (typeof window !== 'undefined') {
+    // ---- No provider configured ------------------------------------------
+    if (mode === 'none') {
+      if (isRuntimeBypassAllowed() && typeof window !== 'undefined') {
+        // Dev/demo builds with nothing configured fall back to the identity
+        // picker so the app is usable locally. Writing the flag re-renders us
+        // into 'dev' mode on the next pass, which restores any stored session.
+        // A locked-down production build must fail closed instead.
+        console.log('[AUTH] No provider configured - enabling dev mode automatically');
         window.localStorage.setItem('DEV_AUTH_BYPASS', 'true');
-        // Try to restore dev user session
-        const storedUser = sessionStorage.getItem('dev_user');
-        if (storedUser) {
-          try {
-            const devUser = JSON.parse(storedUser);
-            console.log('[DEV MODE] Restored session for:', devUser.email);
-            setUser(devUser);
-          } catch (e) {
-            console.warn('[DEV MODE] Failed to restore session');
-          }
-        }
+      } else {
+        console.warn('[AUTH] No authentication provider configured');
       }
       setLoading(false);
       return;
     }
 
-    console.log('[AUTH] Using Firebase authentication');
+    // ---- Logto ------------------------------------------------------------
+    let cancelled = false;
 
-    let authResolved = false;
-
-    // Timeout: If Firebase doesn't respond in 5 seconds, fall back to dev mode
-    // This enables automated testing with Puppeteer when Firebase hangs
-    const timeoutId = setTimeout(() => {
-      if (!authResolved) {
-        // Only fall back to dev mode in builds that permit the bypass. A
-        // locked-down production build must fail closed if Firebase hangs
-        // rather than auto-authenticating the visitor.
-        if (isRuntimeBypassAllowed()) {
-          console.warn('[AUTH] Firebase auth timeout - enabling dev mode fallback');
-          autoDevModeEnabled = true;
-          // Store in localStorage so future page loads use dev mode
-          if (typeof window !== 'undefined') {
-            window.localStorage.setItem('DEV_AUTH_BYPASS', 'true');
-          }
-        } else {
-          console.warn('[AUTH] Firebase auth timeout - no dev fallback in production');
-        }
-        setLoading(false);
-      }
-    }, 5000);
-
-    const unsubscribe = onAuthChange(async (fbUser) => {
-      authResolved = true;
-      clearTimeout(timeoutId);
-      setFirebaseUser(fbUser);
-
-      if (fbUser) {
-        // User is signed in, fetch their profile
-        setProfileLoading(true);
-        try {
-          const idToken = await fbUser.getIdToken();
-          const profile = await fetchUserProfile(idToken);
-          setUser(profile);
-          setError(null);
-        } catch (error) {
-          setUser(null);
-          // Don't show error on initial load, only on explicit actions
-          const message = error instanceof Error ? error.message : String(error);
-          console.warn('Could not fetch user profile:', message);
-        } finally {
-          setProfileLoading(false);
-        }
-      } else {
-        // User is signed out
-        setUser(null);
-      }
-
-      setLoading(false);
-    });
-
-    // Cleanup subscription and timeout
-    return () => {
-      unsubscribe();
-      clearTimeout(timeoutId);
+    const signedOut = () => {
+      clearRefresh();
+      tokenRef.current = null;
+      if (!cancelled) setUser(null);
     };
-  }, [isConfigured]);
 
-  // Login function
+    const fetchToken = async (): Promise<string | null> => {
+      const response = await fetch('/api/auth/token', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+      if (cancelled) return null;
+      if (response.status !== 200) {
+        // 204 (signed out) or an error: the session is over.
+        signedOut();
+        return null;
+      }
+      const { access_token: accessToken, expires_in: expiresIn } =
+        (await response.json()) as TokenBody;
+      if (cancelled) return null;
+      tokenRef.current = accessToken;
+      clearRefresh();
+      refreshRef.current = setTimeout(() => {
+        refreshRef.current = null;
+        void fetchToken().catch(signedOut);
+      }, refreshDelaySeconds(expiresIn) * 1000);
+      return accessToken;
+    };
+
+    fetchTokenRef.current = fetchToken;
+
+    const bootstrap = async () => {
+      const response = await fetch('/api/auth/session', {
+        cache: 'no-store',
+        credentials: 'same-origin',
+      });
+      if (cancelled) return;
+      if (!response.ok) return;
+      const session = (await response.json()) as SessionBody;
+      if (cancelled) return;
+      if (!session.signedIn) {
+        if (session.error === 'forbidden') setError(FORBIDDEN_MESSAGE);
+        return;
+      }
+      await fetchToken();
+      if (cancelled || tokenRef.current === null || !session.profile) return;
+      setUser(session.profile);
+      setError(null);
+    };
+
+    setProfileLoading(true);
+    bootstrap()
+      .catch((err) => {
+        console.warn('Could not restore session:', err instanceof Error ? err.message : err);
+        signedOut();
+      })
+      .finally(() => {
+        if (cancelled) return;
+        setProfileLoading(false);
+        setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      clearRefresh();
+      fetchTokenRef.current = async () => null;
+    };
+  }, [mode, clearRefresh]);
+
+  // Dev-mode sign-in (the identity picker on /login). Real sign-in goes
+  // through the provider; there is no password for this app to check.
   const login = async (email: string, password: string) => {
     setError(null);
     setProfileLoading(true);
 
     try {
-      // Development bypass mode (manual or auto-enabled from timeout)
-      if (isDevBypassEnabled() || isAutoDevModeEnabled()) {
-        const devUser = DEV_USERS[email.toLowerCase()];
-        // Accept Test123! for dev users OR the real demo password
-        const validPasswords = ['Test123!', 'dont4get'];
-        if (devUser && validPasswords.includes(password)) {
-          console.log('[DEV MODE] Bypassing Firebase auth for:', email);
-          setUser(devUser);
-          // Store in sessionStorage for persistence
-          if (typeof window !== 'undefined') {
-            sessionStorage.setItem('dev_user', JSON.stringify(devUser));
-          }
-          return;
-        }
-        throw new Error('Invalid email or password. Dev users: demo@calricula.com, faculty@calricula.com, chair@calricula.com, admin@calricula.com');
+      if (mode !== 'dev') {
+        throw new Error('Password sign-in is disabled. Use your college account to sign in.');
       }
-
-      const credential = await signIn(email, password);
-
-      // Fetch user profile after successful login
-      const idToken = await credential.user.getIdToken();
-      const profile = await fetchUserProfile(idToken);
-      setUser(profile);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
-      throw error;
+      const devUser = DEV_USERS[email.toLowerCase()];
+      // Accept Test123! for dev users OR the real demo password
+      const validPasswords = ['Test123!', 'dont4get'];
+      if (devUser && validPasswords.includes(password)) {
+        console.log('[DEV MODE] Signing in as:', email);
+        setUser(devUser);
+        // Store in sessionStorage for persistence (a mock profile, not a token)
+        if (typeof window !== 'undefined') {
+          window.sessionStorage.setItem('dev_user', JSON.stringify(devUser));
+        }
+        return;
+      }
+      throw new Error(DEV_LOGIN_HINT);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      throw err;
     } finally {
       setProfileLoading(false);
     }
   };
 
+  // Logto sign-in: the server route starts the authorization-code flow. A plain
+  // navigation, so it works without JS and never puts a token in the URL.
+  const signInWithProvider = () => {
+    if (mode !== 'logto') return;
+    window.location.assign('/sign-in');
+  };
+
   // Logout function
   const logout = async () => {
     setError(null);
-    try {
-      // Development bypass mode (manual or auto-enabled from timeout)
-      if (isDevBypassEnabled() || isAutoDevModeEnabled()) {
-        console.log('[DEV MODE] Logging out');
-        setUser(null);
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem('dev_user');
-        }
-        return;
-      }
+    clearRefresh();
+    tokenRef.current = null;
+    setUser(null);
 
-      await signOut();
-      setUser(null);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : String(error));
-      throw error;
+    if (mode === 'dev') {
+      console.log('[DEV MODE] Logging out');
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem('dev_user');
+      }
+      return;
+    }
+
+    if (mode === 'logto') {
+      // The server route clears the session cookie and ends the Logto session.
+      window.location.assign('/sign-out');
     }
   };
 
-  // Get fresh ID token
+  // Bearer token for API calls
   const getToken = async (): Promise<string | null> => {
-    // In dev bypass mode, return the mock user's ID as the token
-    // The backend will use this to identify the dev user
-    if ((isDevBypassEnabled() || isAutoDevModeEnabled()) && user) {
-      return user.id; // e.g., "dev-faculty-001"
+    // In dev bypass mode the mock user's id IS the token; the backend resolves
+    // `dev-*` tokens only while AUTH_DEV_MODE is on.
+    if (mode === 'dev') {
+      return user ? user.id : null;
     }
-    return await getIdToken();
+    if (mode !== 'logto') return null;
+    if (tokenRef.current) return tokenRef.current;
+    return fetchTokenRef.current();
   };
 
   // Clear error
@@ -403,21 +425,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setError(null);
   };
 
-  // Check if any dev mode is active (manual or auto from timeout)
-  const devModeActive = isDevBypassEnabled() || isAutoDevModeEnabled();
-  const demoModeActive = isDemoModeEnabled();
-
   const value: AuthContextType = {
-    firebaseUser,
+    mode,
     user,
     loading,
     profileLoading,
     error,
-    // In dev bypass mode, only check for user; otherwise require both firebaseUser and user
-    isAuthenticated: devModeActive ? !!user : (!!firebaseUser && !!user),
-    isConfigured: devModeActive || isConfigured,
-    isDemoMode: demoModeActive,
+    isAuthenticated: !!user,
+    isConfigured: mode !== 'none',
+    isDemoMode: isDemoModeEnabled(),
     login,
+    signInWithProvider,
     logout,
     getToken,
     clearError,

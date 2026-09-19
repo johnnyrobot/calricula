@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { CourseListItem, CourseListResponse } from '@/lib/api';
-import { getIdToken } from '@/lib/firebase';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface UseUserCoursesOptions {
   /** Filter for CTE courses only */
@@ -48,6 +48,7 @@ export function useUserCourses({
   initialQuery = '',
   autoFetch = true,
 }: UseUserCoursesOptions = {}): UseUserCoursesResult {
+  const { getToken } = useAuth();
   const [courses, setCourses] = useState<CourseListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,8 +75,8 @@ export function useUserCourses({
         'Content-Type': 'application/json',
       };
 
-      // Attach Firebase auth token so the request is authenticated.
-      const token = await getIdToken();
+      // Attach the current bearer token so the request is authenticated.
+      const token = await getToken();
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
