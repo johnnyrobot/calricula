@@ -10,8 +10,13 @@
 !.env.example
 !.env.*.example
 *.pem
-# Generic patterns for any deployer-supplied service-account-style credential
-# file (e.g. a cloud provider key mounted for a future integration).
+# Credential files a deployer may leave behind (any provider) — never commit
+serviceAccountKey.json
+serviceAccountkey.json
+serviceaccount.json
+firebase-credentials.json
+# Generic pattern for any other deployer-supplied service-account-style
+# credential file (e.g. a cloud provider key mounted for a future integration).
 *-service-account.json
 
 # ===========================================
