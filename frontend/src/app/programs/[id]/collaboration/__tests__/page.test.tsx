@@ -10,7 +10,8 @@ jest.mock('@/contexts/AuthContext', () => ({
 const status = jest.fn();
 jest.mock('@/hooks/useApplicationXStatus', () => ({ useApplicationXStatus: () => status() }));
 
-jest.mock('next/navigation', () => ({ useParams: () => ({ id: 'p1' }) }));
+const push = jest.fn();
+jest.mock('next/navigation', () => ({ useParams: () => ({ id: 'p1' }), useRouter: () => ({ push }) }));
 jest.mock('@/components/layout/PageShell', () => ({
   __esModule: true,
   default: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -26,6 +27,9 @@ jest.mock('@/lib/applicationx/client', () => ({
 }));
 
 const program = (updated_at: string) => ({ id: 'p1', title: 'CS AS-T', updated_at });
+// The shared shell resolves the context a second time on mount, so ready
+// resolutions are installed as the default (not `Once`).
+const ready = (revision_label: string) => ({ state: 'ready', workspace_id: 'w', workspace_title: 'CS workspace', program_title: 'CS AS-T', campus_label: 'LACC', revision_label, api_version: '1' });
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -40,7 +44,7 @@ test('Retry after context_stale refetches the program and resolves the new conte
   getProgram.mockResolvedValueOnce(program('v1')).mockResolvedValueOnce(program('v2'));
   resolveContext
     .mockResolvedValueOnce({ state: 'context_stale', message: 'Program changed.', retryable: true })
-    .mockResolvedValueOnce({ state: 'ready', workspace_id: 'w', workspace_title: 'W', program_title: 'CS AS-T', campus_label: 'LACC', revision_label: 'Rev 2', api_version: '1' });
+    .mockResolvedValue(ready('Rev 2'));
 
   render(<ProgramCollaborationPage />);
   const retry = await screen.findByRole('button', { name: 'Retry' });
@@ -93,7 +97,7 @@ test('non-ready host state: one "Back to program" link under the panel (outage i
 
 test('ready state: the banner is the only "Back to program" link', async () => {
   getProgram.mockResolvedValueOnce(program('v1'));
-  resolveContext.mockResolvedValueOnce({ state: 'ready', workspace_id: 'w', workspace_title: 'W', program_title: 'CS AS-T', campus_label: 'LACC', revision_label: 'Rev 1', api_version: '1' });
+  resolveContext.mockResolvedValue(ready('Rev 1'));
   render(<ProgramCollaborationPage />);
   const region = await screen.findByRole('region', { name: 'Workspace context' });
   const links = screen.getAllByRole('link', { name: 'Back to program' });
@@ -122,27 +126,62 @@ test('both tokens missing: session_expired', async () => {
   expect(screen.getByRole('link', { name: 'Sign in again' })).toHaveAttribute('href', '/login');
 });
 
-test('ready state: "Open in ApplicationX" links to the resolved workspace (M-8)', async () => {
+test('ready state: one "Open in ApplicationX" control (the shell\'s), opening the resolved workspace (M-8)', async () => {
   status.mockReturnValue({ status: { enabled: true, standalone_url: 'https://ax.example.edu/' }, loading: false });
   getProgram.mockResolvedValueOnce(program('v1'));
-  resolveContext.mockResolvedValueOnce({ state: 'ready', workspace_id: 'ws 1/2', workspace_title: 'W', program_title: 'CS AS-T', campus_label: 'LACC', revision_label: 'Rev 1', api_version: '1' });
+  resolveContext.mockResolvedValue({ ...ready('Rev 1'), workspace_id: 'ws 1/2' });
+  const open = jest.spyOn(window, 'open').mockImplementation(() => null);
   render(<ProgramCollaborationPage />);
   await screen.findByRole('region', { name: 'Workspace context' });
-  expect(screen.getByRole('link', { name: /Open in ApplicationX/ })).toHaveAttribute('href', 'https://ax.example.edu/workspaces/ws%201%2F2');
+  await screen.findByRole('region', { name: 'CS workspace' });
+  // The banner no longer duplicates the shell's control.
+  expect(screen.queryByRole('link', { name: /Open in ApplicationX/ })).toBeNull();
+  const buttons = screen.getAllByRole('button', { name: /Open in ApplicationX/ });
+  expect(buttons).toHaveLength(1);
+  fireEvent.click(buttons[0]);
+  expect(open).toHaveBeenCalledWith('https://ax.example.edu/workspaces/ws%201%2F2', '_blank', 'noopener');
+  open.mockRestore();
+});
+
+test('ready state without a standalone URL: no "Open in ApplicationX" control anywhere', async () => {
+  status.mockReturnValue({ status: { enabled: true, standalone_url: null }, loading: false });
+  getProgram.mockResolvedValueOnce(program('v1'));
+  resolveContext.mockResolvedValue(ready('Rev 1'));
+  render(<ProgramCollaborationPage />);
+  await screen.findByRole('region', { name: 'CS workspace' });
+  expect(screen.queryByRole('button', { name: /Open in ApplicationX/ })).toBeNull();
+  expect(screen.queryByRole('link', { name: /Open in ApplicationX/ })).toBeNull();
+  expect(screen.getAllByRole('link', { name: 'Back to program' })).toHaveLength(1);
 });
 
 test('embed reported disabled after a ready resolution: banner and workspace placeholder are hidden (M-10)', async () => {
-  status.mockReturnValue({ status: null, loading: true });
+  status.mockReturnValue({ status: { enabled: true, standalone_url: null }, loading: false });
   getProgram.mockResolvedValueOnce(program('v1'));
-  resolveContext.mockResolvedValueOnce({ state: 'ready', workspace_id: 'w', workspace_title: 'W', program_title: 'CS AS-T', campus_label: 'LACC', revision_label: 'Rev 1', api_version: '1' });
+  resolveContext.mockResolvedValue(ready('Rev 1'));
   const { rerender } = render(<ProgramCollaborationPage />);
   await screen.findByRole('region', { name: 'Workspace context' });
-  expect(screen.getByRole('region', { name: 'Workspace' })).toBeInTheDocument();
+  await screen.findByRole('region', { name: 'CS workspace' });
 
   status.mockReturnValue({ status: { enabled: false, standalone_url: null }, loading: false });
   rerender(<ProgramCollaborationPage />);
   expect(screen.getByText('Employer & Career Collaboration is not enabled for this college.')).toBeInTheDocument();
   expect(screen.queryByRole('region', { name: 'Workspace context' })).toBeNull();
-  expect(screen.queryByRole('region', { name: 'Workspace' })).toBeNull();
+  expect(screen.queryByRole('region', { name: 'CS workspace' })).toBeNull();
+  expect(screen.queryByRole('textbox')).toBeNull();
   expect(screen.getAllByRole('link', { name: 'Back to program' })).toHaveLength(1);
+});
+
+test('ready state: the shared shell renders inside a luminous-card with a labelled chat textbox and no <main> (Task 8)', async () => {
+  status.mockReturnValue({ status: { enabled: true, organization_ref: 'lamc', campus_ref: 'LAMC', standalone_url: null }, loading: false });
+  getProgram.mockResolvedValueOnce(program('v1'));
+  resolveContext.mockResolvedValue(ready('Rev 1'));
+  const { container } = render(<ProgramCollaborationPage />);
+  const shell = await screen.findByRole('region', { name: 'CS workspace' });
+  expect(shell.closest('.luminous-card')).not.toBeNull();
+  expect(container.querySelector('main')).toBeNull();
+  expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+  expect(await screen.findByRole('textbox', { name: /ask about/i })).toBeInTheDocument();
+  // Both resolutions (page + shell) carry the same program context.
+  expect(resolveContext).toHaveBeenCalledTimes(2);
+  expect(resolveContext.mock.calls[1][1]).toMatchObject({ program_id: 'p1', context_id: 'p1:v1' });
 });

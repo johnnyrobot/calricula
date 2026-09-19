@@ -41,6 +41,25 @@
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 }
 
+/* Shared ApplicationX workspace shell (@johnnyrobot/workspace-ui) — repoint
+   its `--ax-*` tokens at the catalog palette. The package declares its
+   defaults on `:where(:root)`, so this ordinary `:root` rule wins regardless
+   of stylesheet order. `--ax-accent` is the primary button's background
+   (paper text on it) and the focus outline, so it must be gold-ink
+   (#7e6018, ~5.6:1 against paper) rather than decorative gold (#9a7b2e,
+   ~3.9:1 — fails WCAG 2.2 AA for the button label). */
+:root {
+  --ax-surface: var(--color-surface);
+  --ax-surface-alt: var(--color-surface-2);
+  --ax-ink: var(--color-ink);
+  --ax-ink-muted: var(--color-ink-soft);
+  --ax-accent: var(--color-gold-ink);
+  --ax-accent-ink: var(--color-gold-ink);
+  --ax-hairline: var(--color-border);
+  --ax-font: var(--font-sans);
+  --ax-radius: 0;
+}
+
 /* Base styles */
 @layer base {
   html {

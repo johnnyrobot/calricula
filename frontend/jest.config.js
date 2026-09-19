@@ -9,6 +9,9 @@ const config = {
   // Module path aliases matching tsconfig
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    // The shared shell publishes only `types` + `import` export conditions;
+    // Jest's CommonJS resolver needs the file path spelled out.
+    '^@johnnyrobot/workspace-ui$': '<rootDir>/node_modules/@johnnyrobot/workspace-ui/dist/index.js',
     // Handle CSS imports (with CSS modules)
     '^.+\\.module\\.(css|sass|scss)$': 'identity-obj-proxy',
     // Handle CSS imports (without CSS modules)
@@ -33,6 +36,10 @@ const config = {
       },
     }],
   },
+
+  // `@johnnyrobot/workspace-ui` ships ESM only; let SWC transform it (the
+  // default pattern skips everything under node_modules).
+  transformIgnorePatterns: ['/node_modules/(?!@johnnyrobot/workspace-ui/)'],
 
   // Always collect coverage so the global threshold gate below is enforced on
   // every `npm test` run (CI runs `npm test`), not only when `--coverage` is

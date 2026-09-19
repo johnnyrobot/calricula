@@ -135,12 +135,109 @@ Stub behaviour:
 
 The Playwright spec `frontend/e2e/applicationx-embed.spec.ts` runs against this
 stack (`PLAYWRIGHT_BASE_URL=http://localhost:3001 npx playwright test
-e2e/applicationx-embed.spec.ts`); rerun it with `STUB_DOWN=1` after restarting
-the stub with `STUB_DOWN=1` for the outage case.
+e2e/applicationx-embed.spec.ts`), including the chat steps (a question is
+answered with one citation through the shell); rerun it with `STUB_DOWN=1`
+after restarting the stub with `STUB_DOWN=1` for the outage case.
 
 ## Chat shell
 
-The collaboration routes currently render the workspace context banner and the
-host-state panels. The chat shell itself arrives with the shared ApplicationX
-workspace package; until that package is a dependency, a `ready` context shows a
-placeholder card ("Workspace ready. Chat arrives with the shared package.").
+A `ready` context on `/programs/<id>/collaboration` renders the shared
+ApplicationX workspace shell (`WorkspaceShell` from `@johnnyrobot/workspace-ui`)
+inside Calricula's card: a context header, the source-grounded chat (labelled
+ask box, transcript, per-answer sources and notices, clarification chips) and,
+for non-ready states inside the shell, the package's own host-state view.
+Calricula keeps its own `HostStatePanel` for the states it resolves before the
+shell mounts, the context banner, the page `<h1>` and the only `<main>`.
+
+The shell's `--ax-*` design tokens are repointed at Calricula's catalog palette
+in `frontend/src/styles/globals.css` (light-only; the accent is `gold-ink` so
+the primary button label meets WCAG 2.2 AA). The package's re-exported
+contracts (`WorkspaceHostAdapter`, `WorkspaceHostContext`, …) and SSE parser
+are what `frontend/src/lib/applicationx/` builds on.
+
+Every SSE event payload ApplicationX emits carries the turn's `context_id`;
+the shell drops frames tagged with another context (or none), which is why the
+stub tags its events too.
+
+## Installing the shared workspace package
+
+`@johnnyrobot/workspace-ui` is published to **GitHub Packages** (private
+registry, owner decision 2026-09-19), not to the public npm registry. This
+means **building Calricula's frontend from source now needs a GitHub token**,
+even for deployments that never enable the embed. `frontend/.npmrc` maps the
+`@johnnyrobot` scope to `https://npm.pkg.github.com`; it carries no
+credentials, and none must ever be committed.
+
+### Obtain a token
+
+Any GitHub account can create one; it only needs the `read:packages` scope.
+
+- **Classic PAT**: GitHub → Settings → Developer settings → Personal access
+  tokens → Tokens (classic) → Generate new token → tick **`read:packages`**
+  only. (Fine-grained PATs cannot read GitHub Packages at the time of writing.)
+- **GitHub CLI**: `gh auth token` prints the CLI's token, which works when the
+  CLI was authorised with the `read:packages` scope
+  (`gh auth refresh -s read:packages`).
+
+Treat it like a password: keep it out of `.env`, shell history and images.
+
+### Local development
+
+Put the token in a file npm reads at install time, outside the repository:
+
+```bash
+# once: ~/.npmrc (not the repo's frontend/.npmrc)
+echo "//npm.pkg.github.com/:_authToken=<token>" >> ~/.npmrc
+cd frontend && npm install
+```
+
+or hand it to a single command through the environment:
+
+```bash
+cd frontend
+env "npm_config_//npm.pkg.github.com/:_authToken=$(gh auth token)" npm install
+```
+
+### Docker builds
+
+Both `frontend/Dockerfile` (dev) and `frontend/Dockerfile.prod` read the token
+as the BuildKit secret **`npm_token`**. It is written to the build user's
+`~/.npmrc` only for the duration of the install step and removed in the same
+layer, so it never ends up in an image.
+
+```bash
+# Plain docker build
+printf '%s' "<token>" > /somewhere/npm_token
+DOCKER_BUILDKIT=1 docker build --secret id=npm_token,src=/somewhere/npm_token \
+  -f frontend/Dockerfile.prod frontend
+
+# docker compose (dev and prod): the secret is wired in both compose files and
+# defaults to the gitignored file ./.npm_token at the repository root
+printf '%s' "<token>" > .npm_token
+docker compose -f docker-compose.prod.yml build frontend
+# or point at another file
+NPM_TOKEN_FILE=/somewhere/npm_token docker compose build frontend
+```
+
+### CI
+
+The frontend job in `.github/workflows/ci.yml` requests `packages: read` and
+authenticates with `WORKSPACE_UI_READ_TOKEN` if that repository secret exists,
+else with `GITHUB_TOKEN`.
+
+**Required setup step (once, by the package owner).** The package is
+published from the `applicationx` repository and inherits that repository's
+permissions, so Calricula's own `GITHUB_TOKEN` cannot read it until one of
+these is done:
+
+1. In the package's settings on GitHub (Packages → `workspace-ui` →
+   Package settings → **Manage Actions access**), add the
+   `johnnyrobot/calricula` repository with **read** access; or
+2. Create a fine-grained personal access token with the `read:packages`
+   permission and store it as the `calricula` repository secret
+   **`WORKSPACE_UI_READ_TOKEN`**.
+
+Until one of them is in place the frontend CI job fails at `npm ci` with
+`E401`. Pull requests from forks cannot build the frontend either way:
+GitHub does not expose repository secrets to fork PRs and the fork's
+`GITHUB_TOKEN` has no access to the package.

@@ -14,9 +14,9 @@
  * Case 9 needs the stub restarted with STUB_DOWN=1 and this spec run with
  * STUB_DOWN=1; it is skipped otherwise.
  *
- * The chat steps of cases 1 and 8 are `test.fixme` until the shared
- * workspace package (chat shell) is integrated (plan Task 8); the host
- * states, context banner and navigation are asserted now.
+ * The chat steps of cases 1 and 8 run against the shared workspace shell
+ * (@johnnyrobot/workspace-ui, host plan Task 8): the stub answers every
+ * question with status → answer (one citation) → done.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -24,6 +24,8 @@ import { TEST_USERS, loginAsUser } from './fixtures/ccn-fixtures';
 
 const MAPPED_PROGRAM = 'Computer Science';
 const UNMAPPED_PROGRAM = 'Business Administration Certificate';
+// The shared shell's ask-box label (ChatPanel in @johnnyrobot/workspace-ui).
+const ASK_LABEL = 'Ask about classes, programs and campus services';
 const outage = !!process.env.STUB_DOWN;
 
 // Reach the program through the sidebar (client-side navigation) rather than a
@@ -59,14 +61,25 @@ test.describe('ApplicationX embed', () => {
     await expect(page.getByRole('region', { name: /Workspace context/ })).toContainText('Computer Science');
   });
 
-  test.fixme('chat arrives with the shared workspace package (plan Task 8) — case 1 chat steps', async ({ page }) => {
+  test('chat answers with sources inside the shared workspace shell (case 1 chat steps)', async ({ page }) => {
     await loginAsUser(page, TEST_USERS.faculty);
     await openProgram(page, MAPPED_PROGRAM);
     await page.getByRole('link', { name: /^Collaboration$/ }).click();
-    await page.getByLabel(/ask/i).fill('open seats in MULTIMD 100');
+    // The shell is a labelled <section> inside the page; the page keeps the only <main> and <h1>.
+    await expect(page.getByRole('region', { name: /workspace/i }).last()).toBeVisible();
+    expect(await page.locator('main').count()).toBe(1);
+    expect(await page.locator('h1').count()).toBe(1);
+
+    const ask = page.getByRole('textbox', { name: ASK_LABEL });
+    await ask.fill('open seats in MULTIMD 100');
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('status')).toHaveText(/answer ready/i);
+    await expect(page.getByRole('status').filter({ hasText: /answer ready/i })).toBeVisible();
+    const log = page.getByRole('log', { name: 'Conversation' });
+    await expect(log).toContainText('open seats in MULTIMD 100');
+    await expect(log).toContainText('MULTIMD 100 has 6 open seats this term.');
     await expect(page.getByRole('list', { name: /sources/i })).toBeVisible();
+    await expect(page.getByRole('list', { name: /sources/i })).toContainText('Schedule of classes');
+    await expect(page.getByRole('link', { name: /Schedule of classes/ })).toHaveAttribute('href', 'https://example.edu/schedule/MULTIMD-100');
   });
 
   test('staff without ApplicationX access sees the access panel, never a workspace (case 2)', async ({ page }) => {
@@ -129,19 +142,28 @@ test.describe('ApplicationX embed', () => {
     await expect(page).toHaveURL(/\/programs\/[0-9a-f-]+$/);
   });
 
-  test.fixme('chat arrives with the shared workspace package (plan Task 8) — case 8 chat steps', async ({ page }) => {
+  test('keyboard-only chat at narrow width (case 8 chat steps)', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 800 });
     await loginAsUser(page, TEST_USERS.faculty);
     await openProgram(page, MAPPED_PROGRAM);
     await page.getByRole('link', { name: /^Collaboration$/ }).click();
-    await page.keyboard.press('Tab'); // skip link
-    for (let i = 0; i < 12; i++) {
-      if (await page.getByLabel(/ask/i).evaluate((el) => el === document.activeElement)) break;
+    const ask = page.getByRole('textbox', { name: ASK_LABEL });
+    await expect(ask).toBeVisible();
+
+    // Tab from the top of the document until the ask box has focus.
+    let reached = false;
+    for (let i = 0; i < 40; i++) {
       await page.keyboard.press('Tab');
+      if (await ask.evaluate((el) => el === document.activeElement)) {
+        reached = true;
+        break;
+      }
     }
+    expect(reached).toBe(true);
     await page.keyboard.type('library hours');
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('status')).toHaveText(/answer ready/i);
+    await expect(page.getByRole('status').filter({ hasText: /answer ready/i })).toBeVisible();
+    await expect(page.getByRole('log', { name: 'Conversation' })).toContainText('library hours');
   });
 });
 

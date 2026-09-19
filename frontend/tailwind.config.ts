@@ -5,6 +5,9 @@ const config: Config = {
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    // Shared ApplicationX workspace shell (GitHub Packages) — its dist uses
+    // its own `ax-*` classes, but scanning it keeps any utility it emits alive.
+    './node_modules/@johnnyrobot/workspace-ui/dist/**/*.js',
   ],
   // Light-only academic theme. `dark` class is never applied (see ThemeContext),
   // so any remaining `dark:` utilities are inert.

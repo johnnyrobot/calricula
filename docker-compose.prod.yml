@@ -162,6 +162,13 @@ services:
         # Advertise Logto sign-in to the browser; baked in at build time like
         # every other NEXT_PUBLIC_ variable.
         - NEXT_PUBLIC_LOGTO_ENABLED=${NEXT_PUBLIC_LOGTO_ENABLED:-false}
+      # The frontend depends on the private package @johnnyrobot/workspace-ui
+      # (GitHub Packages). The build reads a `read:packages` token from the
+      # file named in NPM_TOKEN_FILE (default ./.npm_token, gitignored) as a
+      # BuildKit secret; it is never stored in the image or in .env.
+      # See docs/APPLICATIONX-EMBED.md "Installing the shared workspace package".
+      secrets:
+        - npm_token
     container_name: calricula-frontend-prod
     restart: unless-stopped
     environment:
@@ -210,6 +217,12 @@ volumes:
     driver: local
   caddy_config:
     driver: local
+
+secrets:
+  # Build-time only (frontend image). Put a GitHub token with `read:packages`
+  # in ./.npm_token, or point NPM_TOKEN_FILE at another file.
+  npm_token:
+    file: ${NPM_TOKEN_FILE:-./.npm_token}
 
 networks:
   default:
