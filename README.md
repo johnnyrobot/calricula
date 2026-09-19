@@ -211,10 +211,11 @@ DB_NAME=calricula
 ## Logto Setup
 
 Calricula authenticates through [Logto](https://logto.io), a self-hostable
-OIDC provider (ADR-0001, `docs/applicationx/ADR-0001-auth-stack-logto.md`).
-The full walkthrough — creating the tenant, the "Traditional web" application,
-the API resource, connector email verification, and demo-mode tenant
-requirements — is in **[`docs/AUTH-LOGTO.md`](docs/AUTH-LOGTO.md)**. In short:
+OIDC provider (decision record: ADR-0001, summarised in
+[`docs/AUTH-LOGTO.md`](docs/AUTH-LOGTO.md) §0). The full walkthrough —
+creating the tenant, the "Traditional web" application, the API resource,
+connector email verification, and demo-mode tenant requirements — is in
+**[`docs/AUTH-LOGTO.md`](docs/AUTH-LOGTO.md)**. In short:
 
 1. Create a Logto tenant (self-hosted or Logto Cloud).
 2. Create a **"Traditional web" application** for Calricula with redirect URI
@@ -228,10 +229,13 @@ requirements — is in **[`docs/AUTH-LOGTO.md`](docs/AUTH-LOGTO.md)**. In short:
 5. For local work with no tenant at all, set `AUTH_DEV_MODE=true` and
    `NEXT_PUBLIC_AUTH_DEV_MODE=true` instead — no Logto setup required.
 
-To create the seeded test users' matching Logto accounts (optional, only
-needed to sign in through Logto rather than dev mode), add users in the Logto
-console with the same emails as the test credentials above, with a verified
-email connector.
+The seeded test users (`faculty@`, `chair@`, `admin@calricula.com`, ...) exist
+for dev mode only. They are stamped `auth_issuer = 'dev'`, so a Logto identity
+with one of those addresses gets its own fresh account rather than adopting
+the seeded one; do not create them in a production tenant, and do not load
+the seeds into a production database (`docs/AUTH-LOGTO.md` §6). Real users
+sign in through your tenant and are provisioned on first sign-in; assign
+roles in Calricula afterwards.
 
 ---
 
@@ -334,8 +338,10 @@ docker-compose -f docker-compose.prod.yml up -d
 # Run database migrations
 docker-compose -f docker-compose.prod.yml exec backend alembic upgrade head
 
-# Seed initial data (first time only)
-docker-compose -f docker-compose.prod.yml exec backend python -m seeds.seed_all
+# Load reference data (first time only). Not `seeds.seed_all`: that one also
+# creates the dev test users, courses and demo data (docs/AUTH-LOGTO.md §6).
+docker-compose -f docker-compose.prod.yml exec backend python -m seeds.seed_top_codes
+docker-compose -f docker-compose.prod.yml exec backend python -m seeds.seed_ccn_standards
 
 # View logs
 docker-compose -f docker-compose.prod.yml logs -f

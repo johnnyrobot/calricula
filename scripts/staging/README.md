@@ -24,7 +24,7 @@ Logto (OIDC) auth over HTTP, the live Gemini / File Search RAG path).
 # from the repo root, with the backend venv active
 export DATABASE_URL='postgresql://user:pass@host:5432/calricula_staging'  # FRESH staging DB
 export API_BASE_URL='https://staging-api.example.org'
-export OIDC_ID_TOKEN='eyJhbG...'       # valid Logto access token (or dev-* token) for a staging user
+export OIDC_ACCESS_TOKEN='eyJhbG...'   # valid Logto access token -- not the ID token (or a dev-* token) -- for a staging user
 export GOOGLE_API_KEY='...'            # live Gemini key
 
 # everything, in order, with a final summary

@@ -14,7 +14,7 @@
 # Required env (see docs/STAGING_VALIDATION.md):
 #   DATABASE_URL    fresh staging DB (mutated by the migration step)
 #   API_BASE_URL    staging API base URL
-#   OIDC_ID_TOKEN   valid Logto access token (or dev-* token) for a staging user
+#   OIDC_ACCESS_TOKEN  valid Logto access token (not the ID token; or a dev-* token) for a staging user
 #   GOOGLE_API_KEY  live Gemini key
 #
 # Skip flags (env): SKIP_MIGRATIONS=1  SKIP_AUTH=1  SKIP_AI=1

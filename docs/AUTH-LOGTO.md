@@ -2,19 +2,38 @@
 
 Calricula authenticates through [Logto](https://logto.io), a standard OIDC
 provider, self-hostable or Logto Cloud. This replaces the earlier Firebase
-Authentication integration; see `docs/applicationx/ADR-0001-auth-stack-logto.md`
-for the decision record. This guide covers tenant setup, the environment
-variables, `AUTH_LEGACY_RELINK`, demo mode, dev mode, and troubleshooting.
+Authentication integration (decision record: ADR-0001, summarised in §0
+below). This guide covers tenant setup, the environment variables,
+`AUTH_LEGACY_RELINK`, demo mode, dev mode, and troubleshooting.
 
 The backend verifies tokens itself via JWKS (`backend/app/core/oidc.py`, no
 vendor SDK); the frontend uses `@logto/next` (`frontend/src/lib/logto.ts` and
 the route handlers under `frontend/src/app/{sign-in,callback,sign-out,api/auth}`).
 
+## 0. Decision record (ADR-0001, Logto auth stack)
+
+The parts of the decision this guide depends on:
+
+- **Shape.** One Logto tenant; two web applications (Calricula and its
+  companion service, ApplicationX); one API resource per application.
+  Calricula's frontend requests access tokens for both resources (its own
+  always, ApplicationX's only when `LOGTO_APPLICATIONX_RESOURCE` is set —
+  §3). Token verification is standard JWT against the tenant's JWKS, with
+  no vendor SDK on the backend. Users are keyed by `auth_subject` (the
+  token's `sub`) plus `auth_issuer`; a NULL `auth_issuer` marks a
+  pre-migration row (§6).
+- **Self-hosting stance.** Deployers run Logto themselves (MPL-2.0; Docker +
+  PostgreSQL) or use Logto Cloud. Either way identity data stays on the
+  deployer's infrastructure or in the deployer's own Logto tenant — the
+  Calricula project hosts nothing and holds no user data.
+
 ## 1. Create the Logto tenant
 
 Self-host Logto (Docker + PostgreSQL, MPL-2.0) or use Logto Cloud. Either way
-you end up with a **tenant endpoint**, e.g. `https://your-tenant.logto.app/`
-(self-hosted) — the OIDC issuer is that endpoint plus `/oidc`.
+you end up with a **tenant endpoint** — `https://<tenant-id>.logto.app/` on
+Logto Cloud, or whatever origin you serve a self-hosted instance from, e.g.
+`https://auth.your-college.edu/` (`http://localhost:3001/` for the default
+Docker image). The OIDC issuer is that endpoint plus `/oidc`.
 
 ## 2. Register the Calricula application
 
@@ -68,7 +87,10 @@ This is load-bearing for two features:
 Configure the connector(s) your tenant uses (email/password, Google, etc.) so
 they mark `email_verified: true` only after real verification (Logto's
 built-in email connector does this already; a social connector must be one
-that verifies email itself, e.g. Google). A user whose token has no verified
+that verifies email itself, e.g. Google). An address an administrator sets on
+the user through the Logto Console or Management API is also reported as
+verified — administrators assigning addresses are inside the trust boundary,
+so treat Console access accordingly. A user whose token has no verified
 email is still provisioned, but with a synthesized, undeliverable placeholder
 address (`provisioning_email` in `backend/app/core/deps.py`) — acceptable for
 occasional use but not for `AUTH_LEGACY_RELINK` or demo mode.
@@ -119,6 +141,40 @@ Firebase-era user has signed in at least once through Logto; then set it to
 `false` so sign-in matches on the OIDC subject alone (narrowing the login
 path and closing the re-link window).
 
+The frontend holds every API token request until `/login` has settled, so
+on first sign-in the re-link runs before any other call. Should an API call
+reach the backend first anyway (another client, a stale tab), the backend
+provisions a placeholder row for the subject and `/login` then folds that
+placeholder into the legacy row. If the placeholder already has dependants
+by then, the merge is abandoned and the backend logs
+`Legacy re-link skipped ...` with both row ids for you to reconcile.
+
+**Cutover.** When you turn `AUTH_LEGACY_RELINK` off, also make sure no row
+still has `auth_issuer IS NULL` — NULL means "adoptable by email match", and
+it should stop meaning anything once the window is closed. Either stamp the
+stragglers with your issuer or delete them:
+
+```sql
+-- users who never signed in post-migration: keep the rows, close the window
+UPDATE users SET auth_issuer = 'https://<tenant-endpoint>/oidc' WHERE auth_issuer IS NULL;
+-- or, if those accounts are abandoned
+DELETE FROM users WHERE auth_issuer IS NULL;
+```
+
+(`auth_subject` on a stamped row still holds the retired provider's uid, so
+that person will get a fresh account if they ever do sign in — which is the
+intended outcome after cutover.)
+
+### Seed data is for development only
+
+`python -m seeds.seed_all` (and `seeds.seed_users`) creates the documented
+test accounts (`faculty@calricula.com`, `admin@calricula.com`, ...) for the
+dev-mode picker (§8). They are stamped `auth_issuer = 'dev'` so the re-link
+above can never adopt them, but they are still real rows with real roles —
+an ADMIN among them. **Do not load the seeds into a production database.**
+Real accounts come from your Logto tenant; roles are assigned in Calricula
+after the user's first sign-in.
+
 ## 7. Demo mode
 
 `DEMO_MODE=true` (backend) / `NEXT_PUBLIC_DEMO_MODE=true` (frontend) now
@@ -146,9 +202,8 @@ flag on when `ENVIRONMENT=production` (fail-closed guard in
 
 The backend fetches Logto's JWKS to verify tokens. When Logto itself runs as
 a container on the same Docker network (a self-hosted dev setup, not
-something Calricula's own compose files start — see
-`docs/applicationx/ADR-0001-auth-stack-logto.md` §"Self-hosting"), the
-backend cannot reach it at `localhost`. Set `OIDC_JWKS_URL` to the service's
+something Calricula's own compose files start — see the self-hosting stance
+in §0), the backend cannot reach it at `localhost`. Set `OIDC_JWKS_URL` to the service's
 internal address, e.g. `http://logto:3001/oidc/jwks`, while leaving
 `OIDC_ISSUER` as the tenant's public issuer URL — that is the `iss` claim
 Logto stamps on tokens it issues through its published endpoint, and the
@@ -163,12 +218,14 @@ backend's issuer check must match that, not the internal JWKS address.
 | `401 invalid or expired token` | Token expired, wrong signing algorithm (not in `OIDC_ALGORITHMS`), or `aud` doesn't match `OIDC_AUDIENCE`. |
 | Backend refuses to boot: `OIDC_AUDIENCE equal to OIDC_CLIENT_ID` | These must be two different Logto resources (§3, §6) — an ID token would otherwise pass the access-token audience check. |
 | Every auth route 404s on the frontend | One of the five required `LOGTO_*` server variables is unset; `LOGTO_CONFIGURED`/`logtoConfig` in `frontend/src/lib/logto.ts` is `null` until all five are set. |
-| Signed in through Logto but treated as signed out | `email_verified` is not `true` on the token (§4), or (demo deployments) the email has no `demo` in it (§7). |
+| Signed in through Logto but treated as signed out (demo deployments) | The verified email has no `demo` in it, or `email_verified` is not `true` on the token, so the demo gate refused the account (§4, §7). Outside demo mode an unverified email does not sign the user out — they are provisioned with a placeholder address instead (next row). |
+| Signed in, but the profile shows an address ending in `@oidc.invalid` | The token carried no verified email (§4): fix the connector, then sign in again and `/login` replaces the placeholder with the verified address. |
+| Sent back to `/login` with "Sign-in could not be completed" | The `/callback` code exchange failed: the user cancelled at Logto, the `state` cookie was missing or stale (cookie blocked, or the sign-in page was left open too long), or the code was reused. Retrying normally succeeds; if it never does, check `LOGTO_BASE_URL` matches the registered redirect URI and the frontend logs for the error class. |
 | A returning Firebase-era user gets a new, empty account instead of their old one | `AUTH_LEGACY_RELINK` was set to `false` before that user signed in once post-migration, or their token's email isn't verified. |
 
 ## References
 
 - Logto docs, validate access tokens: <https://docs.logto.io/authorization/validate-access-tokens>
 - Logto Next.js App Router SDK: <https://docs.logto.io/quick-starts/next-app-router>
-- `docs/applicationx/ADR-0001-auth-stack-logto.md` — the decision record shared with ApplicationX.
-- `docs/STAGING_VALIDATION.md` — running the real auth check against a staging deploy.
+- §0 above — the decision record (ADR-0001, shared with ApplicationX) as far as this guide relies on it.
+- `docs/STAGING_VALIDATION.md` — running the real auth check against a staging deploy, and the Logto cutover gate.

@@ -13,9 +13,11 @@
 #   Logs:     docker compose -f docker-compose.prod.yml logs -f
 #   Stop:     docker compose -f docker-compose.prod.yml down
 #
-# First-time setup:
+# First-time setup (reference data only -- seeds.seed_all also creates the
+# dev test users and demo content and must not be run in production):
 #   docker compose -f docker-compose.prod.yml exec backend alembic upgrade head
-#   docker compose -f docker-compose.prod.yml exec backend python -m seeds.seed_all
+#   docker compose -f docker-compose.prod.yml exec backend python -m seeds.seed_top_codes
+#   docker compose -f docker-compose.prod.yml exec backend python -m seeds.seed_ccn_standards
 #
 # Estimated resources: 1-2 vCPU, 2GB RAM (light usage, ~25 users)
 
