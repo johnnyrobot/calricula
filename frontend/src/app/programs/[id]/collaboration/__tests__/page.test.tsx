@@ -75,3 +75,24 @@ test('signed out after auth settled: session_expired alert', () => {
   expect(screen.getByRole('alert')).toBeInTheDocument();
   expect(screen.getByRole('link', { name: 'Sign in again' })).toHaveAttribute('href', '/login');
 });
+
+test('non-ready host state: one "Back to program" link under the panel (outage isolation)', async () => {
+  getProgram.mockResolvedValueOnce(program('v1'));
+  resolveContext.mockResolvedValueOnce({ state: 'service_unavailable', message: 'Down.', retryable: true });
+  render(<ProgramCollaborationPage />);
+  await screen.findByRole('alert');
+  const links = screen.getAllByRole('link', { name: 'Back to program' });
+  expect(links).toHaveLength(1);
+  expect(links[0]).toHaveAttribute('href', '/programs/p1');
+});
+
+test('ready state: the banner is the only "Back to program" link', async () => {
+  getProgram.mockResolvedValueOnce(program('v1'));
+  resolveContext.mockResolvedValueOnce({ state: 'ready', workspace_id: 'w', workspace_title: 'W', program_title: 'CS AS-T', campus_label: 'LACC', revision_label: 'Rev 1', api_version: '1' });
+  render(<ProgramCollaborationPage />);
+  const region = await screen.findByRole('region', { name: 'Workspace context' });
+  const links = screen.getAllByRole('link', { name: 'Back to program' });
+  expect(links).toHaveLength(1);
+  expect(region).toContainElement(links[0]);
+  expect(links[0]).toHaveAttribute('href', '/programs/p1');
+});
