@@ -14,7 +14,7 @@
  * two server routes are stubbed through `global.fetch`.
  */
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { AuthProvider, useAuth, refreshDelaySeconds } from '../AuthContext';
@@ -27,11 +27,16 @@ const PROFILE = {
   department_name: 'Mathematics',
 };
 
-/** Route `fetch` by URL to the two auth endpoints. */
-function mockAuthRoutes(options: {
+interface RouteSpec {
   session?: { status?: number; body?: unknown };
   token?: { status?: number; body?: unknown };
-}) {
+}
+
+/**
+ * Route `fetch` by URL to the two auth endpoints. The spec is read on every
+ * call, so a test can mutate it to change what a later request sees.
+ */
+function mockAuthRoutes(options: RouteSpec) {
   const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     const spec = url.includes('/api/auth/session') ? options.session : options.token;
@@ -78,10 +83,33 @@ function Consumer() {
   );
 }
 
-const renderAuth = () =>
+/**
+ * A descendant that asks for a bearer token in its own mount effect — the
+ * ordering that matters, because React runs child effects before the
+ * provider's own. Mirrors `useUserCourses({ autoFetch: true })`.
+ */
+function EagerTokenConsumer() {
+  const { getToken } = useAuth();
+  const [eager, setEager] = React.useState<string>('');
+  React.useEffect(() => {
+    let cancelled = false;
+    void getToken().then((t) => {
+      if (!cancelled) setEager(t ?? 'null');
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Deliberately mount-only, like the real hook's static dependency list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <span data-testid="eager-token">{eager}</span>;
+}
+
+const renderAuth = (children?: React.ReactNode) =>
   render(
     <AuthProvider>
       <Consumer />
+      {children}
     </AuthProvider>
   );
 
@@ -324,6 +352,109 @@ describe('Logto mode', () => {
 
     await user.click(screen.getByText('get-token'));
     await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('at-lazy'));
+  });
+
+  it('mints a token for a child that asks during its own mount effect', async () => {
+    // React runs child effects before the provider's: the token fetcher must
+    // exist from the first render, not be installed by the provider's effect.
+    mockAuthRoutes({
+      session: { body: { signedIn: true, profile: PROFILE } },
+      token: { body: { access_token: 'at-eager', expires_in: 3600 } },
+    });
+
+    renderAuth(<EagerTokenConsumer />);
+
+    // No waiting on `loading` first — the child gets a real token straight away.
+    await waitFor(() => expect(screen.getByTestId('eager-token')).toHaveTextContent('at-eager'));
+  });
+
+  it('refreshes the access token before it expires', async () => {
+    jest.useFakeTimers();
+    try {
+      const fetchMock = mockAuthRoutes({
+        session: { body: { signedIn: true, profile: PROFILE } },
+        token: { body: { access_token: 'at-1', expires_in: 120 } },
+      });
+      const tokenCalls = () =>
+        fetchMock.mock.calls.filter(([url]) => String(url).includes('/api/auth/token')).length;
+
+      renderAuth();
+      await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+      expect(tokenCalls()).toBe(1);
+
+      // refreshDelaySeconds(120) === 60
+      await act(async () => {
+        jest.advanceTimersByTime(60_000);
+      });
+      await waitFor(() => expect(tokenCalls()).toBe(2));
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('signs the user out when a scheduled refresh comes back non-200', async () => {
+    jest.useFakeTimers();
+    try {
+      const spec: RouteSpec = {
+        session: { body: { signedIn: true, profile: PROFILE } },
+        token: { body: { access_token: 'at-1', expires_in: 120 } },
+      };
+      mockAuthRoutes(spec);
+
+      renderAuth();
+      await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+
+      // The session died while the tab was open.
+      spec.token = { status: 204 };
+      await act(async () => {
+        jest.advanceTimersByTime(60_000);
+      });
+
+      await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('false'));
+      expect(screen.getByTestId('user')).toHaveTextContent('none');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('re-mints a token that has entered its refresh margin', async () => {
+    // A frozen tab's timer never fires, so getToken must notice staleness too.
+    const spec: RouteSpec = {
+      session: { body: { signedIn: true, profile: PROFILE } },
+      token: { body: { access_token: 'at-old', expires_in: 40 } },
+    };
+    const fetchMock = mockAuthRoutes(spec);
+    const user = userEvent.setup();
+    renderAuth();
+    await waitFor(() => expect(screen.getByTestId('authed')).toHaveTextContent('true'));
+
+    const before = fetchMock.mock.calls.length;
+    // refreshDelaySeconds(40) === 30, so the cached copy is stale by now.
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 31_000);
+    try {
+      spec.token = { body: { access_token: 'at-new', expires_in: 3600 } };
+
+      await user.click(screen.getByText('get-token'));
+      await waitFor(() => expect(screen.getByTestId('token')).toHaveTextContent('at-new'));
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(before);
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('reports a backend outage rather than failing silently', async () => {
+    mockAuthRoutes({ session: { status: 502, body: { signedIn: false, error: 'profile_unavailable' } } });
+    renderAuth();
+
+    await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent(/Could not reach the Calricula server/i));
+    expect(screen.getByTestId('authed')).toHaveTextContent('false');
+  });
+
+  it('reports a server that advertises Logto but is not configured', async () => {
+    mockAuthRoutes({ session: { status: 404, body: { error: 'logto_not_configured' } } });
+    renderAuth();
+
+    await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent(/not configured/i));
   });
 
   it('refuses password sign-in', async () => {

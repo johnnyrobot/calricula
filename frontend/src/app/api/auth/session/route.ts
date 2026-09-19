@@ -7,6 +7,9 @@ import { API_BASE_URL, json, logtoConfig, notConfigured } from '@/lib/logto';
 
 export const dynamic = 'force-dynamic';
 
+/** How long to wait on the backend's ID-token exchange before giving up. */
+const BACKEND_TIMEOUT_MS = 5000;
+
 /** The app profile the browser is allowed to see (mirrors `UserProfile` in AuthContext). */
 export interface SessionProfile {
   id: string;
@@ -81,6 +84,9 @@ export async function GET(): Promise<Response> {
         'Content-Type': 'application/json',
       },
       cache: 'no-store',
+      // A wedged backend must not hold this request (and the visitor's page)
+      // open indefinitely; a timeout is just another "profile unavailable".
+      signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
     });
   } catch {
     return json({ signedIn: false, error: 'profile_unavailable' } satisfies SessionResponse, 502);

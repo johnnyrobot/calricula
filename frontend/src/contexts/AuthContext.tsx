@@ -215,6 +215,19 @@ const DEV_LOGIN_HINT =
 const FORBIDDEN_MESSAGE =
   'This deployment only admits demo accounts. Please sign in with a demo account.';
 
+const UNAVAILABLE_MESSAGE =
+  'Could not reach the Calricula server to load your profile. Please try again in a moment.';
+
+const UNCONFIGURED_MESSAGE =
+  'Single sign-on is not configured on this server. Please contact an administrator.';
+
+/** The in-memory access token and the moment it should be replaced. */
+interface CachedToken {
+  value: string;
+  /** Epoch ms at which the token is considered stale (mirrors the refresh timer). */
+  refreshAt: number;
+}
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -223,11 +236,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // The Logto access token lives here and nowhere else: no web storage, no
   // cookie the page script can read, no URL.
-  const tokenRef = useRef<string | null>(null);
+  const tokenRef = useRef<CachedToken | null>(null);
   const refreshRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Set by the Logto effect so `getToken` can mint a token on demand if a
-  // consumer asks before (or after) the mount fetch has settled.
-  const fetchTokenRef = useRef<() => Promise<string | null>>(async () => null);
+  // De-duplicates concurrent callers: several widgets mount at once and each
+  // asks for a token, but only one request should go out.
+  const inflightRef = useRef<Promise<string | null> | null>(null);
+  const mountedRef = useRef(true);
+  // Lets the refresh timer call the current fetcher without the fetcher having
+  // to depend on itself. Assigned in an effect; the timer only fires ≥30s later.
+  const fetchRef = useRef<() => Promise<string | null>>(async () => null);
 
   // Dev bypass is checked on every render because it can be flipped at runtime
   // via localStorage (only in builds where that is permitted).
@@ -240,6 +257,79 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       refreshRef.current = null;
     }
   }, []);
+
+  const signedOut = useCallback(() => {
+    clearRefresh();
+    tokenRef.current = null;
+    if (mountedRef.current) setUser(null);
+  }, [clearRefresh]);
+
+  /**
+   * Mints (or renews) the API access token from the same-origin route handler
+   * and schedules the next renewal.
+   *
+   * Defined from the very first render — not inside the bootstrap effect —
+   * because React runs child effects before the provider's own: a descendant
+   * that calls `getToken()` in its mount effect (e.g. `useUserCourses` with
+   * `autoFetch`) must get a real token rather than a stub that answers `null`
+   * once and never retries.
+   */
+  const fetchAccessToken = useCallback(async (): Promise<string | null> => {
+    if (inflightRef.current) return inflightRef.current;
+
+    const request = (async (): Promise<string | null> => {
+      try {
+        const response = await fetch('/api/auth/token', {
+          cache: 'no-store',
+          credentials: 'same-origin',
+        });
+        if (response.status !== 200) {
+          // 204 (signed out) or an error: the session is over.
+          signedOut();
+          return null;
+        }
+        const { access_token: accessToken, expires_in: expiresIn } =
+          (await response.json()) as TokenBody;
+        const delaySeconds = refreshDelaySeconds(expiresIn);
+        tokenRef.current = { value: accessToken, refreshAt: Date.now() + delaySeconds * 1000 };
+        if (mountedRef.current) {
+          clearRefresh();
+          refreshRef.current = setTimeout(() => {
+            refreshRef.current = null;
+            void fetchRef.current();
+          }, delaySeconds * 1000);
+        }
+        return accessToken;
+      } catch (err) {
+        // A transport failure is indistinguishable from a dead session here;
+        // fail closed rather than hand out a token we could not confirm.
+        console.warn(
+          'Could not obtain an access token:',
+          err instanceof Error ? err.message : err
+        );
+        signedOut();
+        return null;
+      } finally {
+        inflightRef.current = null;
+      }
+    })();
+
+    inflightRef.current = request;
+    return request;
+  }, [clearRefresh, signedOut]);
+
+  useEffect(() => {
+    fetchRef.current = fetchAccessToken;
+  }, [fetchAccessToken]);
+
+  // Stop the refresh timer (and any state writes) once the provider unmounts.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearRefresh();
+    };
+  }, [clearRefresh]);
 
   useEffect(() => {
     // ---- Dev bypass: restore the picked identity from sessionStorage -------
@@ -280,51 +370,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // ---- Logto ------------------------------------------------------------
     let cancelled = false;
 
-    const signedOut = () => {
-      clearRefresh();
-      tokenRef.current = null;
-      if (!cancelled) setUser(null);
-    };
-
-    const fetchToken = async (): Promise<string | null> => {
-      const response = await fetch('/api/auth/token', {
-        cache: 'no-store',
-        credentials: 'same-origin',
-      });
-      if (cancelled) return null;
-      if (response.status !== 200) {
-        // 204 (signed out) or an error: the session is over.
-        signedOut();
-        return null;
-      }
-      const { access_token: accessToken, expires_in: expiresIn } =
-        (await response.json()) as TokenBody;
-      if (cancelled) return null;
-      tokenRef.current = accessToken;
-      clearRefresh();
-      refreshRef.current = setTimeout(() => {
-        refreshRef.current = null;
-        void fetchToken().catch(signedOut);
-      }, refreshDelaySeconds(expiresIn) * 1000);
-      return accessToken;
-    };
-
-    fetchTokenRef.current = fetchToken;
-
     const bootstrap = async () => {
       const response = await fetch('/api/auth/session', {
         cache: 'no-store',
         credentials: 'same-origin',
       });
       if (cancelled) return;
-      if (!response.ok) return;
-      const session = (await response.json()) as SessionBody;
+      const session = (await response.json().catch(() => null)) as SessionBody | null;
       if (cancelled) return;
-      if (!session.signedIn) {
-        if (session.error === 'forbidden') setError(FORBIDDEN_MESSAGE);
+
+      if (!session?.signedIn) {
+        // Tell the visitor *why* they are not signed in: a refused demo
+        // account and a backend outage need different responses from them.
+        if (session?.error === 'forbidden') {
+          setError(FORBIDDEN_MESSAGE);
+        } else if (session?.error === 'logto_not_configured') {
+          setError(UNCONFIGURED_MESSAGE);
+        } else if (session?.error === 'profile_unavailable' || !response.ok) {
+          setError(UNAVAILABLE_MESSAGE);
+        }
         return;
       }
-      await fetchToken();
+
+      await fetchAccessToken();
       if (cancelled || tokenRef.current === null || !session.profile) return;
       setUser(session.profile);
       setError(null);
@@ -344,10 +412,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     return () => {
       cancelled = true;
-      clearRefresh();
-      fetchTokenRef.current = async () => null;
     };
-  }, [mode, clearRefresh]);
+  }, [mode, clearRefresh, signedOut, fetchAccessToken]);
 
   // Dev-mode sign-in (the identity picker on /login). Real sign-in goes
   // through the provider; there is no password for this app to check.
@@ -416,8 +482,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return user ? user.id : null;
     }
     if (mode !== 'logto') return null;
-    if (tokenRef.current) return tokenRef.current;
-    return fetchTokenRef.current();
+    const cached = tokenRef.current;
+    // Renew a token that is inside its refresh margin rather than handing out
+    // one that is about to expire — the scheduled timer does not run while the
+    // tab is frozen, so the cached copy can be arbitrarily old.
+    if (cached && Date.now() < cached.refreshAt) return cached.value;
+    return fetchAccessToken();
   };
 
   // Clear error
