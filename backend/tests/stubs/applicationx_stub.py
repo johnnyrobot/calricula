@@ -6,9 +6,9 @@ Implements just enough of the ApplicationX host API for the Calricula broker
 (app/services/applicationx_broker.py) to exercise every host state:
 
     POST /v1/host-contexts/resolve   ready | mapping_required | access_required
-    POST /v1/chat/messages           202 with a run id
-    GET  /v1/chat/runs/{id}/events   SSE: status, answer (one citation), done
-    POST /v1/chat/runs/{id}/cancel   200 {run_id, status: cancelled}
+    GET  /v1/sources                 the source inventory
+    GET  /v1/sources/{id}/health     per-source health
+    GET  /v1/workspaces/{id}/events  SSE: status, updated, done
     GET  /v1/sources                 a single source
 
 Behaviour is driven by environment variables:
@@ -77,7 +77,7 @@ async def resolve(request: Request, authorization: str | None = Header(default=N
         return JSONResponse(
             {
                 "state": "access_required",
-                "message": "Ask your ApplicationX administrator to add you to the lamc organization.",
+                "message": "Ask your ApplicationX administrator to add you to the organization.",
                 "retryable": False,
             },
             # Host states are resolution outcomes, not transport errors: the
@@ -101,82 +101,45 @@ async def resolve(request: Request, authorization: str | None = Header(default=N
         "workspace_id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"stub:{external_id}")),
         "workspace_title": f"{program_ref.get('title') or 'Program'} workspace",
         "program_title": program_ref.get("title"),
-        "campus_label": body.get("campus_ref") or "LAMC",
+        "campus_label": body.get("campus_ref") or "MAIN",
         "revision_label": f"Revision {str(program_ref.get('revision', ''))[:10]}",
         "api_version": API_VERSION,
     }
 
 
-@app.post("/v1/chat/messages", status_code=202)
-async def messages(request: Request):
-    body = await request.json()
-    return {"run_id": str(uuid.uuid4()), "accepted": True, "context_id": body.get("context_id")}
+@app.get("/v1/sources")
+async def sources():
+    return {"sources": [{"source_id": "calricula_lmi", "connector_id": "calricula_lmi", "phase": "P1",
+                         "status": "implemented_tested", "disposition_summary": {"public_read": 1}}]}
 
 
-def _events(run_id: str) -> list[tuple[int, str, dict]]:
+@app.get("/v1/sources/{source_id}/health")
+async def source_health(source_id: str):
+    return {"source_id": source_id, "recorded": False, "status": "unknown", "observed_at": None,
+            "age_seconds": None, "stale": None, "max_age_seconds": 86400, "detail": "never observed"}
+
+
+def _events(workspace_id: str) -> list[tuple[int, str, dict]]:
     return [
-        (1, "status", {"run_id": run_id, "status": "thinking"}),
-        (
-            2,
-            "answer",
-            {
-                "message_id": str(uuid.uuid4()),
-                "answer": "MULTIMD 100 has 6 open seats this term.",
-                "route": "sections",
-                "resolved_scope": {"campus": "LAMC"},
-                "cards": [],
-                "citations": [
-                    {
-                        "evidence_id": "ev-stub-1",
-                        "url": "https://example.edu/schedule/MULTIMD-100",
-                        "locator": "Schedule of classes",
-                        "source_period": "2026FA",
-                        "observed_at": "2026-09-19T00:00:00Z",
-                    }
-                ],
-                "warnings": [],
-                "clarification": None,
-                "completeness": "complete",
-                "run_id": run_id,
-            },
-        ),
-        (3, "done", {"run_id": run_id, "status": "answer ready"}),
+        (1, "status", {"workspace_id": workspace_id, "status": "connected"}),
+        (2, "updated", {"workspace_id": workspace_id, "resource": "workspace", "revision": 1}),
+        (3, "done", {"workspace_id": workspace_id, "status": "caught up"}),
     ]
 
 
-async def _stream(run_id: str, after: int) -> AsyncIterator[bytes]:
-    for event_id, name, data in _events(run_id):
+async def _stream(workspace_id: str, after: int) -> AsyncIterator[bytes]:
+    for event_id, name, data in _events(workspace_id):
         if event_id <= after:
             continue
         yield f"id: {event_id}\nevent: {name}\ndata: {json.dumps(data)}\n\n".encode()
         await asyncio.sleep(0.05)
 
 
-@app.get("/v1/chat/runs/{run_id}/events")
-async def events(run_id: str, last_event_id: str | None = Header(default=None, alias="Last-Event-ID")):
+@app.get("/v1/workspaces/{workspace_id}/events")
+async def events(workspace_id: str, last_event_id: str | None = Header(default=None, alias="Last-Event-ID")):
     after = int(last_event_id) if last_event_id and last_event_id.isdigit() else 0
     return StreamingResponse(
-        _stream(run_id, after),
+        _stream(workspace_id, after),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache"},
     )
-
-
-@app.post("/v1/chat/runs/{run_id}/cancel")
-async def cancel(run_id: str):
-    # A JSON body, not 204: the broker parses every upstream reply as JSON.
-    return {"run_id": run_id, "status": "cancelled"}
-
-
-@app.get("/v1/sources")
-async def sources():
-    return {
-        "sources": [
-            {"id": "schedule", "title": "Schedule of classes", "health": "ok", "observed_at": "2026-09-19T00:00:00Z"}
-        ]
-    }
-
-
-@app.get("/v1/sources/{source_id}/health")
-async def source_health(source_id: str):
-    return {"id": source_id, "health": "ok", "observed_at": "2026-09-19T00:00:00Z"}

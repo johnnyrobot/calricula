@@ -174,7 +174,7 @@ export default function ProgramCollaborationPage() {
 
         {!embedDisabled && resolution.state === 'ready' && (
           <section aria-label="Workspace" className="luminous-card mt-6">
-            <p className="text-sm text-ink-soft">Workspace ready. Chat arrives with the shared package.</p>
+            <p className="text-sm text-ink-soft">Workspace ready. Employer records, threads and evidence arrive with the shared workspace package.</p>
           </section>
         )}
       </div>

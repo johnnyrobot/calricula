@@ -35,8 +35,8 @@ Copy the block from `.env.example`:
 | --- | --- | --- |
 | `APPLICATIONX_EMBED_ENABLED` | yes | `true` turns the embed on. |
 | `APPLICATIONX_API_ORIGIN` | yes | Origin of the ApplicationX API, no path (e.g. `https://ax.example.edu`). In production this must be `https://`; the backend refuses to start otherwise. |
-| `APPLICATIONX_ORGANIZATION_REF` | yes | ApplicationX organization slug for this deployment (e.g. `lamc`). |
-| `APPLICATIONX_CAMPUS_REF` | yes | Campus code sent with every context (e.g. `LAMC`). |
+| `APPLICATIONX_ORGANIZATION_REF` | yes | ApplicationX organization slug for this deployment (e.g. `demo-college`). |
+| `APPLICATIONX_CAMPUS_REF` | yes | Campus code sent with every context (e.g. `MAIN`). |
 | `APPLICATIONX_STANDALONE_URL` | no | Public URL of standalone ApplicationX, offered as an "Open in ApplicationX" link. |
 | `APPLICATIONX_SERVICE_TOKEN` | no | Optional transport credential sent as `X-Calricula-Service`. It identifies the Calricula deployment; it never expands a user's scope. |
 | `APPLICATIONX_TIMEOUT_SECONDS` | no | Upstream timeout (default 20). |
@@ -83,11 +83,9 @@ The broker exposes exactly these upstream routes; anything else is 404.
 | Broker route | Upstream | Notes |
 | --- | --- | --- |
 | `POST /api/applicationx/host-contexts/resolve` | `POST /v1/host-contexts/resolve` | Body: `program_id`, `workspace_id`, `context_id`. The program reference (id, title, status, revision) is built server-side. |
-| `POST /api/applicationx/ops/chat.messages` | `POST /v1/chat/messages` | Request bodies are capped at 16 KiB. |
-| `POST /api/applicationx/ops/chat.cancel` | `POST /v1/chat/runs/{run_id}/cancel` | `run_id` must be a UUID. |
-| `POST /api/applicationx/ops/sources.list` | `GET /v1/sources` | |
+| `POST /api/applicationx/ops/sources.list` | `GET /v1/sources` | Request bodies are capped at 16 KiB. |
 | `POST /api/applicationx/ops/sources.health` | `GET /v1/sources/{source_id}/health` | `source_id` must match `[a-z_]{2,40}`. |
-| `GET /api/applicationx/runs/{run_id}/events` | `GET /v1/chat/runs/{run_id}/events` | Server-Sent Events pass-through; `Last-Event-ID` is honored for resume, a keepalive comment is emitted every 15 s, and one connection is capped at `APPLICATIONX_STREAM_MAX_SECONDS`. |
+| `GET /api/applicationx/workspaces/{workspace_id}/events` | `GET /v1/workspaces/{workspace_id}/events` | `workspace_id` must be a UUID. Server-Sent Events pass-through (workspace event streams arrive with ApplicationX P2); `Last-Event-ID` is honored for resume, a keepalive comment is emitted every 15 s, and one connection is capped at `APPLICATIONX_STREAM_MAX_SECONDS`. |
 
 Event ids are **opaque cursors**: the broker forwards `Last-Event-ID` only when
 it matches `^[A-Za-z0-9._:-]{1,64}$` and never interprets it (the stub happens
@@ -103,8 +101,8 @@ not know is shown as `version_mismatch`.
 ## Local development with the stub upstream
 
 `backend/tests/stubs/applicationx_stub.py` is a small FastAPI app that stands in
-for ApplicationX. It answers the routes above, streams three chat events
-(status, answer with one citation, done) and honors `Last-Event-ID`.
+for ApplicationX. It answers the routes above, streams three workspace events
+(status, updated, done) and honors `Last-Event-ID`.
 
 ```bash
 # 1. Find the program you want to treat as "mapped"
@@ -116,7 +114,7 @@ STUB_MAPPED=<that uuid> uvicorn tests.stubs.applicationx_stub:app --port 8099
 # 3. Start the backend pointed at it
 AUTH_DEV_MODE=true APPLICATIONX_EMBED_ENABLED=true \
 APPLICATIONX_API_ORIGIN=http://localhost:8099 \
-APPLICATIONX_ORGANIZATION_REF=lamc APPLICATIONX_CAMPUS_REF=LAMC \
+APPLICATIONX_ORGANIZATION_REF=demo-college APPLICATIONX_CAMPUS_REF=MAIN \
 APPLICATIONX_STANDALONE_URL=http://localhost:3002 \
 uvicorn app.main:app --port 8001
 
@@ -138,9 +136,9 @@ stack (`PLAYWRIGHT_BASE_URL=http://localhost:3001 npx playwright test
 e2e/applicationx-embed.spec.ts`); rerun it with `STUB_DOWN=1` after restarting
 the stub with `STUB_DOWN=1` for the outage case.
 
-## Chat shell
+## Workspace shell
 
 The collaboration routes currently render the workspace context banner and the
-host-state panels. The chat shell itself arrives with the shared ApplicationX
-workspace package; until that package is a dependency, a `ready` context shows a
-placeholder card ("Workspace ready. Chat arrives with the shared package.").
+host-state panels. The workspace content (employer records, threads, evidence)
+arrives with the shared ApplicationX workspace package; until that package is a
+dependency, a `ready` context shows a placeholder card.

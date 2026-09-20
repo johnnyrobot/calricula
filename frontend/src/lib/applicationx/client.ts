@@ -170,4 +170,4 @@ export async function op<T>(
   return r.json();
 }
 
-export const eventsUrl = (runId: string) => `${apiBase()}/api/applicationx/runs/${encodeURIComponent(runId)}/events`;
+export const eventsUrl = (workspaceId: string) => `${apiBase()}/api/applicationx/workspaces/${encodeURIComponent(workspaceId)}/events`;

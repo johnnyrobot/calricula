@@ -80,25 +80,15 @@ test('resolveContext reports "not configured" when only the ApplicationX token i
   expect(mockResolveContext).not.toHaveBeenCalled();
 });
 
-test('request attaches bearer token for a known operation', async () => {
+test('request attaches both tokens for a known operation', async () => {
   mockOp.mockResolvedValue({ ok: true });
   const adapter = createBrokeredAdapter({ getToken, router, standaloneUrl: null });
   const signal = new AbortController().signal;
 
-  const result = await adapter.request('chat.messages', { text: 'hi' }, signal);
+  const result = await adapter.request('sources.health', { source_id: 'calricula_lmi' }, signal);
 
   expect(result).toEqual({ ok: true });
-  expect(mockOp).toHaveBeenCalledWith({ calricula: 'ctok', applicationx: 'atok' }, 'chat.messages', {}, { text: 'hi' }, signal);
-});
-
-test('request maps chat.cancel to path_params', async () => {
-  mockOp.mockResolvedValue({ ok: true });
-  const adapter = createBrokeredAdapter({ getToken, router, standaloneUrl: null });
-  const signal = new AbortController().signal;
-
-  await adapter.request('chat.cancel', { run_id: 'r1' }, signal);
-
-  expect(mockOp).toHaveBeenCalledWith({ calricula: 'ctok', applicationx: 'atok' }, 'chat.cancel', { run_id: 'r1' }, null, signal);
+  expect(mockOp).toHaveBeenCalledWith({ calricula: 'ctok', applicationx: 'atok' }, 'sources.health', { source_id: 'calricula_lmi' }, null, signal);
 });
 
 test('request sends sources.list with empty path_params and a null body', async () => {
@@ -142,7 +132,7 @@ test('request throws session_expired when a token is unavailable', async () => {
   const adapter = createBrokeredAdapter({ getToken: noAppToken, router, standaloneUrl: null });
   const signal = new AbortController().signal;
 
-  await expect(adapter.request('chat.messages', {}, signal)).rejects.toMatchObject({ code: 'session_expired' });
+  await expect(adapter.request('sources.list', {}, signal)).rejects.toMatchObject({ code: 'session_expired' });
   expect(mockOp).not.toHaveBeenCalled();
 });
 
@@ -154,14 +144,14 @@ test('subscribe passes Last-Event-ID cursor and both auth headers', async () => 
   const adapter = createBrokeredAdapter({ getToken, router, standaloneUrl: null });
   const signal = new AbortController().signal;
 
-  const iter = adapter.subscribe('run-1', 'cursor-7', signal);
+  const iter = adapter.subscribe('ws-1', 'cursor-7', signal);
   const results = [];
   for await (const e of iter) results.push(e);
 
   expect(results).toHaveLength(1);
   expect(mockSubscribeSSE).toHaveBeenCalledWith(
     globalFetch,
-    expect.stringMatching(/\/api\/applicationx\/runs\/run-1\/events$/),
+    expect.stringMatching(/\/api\/applicationx\/workspaces\/ws-1\/events$/),
     { Authorization: 'Bearer ctok', 'X-ApplicationX-Token': 'atok' },
     'cursor-7',
     signal,
