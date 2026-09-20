@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ApplicationX × Calricula — research-backed proposal</title>
+  <meta name="description" content="Proposal deck: what the research found about college–employer engagement, how Calricula and ApplicationX answer it today, and what to build next.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #FFFFFF; --bg-subtle: #FAFAFB; --bg-sunken: #F5F6F8;
+      --text: #15161A; --text-muted: #585C64; --text-faint: #676C76;
+      --border: #ECECF1; --border-strong: #E0E1E8;
+      --accent: #4F46E5; --accent-hover: #4038C9; --accent-bright: #6366F1; --accent-soft: #EEEDFD; --accent-on-dark: #A5B0FF;
+      --ok: #166534; --ok-soft: #E8F7EE; --warn: #92400E; --warn-soft: #FDF3E4; --bad: #B91C1C; --bad-soft: #FDECEC;
+      --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      --shadow-xs: 0 1px 2px rgba(17,18,23,.06);
+      --shadow-sm: 0 1px 3px rgba(17,18,23,.05), 0 1px 2px rgba(17,18,23,.03);
+      --shadow-md: 0 12px 32px -12px rgba(17,18,23,.16);
+      --r: 14px; --r-sm: 10px; --r-lg: 22px; --r-pill: 999px;
+      --maxw: 1180px; --gutter: 40px;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 17px; line-height: 1.6; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+    h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -0.025em; line-height: 1.05; }
+    p { margin: 0; }
+    a { color: inherit; text-decoration: none; }
+    ul { margin: 0; padding-left: 1.2em; }
+    .container { width: 100%; max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter); }
+    .vh { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+    .skip-link { position: absolute; left: 16px; top: -64px; z-index: 100; background: var(--text); color: #fff; padding: 12px 18px; border-radius: 10px; font-weight: 600; font-size: 15px; transition: top .18s ease; }
+    .skip-link:focus { top: 16px; }
+    a:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+    .kicker { display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 12.5px; font-weight: 500; letter-spacing: 0.02em; color: var(--accent); text-transform: lowercase; }
+    .kicker .idx { color: var(--text-faint); }
+    .kicker::before { content: ""; width: 7px; height: 7px; border-radius: 2px; background: var(--accent); }
+    .eyebrow { font-family: var(--mono); font-size: 13px; font-weight: 500; letter-spacing: 0.01em; color: var(--accent); }
+    .chip { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 12.5px; font-weight: 500; color: var(--text-muted); padding: 6px 11px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-pill); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 46px; padding: 0 20px; border-radius: var(--r-pill); font-size: 15px; font-weight: 600; line-height: 1; cursor: pointer; border: 1px solid transparent; transition: background .16s ease, border-color .16s ease, transform .16s ease, box-shadow .16s ease; }
+    .btn-primary { background: var(--accent); color: #fff; box-shadow: var(--shadow-sm); }
+    .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); box-shadow: var(--shadow-md); }
+    .btn-ghost { background: var(--bg); color: var(--text); border-color: var(--border-strong); }
+    .btn-ghost:hover { border-color: var(--text); transform: translateY(-1px); }
+    .arrow { width: 15px; height: 15px; flex: 0 0 auto; }
+
+    /* evidence tags */
+    .tag { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--text-muted); padding: 5px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 7px; white-space: nowrap; }
+    .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+    .tag.owner { color: var(--accent); border-color: #DAD8FB; background: var(--accent-soft); }
+    .tag.verified { color: var(--ok); border-color: #BFE7CD; background: var(--ok-soft); }
+    .tag.sourced { color: var(--warn); border-color: #F3DDB8; background: var(--warn-soft); }
+    .tag.refuted { color: var(--bad); border-color: #F5C2C2; background: var(--bad-soft); }
+    .tag.repo { color: var(--text); border-color: var(--border-strong); background: var(--bg-sunken); }
+    .status { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; font-weight: 500; padding: 4px 9px; border-radius: 7px; border: 1px solid var(--border); white-space: nowrap; }
+    .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .status.built { color: var(--ok); background: var(--ok-soft); border-color: #BFE7CD; }
+    .status.designed { color: var(--accent); background: var(--accent-soft); border-color: #DAD8FB; }
+    .status.partial { color: var(--warn); background: var(--warn-soft); border-color: #F3DDB8; }
+    .status.absent { color: var(--bad); background: var(--bad-soft); border-color: #F5C2C2; }
+
+    /* header */
+    .site-header { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 14px var(--gutter); background: rgba(255,255,255,0.78); backdrop-filter: saturate(180%) blur(16px); border-bottom: 1px solid var(--border); }
+    .brand { display: inline-flex; align-items: center; gap: 11px; font-weight: 700; font-size: 16px; letter-spacing: -0.01em; }
+    .brand .mark { width: 30px; height: 30px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #8B5CF6); border: 1px solid var(--border-strong); display: grid; place-items: center; color: #fff; font-family: var(--mono); font-size: 12px; font-weight: 600; }
+    .nav { display: flex; align-items: center; gap: 4px; }
+    .nav a { font-size: 14.5px; font-weight: 500; color: var(--text-muted); padding: 9px 13px; border-radius: 9px; min-height: 24px; display: inline-flex; align-items: center; transition: color .15s ease, background .15s ease; }
+    .nav a:hover { color: var(--text); background: var(--bg-sunken); }
+    .nav .nav-cta { color: #fff; background: var(--accent); }
+    .nav .nav-cta:hover { background: var(--accent-hover); color: #fff; }
+
+    /* hero */
+    .hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--border); }
+    .hero::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; background-image: radial-gradient(circle at center, #E6E6EE 1px, transparent 1px); background-size: 24px 24px; -webkit-mask-image: radial-gradient(120% 80% at 70% 0%, #000 0%, transparent 70%); mask-image: radial-gradient(120% 80% at 70% 0%, #000 0%, transparent 70%); opacity: .7; }
+    .hero::after { content: ""; position: absolute; top: -200px; right: -160px; width: 620px; height: 620px; z-index: 0; background: radial-gradient(circle, rgba(99,102,241,.16), rgba(99,102,241,0) 62%); pointer-events: none; }
+    .hero-inner { position: relative; z-index: 1; padding: 92px 0 76px; display: flex; flex-direction: column; gap: 30px; align-items: flex-start; }
+    .avail { display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 12.5px; font-weight: 500; color: var(--text-muted); padding: 7px 13px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-pill); box-shadow: var(--shadow-xs); }
+    .avail .led { width: 7px; height: 7px; border-radius: 50%; background: #16A34A; box-shadow: 0 0 0 3px rgba(22,163,74,.16); }
+    .hero h1 { font-size: clamp(42px, 6.6vw, 78px); letter-spacing: -0.04em; max-width: 18ch; }
+    .hero h1 .grad { background: linear-gradient(100deg, var(--accent), var(--accent-bright) 55%, #8B5CF6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .hero-lead { font-size: clamp(19px, 2.3vw, 23px); line-height: 1.5; color: var(--text-muted); max-width: 62ch; font-weight: 450; }
+    .hero-lead strong { color: var(--text); font-weight: 600; }
+    .hero-chips { display: flex; flex-wrap: wrap; gap: 9px; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; }
+    .hero-note { font-size: 14px; color: var(--text-faint); }
+
+    /* stat band */
+    .stats-wrap { position: relative; z-index: 2; margin-top: -40px; }
+    .stats { display: flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: var(--r); background: var(--bg); box-shadow: var(--shadow-sm); overflow: hidden; }
+    .stat { flex: 1 1 0; min-width: 180px; padding: 26px 28px; border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; }
+    .stat:last-child { border-right: 0; }
+    .stat .num { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; }
+    .stat .num .u { color: var(--accent); }
+    .stat .cap { font-size: 13.5px; color: var(--text-muted); font-family: var(--mono); font-weight: 500; }
+    .stat .src { font-size: 12px; color: var(--text-faint); }
+
+    /* sections */
+    .section { padding: 96px 0; }
+    .section.subtle { background: var(--bg-subtle); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    section[id] { scroll-margin-top: 76px; }
+    .sec-head { display: flex; flex-direction: column; gap: 18px; margin-bottom: 52px; }
+    .sec-head.split { flex-direction: row; align-items: flex-end; justify-content: space-between; gap: 32px; flex-wrap: wrap; }
+    .sec-head h2 { font-size: clamp(32px, 4.6vw, 46px); letter-spacing: -0.035em; }
+    .sec-head .note { font-size: 16px; color: var(--text-muted); max-width: 480px; }
+
+    .statement-body { display: grid; grid-template-columns: 1.25fr 1fr; gap: 64px; align-items: start; }
+    .statement { font-size: clamp(26px, 3.4vw, 36px); line-height: 1.28; letter-spacing: -0.03em; font-weight: 700; }
+    .statement .em { color: var(--accent); }
+    .statement-col { display: flex; flex-direction: column; gap: 20px; padding-top: 6px; }
+    .statement-col p { font-size: 17px; line-height: 1.66; }
+    .statement-col p.muted { color: var(--text-muted); }
+
+    /* cards */
+    .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+    .grid.three { grid-template-columns: repeat(3, 1fr); }
+    .card { display: flex; flex-direction: column; gap: 14px; padding: 28px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r); box-shadow: var(--shadow-xs); min-width: 0; overflow-wrap: anywhere; }
+    .card .cat { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--accent); }
+    .card h3 { font-size: 22px; letter-spacing: -0.025em; line-height: 1.2; }
+    .card p { font-size: 15.5px; line-height: 1.62; color: var(--text-muted); flex: 1 1 auto; }
+    .card p strong { color: var(--text); font-weight: 600; }
+    .card ul { font-size: 15px; line-height: 1.6; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; }
+    .card ul strong { color: var(--text); font-weight: 600; }
+    .card .foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 6px; border-top: 1px solid var(--border); }
+    .card .go { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; color: var(--accent); font-family: var(--mono); }
+    .card .go.static { color: var(--text-faint); }
+    .card.big-num .n { font-size: 44px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; color: var(--accent); }
+    .cta-card { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 16px; padding: 36px; background: var(--accent-soft); border: 1px solid #DAD8FB; border-radius: var(--r); }
+    .cta-card h3 { font-size: 24px; letter-spacing: -0.025em; line-height: 1.2; }
+    .cta-card p { font-size: 16px; color: var(--text-muted); line-height: 1.6; }
+
+    /* work rows (finding → solution) */
+    .work-row { display: grid; grid-template-columns: 300px 1fr; gap: 48px; align-items: start; padding: 34px 24px; margin: 0 -24px; border-top: 1px solid var(--border); border-radius: var(--r); transition: background .16s ease; }
+    .work-row:hover { background: var(--bg-subtle); }
+    .work-row:last-child { border-bottom: 1px solid var(--border); }
+    .work-meta { display: flex; flex-direction: column; gap: 10px; }
+    .work-org { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+    .work-role { font-size: 15px; font-weight: 500; color: var(--text-muted); line-height: 1.5; }
+    .work-dates { font-family: var(--mono); font-size: 13px; color: var(--text-faint); }
+    .work-detail { display: flex; flex-direction: column; gap: 16px; }
+    .work-detail .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .work-detail .pair > div { display: flex; flex-direction: column; gap: 8px; }
+    .work-detail .lbl { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--text-faint); letter-spacing: .02em; }
+    .work-detail p { font-size: 15.5px; line-height: 1.62; color: var(--text-muted); }
+    .work-detail p strong { color: var(--text); font-weight: 600; }
+    .work-detail .propose { padding: 16px 18px; background: var(--accent-soft); border: 1px solid #DAD8FB; border-radius: var(--r-sm); }
+    .work-detail .propose p { color: var(--text); }
+    .work-detail .propose .lbl { color: var(--accent); }
+
+    /* phase timeline */
+    .phases { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+    .phase { display: flex; flex-direction: column; gap: 10px; padding: 20px 18px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--r-sm); position: relative; min-width: 0; }
+    .phase .ph { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--accent); }
+    .phase .t { font-size: 15.5px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; }
+    .phase .d { font-size: 13.5px; line-height: 1.5; color: var(--text-muted); }
+    .phase.done { border-color: #BFE7CD; background: var(--ok-soft); }
+    .phase.done .ph { color: var(--ok); }
+    .phase.now { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(99,102,241,.14); }
+    .phase.proposed { border-style: dashed; border-color: var(--accent-bright); background: var(--accent-soft); }
+
+    /* tables */
+    .tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--r); background: var(--bg); box-shadow: var(--shadow-xs); }
+    table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+    th, td { text-align: left; vertical-align: top; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+    th { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--text-faint); letter-spacing: .02em; background: var(--bg-subtle); }
+    tr:last-child td { border-bottom: 0; }
+    td strong { font-weight: 600; }
+    td .sub { display: block; font-size: 13px; color: var(--text-faint); margin-top: 2px; }
+
+    /* legend */
+    .legend { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 14px; color: var(--text-muted); }
+
+    /* footer */
+    .footer { background: var(--bg-sunken); border-top: 1px solid var(--border); padding: 88px 0 40px; }
+    .footer-top { display: flex; align-items: flex-end; justify-content: space-between; gap: 48px; flex-wrap: wrap; }
+    .footer-head { display: flex; flex-direction: column; gap: 22px; max-width: 640px; }
+    .footer-head h2 { font-size: clamp(34px, 5vw, 54px); letter-spacing: -0.04em; line-height: 1.04; }
+    .footer-head h2 .grad { background: linear-gradient(100deg, var(--accent), #8B5CF6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .footer-head p { font-size: 17px; color: var(--text-muted); line-height: 1.6; }
+    .footer-links { display: flex; flex-direction: column; gap: 6px; }
+    .footer-links a { display: flex; align-items: center; justify-content: space-between; gap: 24px; min-width: 300px; padding: 11px 16px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg); font-weight: 600; font-size: 15px; min-height: 24px; transition: border-color .15s ease, transform .15s ease; }
+    .footer-links a:hover { border-color: var(--text); transform: translateX(2px); }
+    .footer-links a .handle { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text-muted); }
+    .footer-bar { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-top: 56px; padding-top: 24px; border-top: 1px solid var(--border); }
+    .footer-bar span { font-family: var(--mono); font-size: 13px; color: var(--text-faint); }
+
+    @media (max-width: 1024px) {
+      :root { --gutter: 32px; }
+      .statement-body { grid-template-columns: 1fr; gap: 40px; }
+      .work-row { grid-template-columns: 240px 1fr; gap: 32px; }
+      .grid.three { grid-template-columns: repeat(2, 1fr); }
+      .phases { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 820px) {
+      .nav .nav-link { display: none; }
+      .grid, .grid.three { grid-template-columns: 1fr; }
+      .work-row { grid-template-columns: 1fr; gap: 16px; padding: 28px 20px; margin: 0 -20px; }
+      .work-detail .pair { grid-template-columns: 1fr; }
+      .sec-head.split { flex-direction: column; align-items: flex-start; }
+      .stat { border-right: 0; border-bottom: 1px solid var(--border); }
+      .stat:last-child { border-bottom: 0; }
+      .phases { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 540px) {
+      :root { --gutter: 20px; }
+      .section { padding: 64px 0; }
+      .hero-inner { padding: 64px 0 56px; }
+      .phases { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { transition: none !important; animation: none !important; }
+    }
+    @media print {
+      .site-header, .skip-link, .hero-actions { display: none; }
+      .section { padding: 40px 0; break-inside: avoid; }
+      .work-row { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header">
+    <a class="brand" href="#top" aria-label="ApplicationX proposal, back to top">
+      <span class="mark" aria-hidden="true">AX</span>
+      ApplicationX <span style="color:var(--text-faint);font-weight:500;">× Calricula</span>
+    </a>
+    <nav class="nav" aria-label="Primary">
+      <a class="nav-link" href="#problem">Problem</a>
+      <a class="nav-link" href="#findings">Findings</a>
+      <a class="nav-link" href="#platforms">Platforms</a>
+      <a class="nav-link" href="#solutions">Solutions</a>
+      <a class="nav-link" href="#roadmap">Roadmap</a>
+      <a class="nav-link" href="#landscape">Landscape</a>
+      <a class="nav-cta" href="#sources">Sources</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <!-- ================= HERO ================= -->
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="container hero-inner">
+        <span class="avail"><span class="led" aria-hidden="true"></span> Research snapshot · September 2026 · California community colleges</span>
+        <span class="eyebrow">// applicationx × calricula — proposal</span>
+        <h1 id="hero-title">Put colleges in the <span class="grad">placement business</span> — with evidence, not guesswork.</h1>
+        <p class="hero-lead">ApplicationX is an AI-assisted companion to <strong>Calricula</strong> that finds the employers a program should be talking to, keeps those relationships alive, and feeds what employers actually need back into the <strong>Course Outline of Record</strong>. This deck pairs the owner's vision with a fact-checked look at the market, the data sources, and the compliance rules — and says plainly what is built, what is designed, and what is still a proposal.</p>
+        <div class="hero-chips" aria-label="Themes">
+          <span class="chip">employer discovery</span>
+          <span class="chip">CTE advisory workflow</span>
+          <span class="chip">curriculum feedback loop</span>
+          <span class="chip">Perkins V · Strong Workforce</span>
+          <span class="chip">WCAG 2.2 AA</span>
+        </div>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#findings">See the findings <svg class="arrow" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+          <a class="btn btn-ghost" href="#solutions">Findings → solutions</a>
+        </div>
+        <p class="hero-note">Every claim below is labelled by where it comes from: the owner's source documents, the repositories, or an external source (verified or not). Nothing here is a claim of institutional adoption.</p>
+      </div>
+    </section>
+
+    <div class="container stats-wrap">
+      <div class="stats" role="list" aria-label="Headline numbers">
+        <div class="stat" role="listitem">
+          <div class="num"><span class="u">38%</span></div>
+          <div class="cap">public confidence in higher ed (57% in 2015)</div>
+          <div class="src">Lumina-Gallup 2026 · sourced</div>
+        </div>
+        <div class="stat" role="listitem">
+          <div class="num"><span class="u">93%</span></div>
+          <div class="cap">of CC leaders grade employer collaboration "B" or lower</div>
+          <div class="src">HBS / AACC · sourced (2020–21 data)</div>
+        </div>
+        <div class="stat" role="listitem">
+          <div class="num"><span class="u">&gt;300</span></div>
+          <div class="cap">applications per hire, tripled since 2021</div>
+          <div class="src">Ashby 2026 · sourced</div>
+        </div>
+        <div class="stat" role="listitem">
+          <div class="num"><span class="u">72</span></div>
+          <div class="cap">CA districts file a Perkins V needs assessment every 2 years</div>
+          <div class="src">CCCCO WED 25-80 · verified</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= PROBLEM ================= -->
+    <section class="section" id="problem" aria-labelledby="problem-title" style="padding-top:120px;">
+      <div class="container">
+        <div class="sec-head">
+          <span class="kicker"><span class="idx">01</span> / the problem — from the owner's source documents</span>
+          <h2 id="problem-title">Three audiences, one missing connection</h2>
+        </div>
+        <div class="statement-body">
+          <p class="statement">Students and parents are losing faith in general education and want <span class="em">skills that lead to a job</span>. Colleges that get good at placement will win — but they are not set up to do it.</p>
+          <div class="statement-col">
+            <p>The owner's <em>Application Benefits</em> deck and <em>Benefit Summary</em> frame the opportunity: colleges will need to get into the job-placement business, and that means knowing the employers in their region, engaging them, and matching students to them. The research below tests that framing against current external evidence and against what the two codebases already do.</p>
+            <p class="muted">Source of truth: <em>Application Benefits.pptx</em> (13 slides), <em>ApplicationX Benefit Summary.docx</em>, and <em>Inputs and Outputs — Standard College Use Case.docx</em>. Their text is not reproduced in the public repository.</p>
+            <div class="tags"><span class="tag owner">owner</span><span class="tag">source of truth</span></div>
+          </div>
+        </div>
+
+        <div class="grid three" style="margin-top:56px;">
+          <article class="card">
+            <span class="cat">for colleges</span>
+            <h3>Deans and chairs are busy, understaffed, and blind to the region</h3>
+            <ul>
+              <li>Don't know all the employers that relate to their programs — some programs are fully online and statewide.</li>
+              <li>Don't know when employers open positions.</li>
+              <li>Struggle to engage employers in program improvement and hiring.</li>
+              <li>CTE deans have small clerical staff; chairs are often part-time from industry.</li>
+              <li>Carry heavy grant reporting (Strong Workforce, Perkins) on top of running programs.</li>
+            </ul>
+            <div class="foot"><span class="tag owner">owner · slide 3</span></div>
+          </article>
+          <article class="card">
+            <span class="cat">for employers</span>
+            <h3>They don't know which colleges produce qualified candidates — and don't fully trust the ones they know</h3>
+            <ul>
+              <li>Unaware of relevant programs, especially non-local ones.</li>
+              <li>Sifting through AI-written résumés to find interview-worthy candidates.</li>
+              <li>Don't see colleges as experts who can close their skills gaps.</li>
+              <li>No time to "donate" to a college unless it lowers the cost of hiring.</li>
+            </ul>
+            <div class="foot"><span class="tag owner">owner · slide 6</span></div>
+          </article>
+          <article class="card">
+            <span class="cat">for students</span>
+            <h3>They don't know what job they want, and rarely meet an employer before graduating</h3>
+            <ul>
+              <li>No access to career services until after enrolling; some services not online.</li>
+              <li>Trouble selecting a program of study.</li>
+              <li>Want to explore careers outside their district.</li>
+              <li>Almost never have access to potential employers; online students are far from the region.</li>
+            </ul>
+            <div class="foot"><span class="tag owner">owner · slide 8</span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= FINDINGS ================= -->
+    <section class="section subtle" id="findings" aria-labelledby="findings-title">
+      <div class="container">
+        <div class="sec-head split">
+          <div style="display:flex;flex-direction:column;gap:18px;">
+            <span class="kicker"><span class="idx">02</span> / what the research found</span>
+            <h2 id="findings-title">Eight findings that should shape the product</h2>
+          </div>
+          <p class="note">Method: 5 search angles → 25 sources fetched → 123 claims extracted → 25 adversarially verified by three independent votes (21 confirmed, 4 refuted), plus a direct read of the owner documents and both repositories.</p>
+        </div>
+
+        <div class="legend" style="margin-bottom:28px;" aria-label="Evidence legend">
+          <span class="tag owner">owner</span> the source-of-truth documents
+          <span class="tag repo">repo</span> what is designed or built
+          <span class="tag verified">verified</span> survived 3-vote review
+          <span class="tag sourced">sourced</span> fetched but not voted
+          <span class="tag refuted">refuted</span> do not re-assert
+        </div>
+
+        <div class="grid">
+          <article class="card">
+            <span class="cat">finding 1 · differentiation</span>
+            <h3>The differentiator is real and uncontested</h3>
+            <p>No product in the competitive set does <strong>employer-side discovery + CTE advisory-board workflow + curriculum feedback into a COR tool</strong>. Handshake, Symplicity, 12twenty and Lightcast Career Coach are student- and career-center-facing. Salesforce, Slate and Element451 are admissions CRMs. Steppingblocks is alumni analytics. Riipen supplies projects. Workforce Connect — the closest analogue — is a K-12 CTE partnership CRM with no AI discovery, LMI ranking, or COR loop.</p>
+            <div class="foot"><div class="tags"><span class="tag verified">verified</span><span class="tag sourced">sourced</span></div><span class="go static">§4 of the report</span></div>
+          </article>
+          <article class="card">
+            <span class="cat">finding 2 · data sources</span>
+            <h3>"Two years of postings per employer" has no cheap, legal path</h3>
+            <p>Indeed retired its Publisher API in 2023. LinkedIn's Job Posting API is <strong>write-only</strong> and closed to new partners. Adzuna's free key is capped at 2,500 calls/month and its terms bar ongoing college or government use without written consent. CareerOneStop's Jobs API now sits behind the NASWA NLx Research Hub governance board. Scraping is barred by contract even where the CFAA does not apply (hiQ v. LinkedIn: $500K and a permanent injunction). Lightcast has the right facets — NAICS 2–6, SOC 2–5, O*NET, company, county/MSA — but <strong>no zip-code facet</strong>, and its pricing is unverified.</p>
+            <div class="foot"><div class="tags"><span class="tag verified">verified</span><span class="tag refuted">lightcast gating refuted</span></div><span class="go static">§3</span></div>
+          </article>
+          <article class="card">
+            <span class="cat">finding 3 · compliance</span>
+            <h3>Grant reporting is the least-designed and most-specifiable benefit</h3>
+            <p>CCCCO memo WED 25-80 defines exactly what a tool must capture for Perkins V: the LMI tests (regional <strong>median-of-median wage</strong>; 2024–2029 growth <strong>and</strong> openings ≥ regional median) and the stakeholder evidence (agendas, sign-in sheets, participant name/institution/title/phone/email — kept on file, never published). Appendix C explicitly accepts "real-time job postings data from online search engines" as evidence. Nothing in the PRD or spec mentions Perkins, Strong Workforce, CLNA, or advisory rosters.</p>
+            <div class="foot"><div class="tags"><span class="tag verified">verified</span><span class="tag repo">absent in repo</span></div><span class="go static">§5</span></div>
+          </article>
+          <article class="card">
+            <span class="cat">finding 4 · privacy</span>
+            <h3>Employer contacts are now a regulated asset in California</h3>
+            <p>The Delete Act's DROP platform has been live since 1 Jan 2026; registered data brokers must poll it every 45 days from 1 Aug 2026 and propagate deletions to service providers. CalPrivacy has already fined B2B lead-generation vendors for non-registration. CPRA's B2B-contact exemption expired in 2023. A vendor-enriched "owner / HR director / supervisor" roster needs registry checks, deletion flow-down, and suppression — none of which the spec's <code>Contact</code> record carries today.</p>
+            <div class="foot"><div class="tags"><span class="tag verified">verified</span><span class="tag repo">gap in spec</span></div><span class="go static">§3 · §5</span></div>
+          </article>
+          <article class="card">
+            <span class="cat">finding 5 · market</span>
+            <h3>The value-of-college story is current and cites cleanly</h3>
+            <p>Public confidence fell from 57% (2015) to 38% (2026); Americans trust community colleges more than four-year schools; only 56% of recent associate graduates say their degree was important to career goals vs. 80% of bachelor's graduates; ~70% of employers say new grads need moderate or substantial extra training. Only one in four employers say they communicate hiring needs transparently; 11% of educators report employers willing to set hiring targets.</p>
+            <div class="foot"><div class="tags"><span class="tag sourced">sourced</span></div><span class="go static">Lumina-Gallup · HBS/AACC</span></div>
+          </article>
+          <article class="card">
+            <span class="cat">finding 6 · the contrarian read</span>
+            <h3>Discovery alone will not move placement</h3>
+            <p>Strada's review of 109 college–employer partnership proposals found the bottleneck is <strong>employer capacity and college data infrastructure</strong>, not finding employers; fewer than half of learners get paid internships. Three-quarters of proposals included curriculum alignment and over 80% work-based learning — which is the loop ApplicationX instruments. The product has to carry the relationship, not just the list.</p>
+            <div class="foot"><div class="tags"><span class="tag sourced">sourced</span></div><span class="go static">Strada</span></div>
+          </article>
+          <article class="card">
+            <span class="cat">finding 7 · résumés</span>
+            <h3>Generic AI résumé help adds to the flood</h3>
+            <p>Applications per hire tripled 2021→2024 and stayed above 300; candidates are ~50% less likely to get an interview than five years ago. 80% of hiring managers say they can spot AI résumés and 62% say uncustomized ones are more likely rejected. Any résumé feature must produce personalised, <strong>employer-verifiable signals</strong> — not more boilerplate. (Note: the "AI apply tools" attribution in search snippets is <em>not</em> in Ashby's release.)</p>
+            <div class="foot"><div class="tags"><span class="tag sourced">sourced</span></div><span class="go static">Ashby · Resume Now</span></div>
+          </article>
+          <article class="card">
+            <span class="cat">finding 8 · system resources</span>
+            <h3>California already has the LMI supplier — ingest it, don't rebuild it</h3>
+            <p>The CCC Centers of Excellence are the system's LMI research arm: nine regional centers matching Strong Workforce consortia, customized occupation and sector data, employer surveys, and a system-level Lightcast licence. Strong Workforce outcomes on LaunchBoard come from EDD wage matching and the CTE Outcomes Survey — <strong>not from college tools</strong>. ApplicationX should consume these and supply the engagement inputs the state cannot see.</p>
+            <div class="foot"><div class="tags"><span class="tag verified">verified</span><span class="tag sourced">sourced</span></div><span class="go static">COE · LaunchBoard</span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PLATFORMS ================= -->
+    <section class="section" id="platforms" aria-labelledby="platforms-title">
+      <div class="container">
+        <div class="sec-head">
+          <span class="kicker"><span class="idx">03</span> / the two platforms</span>
+          <h2 id="platforms-title">Calricula owns the curriculum. ApplicationX owns the employer relationship.</h2>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <span class="cat">calricula · curriculum management · public source</span>
+            <h3>The catalog of record, with compliance built in</h3>
+            <p>Faculty create, modify and route Course Outlines of Record and Programs through Faculty → Department → Committee → Articulation → Approved, with PCAH 8th ed. and Title 5 rules embedded in the UI.</p>
+            <ul>
+              <li><strong>COR authoring</strong> with AI suggestions (Gemini + File Search RAG).</li>
+              <li><strong>54-Hour Rule</strong> unit validation (Title 5 §55002.5), <strong>CB Code Wizard</strong> (27 Title 5 / PCAH codes), <strong>SLO editor</strong> with Bloom's distribution.</li>
+              <li><strong>Labor-market data already wired:</strong> BLS OES wages, projections, QCEW county employment, California EDD.</li>
+              <li>Program builder (60-unit limit); roles for Faculty, Curriculum Chair, Articulation Officer, Admin.</li>
+              <li>Logto (OIDC) identity; light-only academic design; <strong>WCAG 2.2 AA</strong> required.</li>
+            </ul>
+            <div class="foot"><div class="tags"><span class="tag repo">repo · built</span><span class="tag">Next.js · FastAPI · PostgreSQL</span></div></div>
+          </article>
+          <article class="card">
+            <span class="cat">applicationx · companion service · private repo</span>
+            <h3>Employer & Career Collaboration, inside Calricula and standalone</h3>
+            <p>A separate FastAPI/PostgreSQL service with its own records and authorization. Staff open its workspace inside Calricula's layout; students and employers use a standalone entry. It exports evidence packages and proposed actions back to Calricula (curriculum) and Calipar (program review) — and can never approve a COR or decide a hire.</p>
+            <ul>
+              <li><strong>Built (P1):</strong> identity (Logto OIDC, dev tokens), organizations / workspaces / program mappings, the Calricula host-context handshake, row-level security, the connector contract with the Calricula labor-market connector, the workspace UI package and the standalone app.</li>
+              <li><strong>Designed (P2):</strong> employer / location / contact / posting records, explainable relevance ranking, outreach drafts behind an approval bound to content and recipients, threads, meeting evidence, evidence graph, cross-app proposals.</li>
+              <li><strong>Designed (P3):</strong> opt-in student ↔ employer contact, interview support, placement and alumni follow-up, private learning data.</li>
+            </ul>
+            <div class="foot"><div class="tags"><span class="tag repo">repo · P1 built</span><span class="tag repo">P2–P4 designed</span></div></div>
+          </article>
+        </div>
+
+        <div style="margin-top:36px;">
+          <div class="tbl-wrap">
+            <table>
+              <caption class="vh">System boundaries and what each exchanges with ApplicationX</caption>
+              <thead><tr><th scope="col">System</th><th scope="col">Owns</th><th scope="col">Exchanges with ApplicationX</th></tr></thead>
+              <tbody>
+                <tr><td><strong>ApplicationX</strong></td><td>Employer records, feedback, workspace discussions, tasks, evidence, agent runs, permitted student sharing</td><td>Evidence packages, source references, proposed actions</td></tr>
+                <tr><td><strong>Calricula</strong></td><td>Course/program revisions, objectives, requirements, approval state</td><td>Approved curriculum and explicitly shared drafts; reviewable curriculum proposals</td></tr>
+                <tr><td><strong>Calipar</strong></td><td>Program reviews, action plans, strategic mappings, resource requests</td><td>Review context explicitly shared by staff; evidence packages and proposed actions</td></tr>
+                <tr><td><strong>State systems</strong> <span class="sub">COE · EDD LMID · LaunchBoard · NOVA</span></td><td>Regional LMI, wage-matched outcomes, Perkins/SWP submissions</td><td>Read-only ingestion of published indexes; export-ready evidence for CLNA and program review <span class="sub">proposed</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SOLUTIONS ================= -->
+    <section class="section subtle" id="solutions" aria-labelledby="solutions-title">
+      <div class="container">
+        <div class="sec-head split">
+          <div style="display:flex;flex-direction:column;gap:18px;">
+            <span class="kicker"><span class="idx">04</span> / findings → solutions</span>
+            <h2 id="solutions-title">What answers each finding today — and what we add</h2>
+          </div>
+          <p class="note">Left: the owner's promised benefit and its source. Right: how the platforms cover it now, then the proposal where they don't. Status reflects the repositories on 20 Sep 2026.</p>
+        </div>
+
+        <div class="legend" style="margin-bottom:12px;" aria-label="Status legend">
+          <span class="status built">built</span> code exists
+          <span class="status designed">designed</span> in PRD/spec with a phase
+          <span class="status partial">partial</span> some aspect designed
+          <span class="status absent">absent</span> no artifact yet
+        </div>
+
+        <div class="work-list">
+          <!-- 1 -->
+          <div class="work-row">
+            <div class="work-meta">
+              <div class="work-org">Find the employers a program should be talking to</div>
+              <div class="work-role">"A continuously updated list of ALL employers in the region that might hire a graduate from any program." Inputs: known employers, NAICS, zip codes, job titles, SOC, O*NET Job Zones.</div>
+              <div class="work-dates">owner · slide 4 · benefit ¶1 · I/O Tier 1</div>
+              <div><span class="status designed">designed · P2</span></div>
+            </div>
+            <div class="work-detail">
+              <div class="pair">
+                <div><span class="lbl">what exists now</span><p><strong>Calricula</strong> already joins programs to SOC codes and pulls BLS/EDD/QCEW wages, projections and county employment. <strong>ApplicationX</strong> J1 "Employer discovery and program evidence" specifies college + program revision + geography + occupations → cited brief → known employers + discovery from configured sources; every match shows location, roles, evidence, last observation, and <em>why it appears</em>. The spec keeps NAICS/SOC/CIP/TOP namespaces distinct and treats a zip code as a filter, not a Job Zone.</p></div>
+                <div><span class="lbl">what the research says</span><p>The repo is right to refuse "ALL employers" (PRD §8). Named rosters need a licensed directory: Data Axle's government channel (~94M records with NAICS/SIC, size, executive titles; many CA college libraries already licence it) is the plausible source; Census County/ZIP Business Patterns gives free denominators ("how many employers of type X in region Y") but no names. Lightcast lacks a zip facet — plan county/MSA translation.</p></div>
+              </div>
+              <div class="propose"><span class="lbl">proposal</span><p>Pull <strong>P2-lite</strong> forward: the Employer / EmployerLocation / Contact / JobPosting migrations plus manual entry and the outreach-approval flow, all on $0 sources. Add Census ZBP as the coverage denominator and evaluate a Data Axle API licence for the named list. Say "employers in configured sources, with coverage shown" in stakeholder material.</p></div>
+            </div>
+          </div>
+
+          <!-- 2 -->
+          <div class="work-row">
+            <div class="work-meta">
+              <div class="work-org">Rank employers most likely to hire</div>
+              <div class="work-role">"Prioritize employers in a ranking that identifies those most likely to hire the college's students and graduates."</div>
+              <div class="work-dates">owner · slide 4 · benefit ¶2</div>
+              <div><span class="status designed">designed · P2</span></div>
+            </div>
+            <div class="work-detail">
+              <div class="pair">
+                <div><span class="lbl">what exists now</span><p>AX-05 specifies an <strong>explainable relevance ranking</strong> that exposes its factors and is explicitly <em>not</em> a hiring-probability score. Acceptance tests cover duplicate branches, duplicate postings, required vs. desired skills and unknown history coverage.</p></div>
+                <div><span class="lbl">what the research says</span><p>Consistent with the owner's intent once the deck stops saying "most likely to hire." The Perkins in-demand and high-wage tests give a defensible, state-recognised factor set (growth 2024–2029, openings ≥ regional median, wage ≥ regional median-of-median).</p></div>
+              </div>
+              <div class="propose"><span class="lbl">proposal</span><p>Make the Perkins tests first-class ranking factors and show them on each employer/occupation card with release date and region. Ingest the COE Occupation-in-Demand index rather than recomputing it.</p></div>
+            </div>
+          </div>
+
+          <!-- 3 -->
+          <div class="work-row">
+            <div class="work-meta">
+              <div class="work-org">Key contacts at each employer</div>
+              <div class="work-role">"A list of key individuals at each employer location — VP of HR, line supervisors — with contact information."</div>
+              <div class="work-dates">owner · slide 4 · benefit ¶4 · I/O output 2</div>
+              <div><span class="status partial">partial · P2</span></div>
+            </div>
+            <div class="work-detail">
+              <div class="pair">
+                <div><span class="lbl">what exists now</span><p>The spec's <code>Contact</code> record carries "sourced professional contacts; consent/sharing state; no student data." Employer guests see only individually shared resources. No enrichment provider is selected.</p></div>
+                <div><span class="lbl">what the research says</span><p>Delete Act registration ($6,000–6,600/yr; $200/day fines), DROP deletion polling every 45 days from 1 Aug 2026, deletion flow-down to service providers, and active CalPrivacy enforcement against B2B lead-gen vendors. Whether ApplicationX itself becomes a "data broker" if contacts are shared across colleges is unresolved.</p></div>
+              </div>
+              <div class="propose"><span class="lbl">proposal</span><p>Extend <code>Contact</code> with: source vendor + registry-check date, DROP suppression flag, email opt-out + timestamp, and an <em>on-file-only vs. public-safe</em> classification. Add a phase gate: no enrichment vendor without verified CalPrivacy registration and contractual deletion flow-down. Get a legal read on cross-college sharing before P2 ships.</p></div>
+            </div>
+          </div>
+
+          <!-- 4 -->
+          <div class="work-row">
+            <div class="work-meta">
+              <div class="work-org">Job postings, the moment they are published</div>
+              <div class="work-role">"Notify dean, chairs, faculty and students of job postings from these employers the moment they are published"; "all job openings from each employer over the last (two?) years"; "minimum and desired qualifications extracted."</div>
+              <div class="work-dates">owner · slide 5 · benefit ¶11 · I/O outputs 3–4</div>
+              <div><span class="status partial">scoped down · P2</span></div>
+            </div>
+            <div class="work-detail">
+              <div class="pair">
+                <div><span class="lbl">what exists now</span><p>Spec §6 sets a <strong>daily configured monitor</strong> with "no promise of instant notifications or complete posting history"; closed postings get dated status observations rather than disappearing. <code>JobPosting</code> carries required/desired skill claims with extracted / inferred / confirmed status and a <code>POSTING_REQUESTS_SKILL</code> edge. J5 monitoring has an owner, last-run state and pause control.</p></div>
+                <div><span class="lbl">what the research says</span><p>No free or self-serve source can supply the history (finding 2). NLx Research Hub (governed, daily/historical feeds) and Lightcast (2010→present, de-duplicated, skill-tagged, possibly reachable through the CCC system licence via COE) are the two viable paths. A <em>daily</em> digest still beats Lightcast Career Coach's monthly posting refresh.</p></div>
+              </div>
+              <div class="propose"><span class="lbl">proposal</span><p>File an NLx Research Hub request and ask COE whether the Lightcast system licence extends to ApplicationX — two quotes before P2. Until one is signed, change the deck line to "daily digest, with coverage and source shown." Keep the CLNA-ready posting summary (source, date range, count, limits) as a P2 output — it is explicitly accepted evidence.</p></div>
+            </div>
+          </div>
+
+          <!-- 5 -->
+          <div class="work-row">
+            <div class="work-meta">
+              <div class="work-org">Advisory boards, program review and accreditation</div>
+              <div class="work-role">"Help department chairs recruit employers for annual program review meetings (required by accreditors)… allow asynchronous communication… help with the collection and presentation of data required for program review and accreditation."</div>
+              <div class="work-dates">owner · slide 4 · benefit ¶8</div>
+              <div><span class="status partial">partial · P2</span></div>
+            </div>
+            <div class="work-detail">
+              <div class="pair">
+                <div><span class="lbl">what exists now</span><p><strong>ApplicationX</strong> J3 "Collaborative advisory review": the assistant compares scoped employer feedback and postings with the approved curriculum, drafts an agenda and gaps, links every claim to evidence; people confirm, assign owners and approve an action package that exports to <strong>Calricula</strong> (draft review item, never overwrites an approved COR) or <strong>Calipar</strong> (program review). This is the differentiator in finding 1.</p></div>
+                <div><span class="lbl">what the research says</span><p>Title 5 §55601 prescribes committee composition (business, industry, EDD, students, faculty, administration, public). Ed Code §78016 requires a two-year CTE review against labor-market demand. The State Plan expects at least one advisory meeting per year. The CLNA wants agendas, sign-in sheets and participant lists on file. None of this roster/attendance structure is in the repo.</p></div>
+              </div>
+              <div class="propose"><span class="lbl">proposal</span><p>Add <strong>AX-14 "CTE compliance evidence"</strong> to P2: advisory roster with §55601 role categories and terms; structured meeting records with agenda artifact, minutes, sign-in capture and linked curriculum actions; a ≥1-per-year indicator; and a CLNA Element #6 export (narrative + evidence list, NOVA-ready PDF). This converts the owner's "recruit employers" benefit into the feature deans will ask about first.</p></div>
+            </div>
+          </div>
+
+          <!-- 6 -->
+          <div class="work-row">
+            <div class="work-meta">
+              <div class="work-org">Grant reporting: Perkins, Strong Workforce, Gainful Employment</div>
+              <div class="work-role">"Possibly help colleges collect and report program data required by government regulators and accreditors… Perkins, Strong Workforce, Gainful Employment."</div>
+              <div class="work-dates">owner · slide 5 · benefit ¶16</div>
+              <div><span class="status absent">absent</span></div>
+            </div>
+            <div class="work-detail">
+              <div class="pair">
+                <div><span class="lbl">what exists now</span><p><strong>Calricula</strong> already computes program-level LMI (wages, projections, county employment) and the ApplicationX <code>lmi.lookup</code> connector reads it by SOC. Nothing else: no Perkins, SWP, CLNA, LaunchBoard or NOVA reference anywhere in the PRD, spec or plans.</p></div>
+                <div><span class="lbl">what the research says</span><p>Perkins V eligibility = two of three (high-skill / high-wage / in-demand) with exact thresholds published by CCCCO. SWP outcomes come from EDD wage match and CTEOS via LaunchBoard — a college tool cannot supply them, only the engagement inputs. Gainful Employment/FVT ends 30 Jun 2027 and is replaced by <strong>STATS and Earnings Accountability</strong> on 1 Jul 2027.</p></div>
+              </div>
+              <div class="propose"><span class="lbl">proposal</span><p>Encode the Perkins high-wage and in-demand booleans in <code>lmi.lookup</code> with region and release date; ingest COE / EDD regional projections as a source. Reframe the deck: Perkins CLNA evidence (yes), Strong Workforce engagement inputs (yes), employment/wage outcomes (link LaunchBoard, don't collect), "GE reporting" → STATS/earnings accountability.</p></div>
+            </div>
+          </div>
+
+          <!-- 7 -->
+          <div class="work-row">
+            <div class="work-meta">
+              <div class="work-org">Outreach from the college to employers</div>
+              <div class="work-role">"A template letter, email or other communication that introduces the college's program and requests a phone or web conference call."</div>
+              <div class="work-dates">owner · I/O output 5</div>
+              <div><span class="status designed">designed · P2</span></div>
+            </div>
+            <div class="work-detail">
+              <div class="pair">
+                <div><span class="lbl">what exists now</span><p>AX-05 outreach drafts; external delivery requires an <code>Approval</code> bound to exact content hash, recipients, resource revision and expiry. Agents can draft but never send on their own. Imported content cannot grant agent permissions.</p></div>
+                <div><span class="lbl">what the research says</span><p>If an email's primary purpose is commercial, CAN-SPAM requires accurate headers, a physical postal address, a conspicuous opt-out honoured within 10 business days, and ad identification; penalties run to ~$53K per email and sender liability cannot be contracted away. The blanket claim that college→employer partnership outreach is "commercial" was <em>refuted</em> 0–3 — so build the fields in by default, don't claim the law forces it.</p></div>
+              </div>
+              <div class="propose"><span class="lbl">proposal</span><p>Add postal address, opt-out link and a suppression list to the outreach template and the <code>Contact</code> record. Cheap, and it makes the college the good actor in every employer's inbox.</p></div>
+            </div>
+          </div>
+
+          <!-- 8 -->
+          <div class="work-row">
+            <div class="work-meta">
+              <div class="work-org">Students: résumés, interviews, follow-up, alumni</div>
+              <div class="work-role">"Help students edit résumés, respond to applications and prepare for interviews… follow up after an interview… maintain relationships with graduates who land jobs… the foundation would also benefit."</div>
+              <div class="work-dates">owner · slide 5 · benefits ¶12–15</div>
+              <div><span class="status partial">partial · P3</span></div>
+            </div>
+            <div class="work-detail">
+              <div class="pair">
+                <div><span class="lbl">what exists now</span><p>AX-11 (P3): opt-in student/employer contact, applications, interview support, placement and alumni follow-up — private records excluded from the public graph, deletion within 24 hours, no employer access to raw grades. Public chat never queries student records.</p></div>
+                <div><span class="lbl">what the research says</span><p>The résumé flood (finding 7) means generic AI résumé generation hurts students. FERPA's school-official exception governs any SIS import: direct control, purpose limitation, no redisclosure. Steppingblocks already sells alumni/advancement analytics to large universities; 12twenty's outcomes are survey-based and incomplete.</p></div>
+              </div>
+              <div class="propose"><span class="lbl">proposal</span><p>Reframe résumé help around <strong>employer-verified signals</strong>: competencies confirmed by the employer in the advisory loop (<code>EMPLOYER_CONFIRMS_TASK</code>) appear on the student's profile with the evidence trail. Keep interview-outcome capture as a structured P3 record. Park the foundation/advancement use until a pilot asks for it.</p></div>
+            </div>
+          </div>
+
+          <!-- 9 -->
+          <div class="work-row">
+            <div class="work-meta">
+              <div class="work-org">Employers: discover programs and shape curriculum without a campus visit</div>
+              <div class="work-role">"Employers will discover what programs are offered… a more time-efficient way to communicate with colleges — to qualify candidates with faculty and to express their wishes for curriculum changes."</div>
+              <div class="work-dates">owner · slide 7</div>
+              <div><span class="status designed">designed · P1/P2</span></div>
+            </div>
+            <div class="work-detail">
+              <div class="pair">
+                <div><span class="lbl">what exists now</span><p>Employer feedback links to specific tasks, skills, objectives and assessments (J1 step 6) and flows into Calricula as a reviewable proposal (AX-09). This is the best-covered employer benefit. There is no employer-facing program discovery view yet; Calricula's approved catalog is the nearest existing surface.</p></div>
+                <div><span class="lbl">what the research says</span><p>Over half of surveyed business leaders could not identify the skills they were hiring for; three-quarters of partnership proposals include curriculum alignment. Riipen (named by the owner) now embeds employer projects in coursework across 14–20 colleges in a Google.org/ACCT initiative launching fall 2026.</p></div>
+              </div>
+              <div class="propose"><span class="lbl">proposal</span><p>A P2 candidate: an employer-oriented <em>occupation or skill → programs (statewide)</em> view over Calricula's approved catalog. Treat Riipen as a P3 integration target timed to the fall-2026 cohort, with a <code>WorkBasedLearning</code> activity model (placement type, hours, supervisor, paid/unpaid).</p></div>
+            </div>
+          </div>
+
+          <!-- 10 -->
+          <div class="work-row">
+            <div class="work-meta">
+              <div class="work-org">Employer performance-gap consulting</div>
+              <div class="work-role">"Help colleges identify gaps in each employer's performance metrics related to employee knowledge and training to potentially offer consulting services."</div>
+              <div class="work-dates">owner · slide 5 · benefit ¶7</div>
+              <div><span class="status absent">absent</span></div>
+            </div>
+            <div class="work-detail">
+              <div class="pair">
+                <div><span class="lbl">what exists now</span><p>Nothing in either repository.</p></div>
+                <div><span class="lbl">what the research says</span><p>The owner's own slide 6 notes employers "do not see colleges as experts in this area." No external evidence supports demand for it, and no data source exposes employer performance metrics.</p></div>
+              </div>
+              <div class="propose"><span class="lbl">proposal</span><p>Park it. Revisit only when a pilot employer asks; the contract-education angle can ride on the advisory loop's skills-gap output if it does.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= ROADMAP ================= -->
+    <section class="section" id="roadmap" aria-labelledby="roadmap-title">
+      <div class="container">
+        <div class="sec-head split">
+          <div style="display:flex;flex-direction:column;gap:18px;">
+            <span class="kicker"><span class="idx">05</span> / roadmap</span>
+            <h2 id="roadmap-title">Where the build is, and what to do first in P2</h2>
+          </div>
+          <p class="note">The owner's stated Level-1 goal is the Tier-1 employer use case. The P1 foundation is done; P2 is where every college-facing benefit in the deck gets built, so its first slice matters.</p>
+        </div>
+
+        <div class="phases" role="list" aria-label="Delivery phases">
+          <div class="phase done" role="listitem"><span class="ph">P1 · done</span><span class="t">Foundation</span><span class="d">Identity, organizations, workspaces, program mappings, host-context handshake, row-level security, connector contract + Calricula LMI, workspace UI package, standalone app, Calricula host route.</span></div>
+          <div class="phase proposed now" role="listitem"><span class="ph">P2-lite · proposed first</span><span class="t">Employer core + AX-14</span><span class="d">Employer/contact/posting tables, manual entry, outreach approval, advisory roster and meeting evidence, Perkins tests in LMI. $0 sources.</span></div>
+          <div class="phase" role="listitem"><span class="ph">P2</span><span class="t">Collaboration & graph</span><span class="d">Threads, tasks, evidence graph, coordinator agent, exchange packages to Calricula and Calipar, occupation and regional connectors.</span></div>
+          <div class="phase" role="listitem"><span class="ph">P2 · when licensed</span><span class="t">Feeds</span><span class="d">Employer directory and posting feed once NLx / Lightcast / Data Axle terms are signed; daily digest until then.</span></div>
+          <div class="phase" role="listitem"><span class="ph">P3</span><span class="t">Students</span><span class="d">Opt-in student profiles, employer-verified competencies, interview and placement follow-up, work-based learning, competency pilots.</span></div>
+          <div class="phase" role="listitem"><span class="ph">P4</span><span class="t">Scale</span><span class="d">Graph benchmark and, only if needed, a Neo4j projection; restore exercise before production.</span></div>
+        </div>
+
+        <div class="grid" style="margin-top:40px;">
+          <article class="card">
+            <span class="cat">ten recommendations · ranked by leverage</span>
+            <h3>What to do from P2 onward</h3>
+            <ul>
+              <li><strong>1.</strong> Start P2 with the P2-lite slice: employer core on $0 sources.</li>
+              <li><strong>2.</strong> Add AX-14 "CTE compliance evidence" (roster, meetings, sign-ins, CLNA export).</li>
+              <li><strong>3.</strong> Encode Perkins high-wage / in-demand tests in <code>lmi.lookup</code>; ingest COE.</li>
+              <li><strong>4.</strong> Two posting-source quotes now: NLx Research Hub and Lightcast via COE.</li>
+              <li><strong>5.</strong> Extend <code>Contact</code> for the Delete Act and CAN-SPAM; add the vendor gate.</li>
+              <li><strong>6.</strong> Evaluate Data Axle API + Census ZBP; drop "ALL employers" from the deck.</li>
+              <li><strong>7.</strong> Reframe GE → STATS, outcomes → engagement inputs, résumés → verified signals.</li>
+              <li><strong>8.</strong> Park employer performance-gap consulting.</li>
+              <li><strong>9.</strong> Employer-facing occupation → programs view over the approved catalog.</li>
+              <li><strong>10.</strong> Riipen integration + work-based-learning model in P3.</li>
+            </ul>
+            <div class="foot"><div class="tags"><span class="tag repo">proposals · not decisions</span></div></div>
+          </article>
+          <div class="cta-card">
+            <span class="eyebrow">// how the pieces fit</span>
+            <h3>Calricula stays the record. ApplicationX becomes the reason employers show up.</h3>
+            <p>Calricula already validates units, codes and outcomes and pulls the labor-market numbers. ApplicationX adds the employers, the conversations, and the evidence trail — then hands a reviewable proposal back to the curriculum workflow. AX-14 closes the loop by making that same evidence the college's Perkins and program-review record, so the compliance work deans dread becomes a by-product of the engagement work they want.</p>
+            <a class="go" href="#solutions" style="display:inline-flex;align-items:center;gap:8px;font-size:15px;font-weight:600;color:var(--accent);">Back to findings → solutions <svg class="arrow" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= LANDSCAPE ================= -->
+    <section class="section subtle" id="landscape" aria-labelledby="landscape-title">
+      <div class="container">
+        <div class="sec-head split">
+          <div style="display:flex;flex-direction:column;gap:18px;">
+            <span class="kicker"><span class="idx">06</span> / landscape</span>
+            <h2 id="landscape-title">Who is adjacent, and what is left for ApplicationX</h2>
+          </div>
+          <p class="note">Pricing only where public. "Not researched" is stated rather than guessed.</p>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <caption class="vh">Competitive landscape</caption>
+            <thead><tr><th scope="col">Product</th><th scope="col">What it does today</th><th scope="col">Pricing</th><th scope="col">Overlap</th><th scope="col">Left to ApplicationX</th><th scope="col">Evidence</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Lightcast Career Coach</strong></td><td>Student career exploration, CIP→O*NET program mapping, 32K-skill library, local + partner postings; postings monthly, LMI quarterly</td><td>Not public</td><td>Student side; posting surfacing</td><td>Employer discovery, CRM, advisory workflow; daily cadence</td><td><span class="tag verified">verified</span></td></tr>
+              <tr><td><strong>Handshake</strong></td><td>Campus-recruiting marketplace, 1M+ employers</td><td>Not public</td><td>Student job board</td><td>Everything employer-side and curricular</td><td><span class="tag sourced">sourced</span></td></tr>
+              <tr><td><strong>Symplicity</strong></td><td>Career-center back office: employer contacts, fairs, postings, caseloads; no proactive outreach</td><td>Pro ~$329/mo; enterprise $20K–100K+/yr</td><td>Contact database</td><td>Discovery, ranking, LMI, COR loop</td><td><span class="tag sourced">sourced</span></td></tr>
+              <tr><td><strong>12twenty</strong></td><td>NACE outcomes reporting, employer recruiting CRM; survey-based outcomes</td><td>Not public</td><td>Alumni outcomes</td><td>Same</td><td><span class="tag sourced">sourced</span></td></tr>
+              <tr><td><strong>Steppingblocks</strong></td><td>150M+ career paths, 25M+ employer profiles; career counselor, graduate outcomes, advancement; large 4-year customers</td><td>Not public</td><td>Alumni / advancement</td><td>No employer CRM or outreach <span class="sub">record-level download claim refuted</span></td><td><span class="tag verified">verified</span> <span class="tag refuted">partly</span></td></tr>
+              <tr><td><strong>Riipen</strong></td><td>Experiential-learning marketplace; Google.org/ACCT initiative, fall 2026</td><td>Not public</td><td>Work-based learning</td><td>Partner, not competitor</td><td><span class="tag verified">verified</span></td></tr>
+              <tr><td><strong>Workforce Connect</strong></td><td>K-12 CTE partnership CRM: advisory boards, WBL by pathway, Perkins/WIOA reports</td><td>Not public; no seat licences</td><td>Closest analogue</td><td>Community-college segment, AI discovery, LMI ranking, COR feedback</td><td><span class="tag sourced">sourced</span></td></tr>
+              <tr><td><strong>Salesforce Ed Cloud · Slate · Element451</strong></td><td>Admissions / advancement CRMs; 6–12-month implementations</td><td>$87–145/user/mo · ~$30–50K/yr · custom</td><td>Generic CRM</td><td>All domain features</td><td><span class="tag sourced">sourced</span></td></tr>
+              <tr><td><strong>CCC Centers of Excellence</strong></td><td>In-system regional LMI research; nine regional centers; system Lightcast licence</td><td>Funded by CCCCO</td><td>LMI analysis</td><td>Consume, don't compete</td><td><span class="tag verified">verified</span></td></tr>
+              <tr><td><strong>PlanStreet · LinkedIn Recruiter · Visier · Crunchr · Stellic · JobsEQ · Pathful · Tallo</strong></td><td colspan="4" style="color:var(--text-faint);">Not researched in this run.</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SOURCES ================= -->
+    <section class="section" id="sources" aria-labelledby="sources-title">
+      <div class="container">
+        <div class="sec-head">
+          <span class="kicker"><span class="idx">07</span> / sources & confidence</span>
+          <h2 id="sources-title">What was verified, what was not, and what was refuted</h2>
+        </div>
+        <div class="grid three">
+          <article class="card">
+            <span class="cat">verified · 3-vote adversarial review</span>
+            <h3>21 claims confirmed</h3>
+            <ul>
+              <li>LinkedIn Job Posting API: write-only, partner-gated, not accepting partners</li>
+              <li>Adzuna limits and academic/government ToS</li>
+              <li>CareerOneStop → NLx Research Hub; royalty-free non-jobs APIs</li>
+              <li>Lightcast facets (NAICS/SOC/O*NET/company/county; no zip)</li>
+              <li>COE role and outputs</li>
+              <li>Career Coach scope; Steppingblocks positioning; Riipen/ACCT initiative</li>
+              <li>Delete Act registration, DROP timeline, enforcement</li>
+              <li>CAN-SPAM required elements</li>
+              <li>Perkins V 2026-27 CLNA dates, thresholds, stakeholder evidence</li>
+            </ul>
+          </article>
+          <article class="card">
+            <span class="cat">sourced · fetched, not voted</span>
+            <h3>Cite with care</h3>
+            <ul>
+              <li>Indeed API retirement (single practitioner blog)</li>
+              <li>Census CBP/ZBP detail; Data Axle terms</li>
+              <li>FSA STATS timeline; LaunchBoard sources; Title 5 / Ed Code quotes via ASCCC; ED PTAC FERPA guidance</li>
+              <li>All pricing figures</li>
+              <li>Gallup, HBS/AACC, Ashby, Strada, Resume Now numbers</li>
+            </ul>
+            <p>Not researched at all: D&B, Google Places, OpenCorporates, Apollo/ZoomInfo/Clearbit/Hunter terms, Jooble, Google Jobs, USAJobs, JobsPikr, Coresignal; the remaining competitors; JFF, Education at Work, CredLens, SHRM Foundation; ACCJC 2024 numbering.</p>
+          </article>
+          <article class="card">
+            <span class="cat">refuted · do not re-assert</span>
+            <h3>4 claims killed</h3>
+            <ul>
+              <li>Lightcast OAuth scope, 10 rps default, 10/100/1,000 posting-sample caps (1–2)</li>
+              <li>CAN-SPAM applies as a blanket matter to college→employer outreach (0–3)</li>
+              <li>Steppingblocks provides record-level alumni employment downloads (1–2)</li>
+            </ul>
+            <p>Time-sensitive: the LinkedIn partner moratorium (page dated June 2026) may lift; Adzuna's ToS is undated; Delete Act enforcement is evolving; Perkins dates are the closed 2026-27 cycle.</p>
+          </article>
+        </div>
+
+        <div class="tbl-wrap" style="margin-top:32px;">
+          <table>
+            <caption class="vh">Primary sources</caption>
+            <thead><tr><th scope="col">Source</th><th scope="col">Used for</th></tr></thead>
+            <tbody>
+              <tr><td><a href="https://learn.microsoft.com/en-us/linkedin/talent/job-postings/api/overview?view=li-lts-2026-03" style="color:var(--accent);">LinkedIn Job Posting API overview (Microsoft Learn)</a></td><td>Finding 2</td></tr>
+              <tr><td><a href="https://docs.lightcast.dev/apis/job-postings" style="color:var(--accent);">Lightcast Job Postings API docs</a></td><td>Finding 2 · solutions 4</td></tr>
+              <tr><td><a href="https://developer.adzuna.com/docs/terms_of_service" style="color:var(--accent);">Adzuna API terms of service</a></td><td>Finding 2</td></tr>
+              <tr><td><a href="https://www.careeronestop.org/Developers/WebAPI/jobs-api-updates.aspx" style="color:var(--accent);">CareerOneStop Jobs API update</a> · <a href="https://www.naswa.org/national-labor-exchange/nlx-research-hub" style="color:var(--accent);">NLx Research Hub</a></td><td>Finding 2 · solutions 4</td></tr>
+              <tr><td><a href="https://coeccc.net/" style="color:var(--accent);">CCC Centers of Excellence</a></td><td>Finding 8</td></tr>
+              <tr><td><a href="https://www.cccco.edu/-/media/CCCCO-Website/docs/memo/wed-25-80-perkins-2026-27-clna-guidance-memo-and-framework-a11y.pdf" style="color:var(--accent);">CCCCO memo WED 25-80 — Perkins V CLNA guidance</a></td><td>Finding 3 · solutions 5–6</td></tr>
+              <tr><td><a href="https://www.calpassplus.org/LaunchBoard/SWP.aspx" style="color:var(--accent);">Cal-PASS Plus LaunchBoard — Strong Workforce</a></td><td>Finding 8 · solutions 6</td></tr>
+              <tr><td><a href="https://fsapartners.ed.gov/knowledge-center/topics/financial-value-transparency-and-gainful-employment-information" style="color:var(--accent);">FSA — FVT/GE status</a></td><td>Solutions 6</td></tr>
+              <tr><td><a href="https://privacy.ca.gov/drop/" style="color:var(--accent);">CalPrivacy DROP</a> · <a href="https://cppa.ca.gov/announcements/2025/20251217.html" style="color:var(--accent);">Enforcement advisory, Dec 2025</a></td><td>Finding 4 · solutions 3</td></tr>
+              <tr><td><a href="https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business" style="color:var(--accent);">FTC CAN-SPAM compliance guide</a></td><td>Solutions 7</td></tr>
+              <tr><td><a href="https://www.sdccd.edu/docs/ISPT/workforce/docs/ASCCC-EffectivePractices-AdvisoryCommittees2019.pdf" style="color:var(--accent);">ASCCC — Effective practices for CTE advisory committees</a></td><td>Solutions 5</td></tr>
+              <tr><td><a href="https://news.gallup.com/poll/702284/college-students-grads-strong-career-value-degree.aspx" style="color:var(--accent);">Lumina-Gallup 2026</a> · <a href="https://www.hbs.edu/faculty/Pages/item.aspx?num=63379" style="color:var(--accent);">HBS/AACC Partnership Imperative</a> · <a href="https://stradaeducation.org/report/trends-in-employer-partnerships-with-community-colleges/" style="color:var(--accent);">Strada partnership trends</a></td><td>Findings 5–6</td></tr>
+              <tr><td><a href="https://lightcast.io/solutions/education/career-coach" style="color:var(--accent);">Lightcast Career Coach</a> · <a href="https://www.steppingblocks.com/" style="color:var(--accent);">Steppingblocks</a> · <a href="https://www.acct.org/news/national-initiative-will-equip-community-colleges-embed-real-world-employer-projects-workforce" style="color:var(--accent);">ACCT × Google.org × Riipen</a></td><td>Finding 1 · landscape</td></tr>
+              <tr><td>Repository artifacts: <code>docs/applicationx/PRD.md</code>, <code>TECHNICAL-SPEC.md</code>, <code>SOURCE-INVENTORY.md</code>, <code>plans/</code>; <code>applicationx/backend/app/connectors/lmi.py</code></td><td>Every "what exists now" cell</td></tr>
+              <tr><td>Full report: <code>docs/applicationx/research/2026-09-20-applicationx-deep-research.md</code> · claims appendix · workflow result</td><td>Everything</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer" id="connect">
+    <div class="container">
+      <div class="footer-top">
+        <div class="footer-head">
+          <span class="eyebrow">// next step</span>
+          <h2>Decide the <span class="grad">sequence</span>, price the two feeds, and write AX-14.</h2>
+          <p>Three owner decisions unlock everything else in this deck: whether P2 opens with the P2-lite slice, which posting source to license, and whether Perkins evidence becomes a first-class feature. None of them needs new research — they need a call.</p>
+        </div>
+        <div class="footer-links" aria-label="Related documents">
+          <a href="../2026-09-20-applicationx-deep-research.md">Full research report <span class="handle">markdown · 8 sections</span></a>
+          <a href="../../PRD.md">ApplicationX PRD v0.4 <span class="handle">docs/applicationx</span></a>
+          <a href="../../TECHNICAL-SPEC.md">Technical specification <span class="handle">docs/applicationx</span></a>
+          <a href="../../plans/2026-09-17-p1b-p4-roadmap.md">P2–P4 roadmap <span class="handle">plans/</span></a>
+        </div>
+      </div>
+      <div class="footer-bar">
+        <span>ApplicationX × Calricula · research snapshot 2026-09-20</span>
+        <span>Proposal only · no institutional adoption or production deployment is claimed</span>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

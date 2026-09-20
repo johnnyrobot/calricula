@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     APPLICATIONX_EMBED_ENABLED: bool = False
     APPLICATIONX_API_ORIGIN: Optional[str] = None       # e.g. https://ax.example.edu (no path)
     APPLICATIONX_ORGANIZATION_REF: Optional[str] = None # ApplicationX organization slug for this deployment
-    APPLICATIONX_CAMPUS_REF: Optional[str] = None       # e.g. LAMC
+    APPLICATIONX_CAMPUS_REF: Optional[str] = None       # e.g. MAIN
     APPLICATIONX_SERVICE_TOKEN: Optional[str] = None    # optional transport credential; never expands user scope
     APPLICATIONX_TIMEOUT_SECONDS: float = 20.0
     APPLICATIONX_STREAM_MAX_SECONDS: float = 600.0  # upper bound on one SSE proxy connection

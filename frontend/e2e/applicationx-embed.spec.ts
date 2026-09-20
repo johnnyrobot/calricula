@@ -14,9 +14,9 @@
  * Case 9 needs the stub restarted with STUB_DOWN=1 and this spec run with
  * STUB_DOWN=1; it is skipped otherwise.
  *
- * The chat steps of cases 1 and 8 are `test.fixme` until the shared
- * workspace package (chat shell) is integrated (plan Task 8); the host
- * states, context banner and navigation are asserted now.
+ * Workspace content (employer records, threads, evidence) arrives with the
+ * shared workspace package; the host states, context banner and navigation
+ * are asserted now.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -55,18 +55,8 @@ test.describe('ApplicationX embed', () => {
     await page.getByRole('link', { name: /^Collaboration$/ }).click();
     await expect(page).toHaveURL(/\/programs\/[0-9a-f-]+\/collaboration$/);
     await expect(page.getByRole('navigation').first()).toBeVisible();
-    await expect(page.getByRole('region', { name: /Workspace context/ })).toContainText('LAMC');
+    await expect(page.getByRole('region', { name: /Workspace context/ })).toContainText('MAIN');
     await expect(page.getByRole('region', { name: /Workspace context/ })).toContainText('Computer Science');
-  });
-
-  test.fixme('chat arrives with the shared workspace package (plan Task 8) — case 1 chat steps', async ({ page }) => {
-    await loginAsUser(page, TEST_USERS.faculty);
-    await openProgram(page, MAPPED_PROGRAM);
-    await page.getByRole('link', { name: /^Collaboration$/ }).click();
-    await page.getByLabel(/ask/i).fill('open seats in MULTIMD 100');
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('status')).toHaveText(/answer ready/i);
-    await expect(page.getByRole('list', { name: /sources/i })).toBeVisible();
   });
 
   test('staff without ApplicationX access sees the access panel, never a workspace (case 2)', async ({ page }) => {
@@ -127,21 +117,6 @@ test.describe('ApplicationX embed', () => {
     expect(reached).toBe(true);
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/\/programs\/[0-9a-f-]+$/);
-  });
-
-  test.fixme('chat arrives with the shared workspace package (plan Task 8) — case 8 chat steps', async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 800 });
-    await loginAsUser(page, TEST_USERS.faculty);
-    await openProgram(page, MAPPED_PROGRAM);
-    await page.getByRole('link', { name: /^Collaboration$/ }).click();
-    await page.keyboard.press('Tab'); // skip link
-    for (let i = 0; i < 12; i++) {
-      if (await page.getByLabel(/ask/i).evaluate((el) => el === document.activeElement)) break;
-      await page.keyboard.press('Tab');
-    }
-    await page.keyboard.type('library hours');
-    await page.keyboard.press('Enter');
-    await expect(page.getByRole('status')).toHaveText(/answer ready/i);
   });
 });
 

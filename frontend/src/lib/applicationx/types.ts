@@ -2,9 +2,9 @@
  * Mirrors @applicationx/workspace-ui contracts; replaced by a re-export when
  * the package is a dependency.
  *
- * Source: applicationx/packages/workspace-ui/src/contracts/host.ts and
- * chat.ts. Plain interfaces/types only — Calricula does not depend on zod,
- * so the runtime schema exports from those files are intentionally omitted.
+ * Source: applicationx/packages/workspace-ui/src/contracts/host.ts. Plain
+ * interfaces/types only — Calricula does not depend on zod, so the runtime
+ * schema exports from that file are intentionally omitted.
  */
 
 export type HostKind = 'calricula' | 'applicationx';
@@ -65,28 +65,4 @@ export interface WorkspaceHostAdapter {
   subscribe(resourceId: string, cursor: string | null, signal: AbortSignal): AsyncIterable<WorkspaceEvent>;
   navigateToProgram(program: ProgramRef): void;
   openStandalone(workspaceId: string): void;
-}
-
-export interface Citation {
-  evidence_id: string;
-  url: string | null;
-  locator: string | null;
-  source_period: string | null;
-  observed_at: string | null;
-}
-
-export interface ChatAnswer {
-  message_id: string;
-  answer: string;
-  route: string;
-  resolved_scope: Record<string, string>;
-  cards: Array<{
-    kind: 'course' | 'section' | 'pathway' | 'agreement' | 'resource' | 'employer' | 'evidence';
-    data: unknown;
-  }>;
-  citations: Citation[];
-  warnings: Array<{ code: string; source_id: string; message: string }>;
-  clarification: { slot: string; choices: string[] } | null;
-  completeness: 'complete' | 'partial' | 'unknown';
-  run_id: string;
 }

@@ -22,8 +22,8 @@ def as_faculty():
 def configured(monkeypatch):
     monkeypatch.setattr(settings, "APPLICATIONX_EMBED_ENABLED", True)
     monkeypatch.setattr(settings, "APPLICATIONX_API_ORIGIN", "https://ax.example.test")
-    monkeypatch.setattr(settings, "APPLICATIONX_ORGANIZATION_REF", "lamc")
-    monkeypatch.setattr(settings, "APPLICATIONX_CAMPUS_REF", "LAMC")
+    monkeypatch.setattr(settings, "APPLICATIONX_ORGANIZATION_REF", "demo-college")
+    monkeypatch.setattr(settings, "APPLICATIONX_CAMPUS_REF", "MAIN")
     monkeypatch.setattr(settings, "APPLICATIONX_STANDALONE_URL", "https://ax.example.test/app")
 
 
@@ -67,8 +67,8 @@ def test_production_requires_https_origin_when_enabled(origin):
             OIDC_CLIENT_ID="calricula-web",
             APPLICATIONX_EMBED_ENABLED=True,
             APPLICATIONX_API_ORIGIN=origin,
-            APPLICATIONX_ORGANIZATION_REF="lamc",
-            APPLICATIONX_CAMPUS_REF="LAMC",
+            APPLICATIONX_ORGANIZATION_REF="demo-college",
+            APPLICATIONX_CAMPUS_REF="MAIN",
         )
 
 
@@ -84,8 +84,8 @@ def test_production_accepts_https_origin_when_enabled():
         OIDC_CLIENT_ID="calricula-web",
         APPLICATIONX_EMBED_ENABLED=True,
         APPLICATIONX_API_ORIGIN="https://ax.example.edu",
-        APPLICATIONX_ORGANIZATION_REF="lamc",
-        APPLICATIONX_CAMPUS_REF="LAMC",
+        APPLICATIONX_ORGANIZATION_REF="demo-college",
+        APPLICATIONX_CAMPUS_REF="MAIN",
     )
     assert s.APPLICATIONX_API_ORIGIN == "https://ax.example.edu"
 
@@ -120,7 +120,7 @@ def test_forward_sends_only_allowlisted_headers(configured):
 
 def test_unknown_operation_and_bad_path_param(configured):
     b = ApplicationXBroker(transport=_transport(lambda r: httpx.Response(200, json={})))
-    for op, params, code in (("admin.nuke", {}, 404), ("chat.cancel", {"run_id": "../x"}, 400), ("sources.health", {"source_id": "A;drop"}, 400)):
+    for op, params, code in (("admin.nuke", {}, 404), ("sources.health", {"source_id": "../x"}, 400), ("sources.health", {"source_id": "A;drop"}, 400)):
         try:
             asyncio.run(b.forward(op, user_token="t", path_params=params, body=None))
             assert False, op
@@ -148,7 +148,7 @@ def test_upstream_5xx_and_timeout_become_typed_errors_without_leaking_body(confi
 
 def test_upstream_4xx_typed_state_passes_and_untyped_is_sanitized(configured):
     b = ApplicationXBroker(transport=_transport(lambda r: httpx.Response(403, json={"detail": "workspace access denied for user@x"})))
-    status, body = asyncio.run(b.forward("chat.messages", user_token="t", path_params={}, body={"question": "q"}))
+    status, body = asyncio.run(b.forward("sources.list", user_token="t", path_params={}, body=None))
     assert status == 403 and body == {"detail": "forbidden"}
 
 
@@ -157,7 +157,7 @@ def test_upstream_4xx_typed_state_is_projected_to_allowlist(configured):
     (debug text, ids) never cross the boundary and message is bounded."""
     upstream = {"state": "access_required", "message": "Ask your admin. " + "x" * 600, "retryable": "yes", "debug": "token=abc"}
     b = ApplicationXBroker(transport=_transport(lambda r: httpx.Response(403, json=upstream)))
-    status, body = asyncio.run(b.forward("chat.messages", user_token="t", path_params={}, body={"question": "q"}))
+    status, body = asyncio.run(b.forward("sources.list", user_token="t", path_params={}, body=None))
     assert status == 403
     assert set(body) == {"state", "message", "retryable"}
     assert body["state"] == "access_required" and body["retryable"] is True
@@ -167,22 +167,26 @@ def test_upstream_4xx_typed_state_is_projected_to_allowlist(configured):
 @pytest.mark.parametrize("state", ["ready", "loading", "pwned", 42, None])
 def test_upstream_4xx_unknown_state_is_sanitized(configured, state):
     b = ApplicationXBroker(transport=_transport(lambda r: httpx.Response(403, json={"state": state, "message": "secret=abc"})))
-    status, body = asyncio.run(b.forward("chat.messages", user_token="t", path_params={}, body={"question": "q"}))
+    status, body = asyncio.run(b.forward("sources.list", user_token="t", path_params={}, body=None))
     assert status == 403 and body == {"detail": "forbidden"}
 
 
-def test_run_id_is_normalized_to_canonical_uuid(configured):
+def test_workspace_id_is_normalized_to_canonical_uuid(configured):
     seen = {}
 
     def handler(req):
         seen["url"] = str(req.url)
-        return httpx.Response(200, json={})
+        return httpx.Response(200, headers={"content-type": "text/event-stream"}, content=b"id: 1\nevent: done\ndata: {}\n\n")
 
-    rid = uuid.uuid4()
+    wid = uuid.uuid4()
     b = ApplicationXBroker(transport=_transport(handler))
-    for raw in (rid.hex, f"urn:uuid:{rid}", "{" + str(rid) + "}", str(rid).upper()):
-        asyncio.run(b.forward("chat.cancel", user_token="t", path_params={"run_id": raw}, body=None))
-        assert seen["url"] == f"https://ax.example.test/v1/chat/runs/{rid}/cancel", raw
+
+    async def collect(raw):
+        return [c async for c in b.stream("workspace.events", user_token="t", path_params={"workspace_id": raw}, last_event_id=None)]
+
+    for raw in (wid.hex, f"urn:uuid:{wid}", "{" + str(wid) + "}", str(wid).upper()):
+        asyncio.run(collect(raw))
+        assert seen["url"] == f"https://ax.example.test/v1/workspaces/{wid}/events", raw
 
 
 def test_stream_passes_events_and_last_event_id(configured):
@@ -195,7 +199,7 @@ def test_stream_passes_events_and_last_event_id(configured):
     b = ApplicationXBroker(transport=_transport(handler))
 
     async def collect():
-        return b"".join([chunk async for chunk in b.stream("chat.events", user_token="t", path_params={"run_id": str(uuid.uuid4())}, last_event_id="1")])
+        return b"".join([chunk async for chunk in b.stream("workspace.events", user_token="t", path_params={"workspace_id": str(uuid.uuid4())}, last_event_id="1")])
 
     out = asyncio.run(collect())
     assert b"event: done" in out and seen["lei"] == "1"
@@ -225,7 +229,7 @@ def test_stream_forwards_only_safe_opaque_cursors(configured, cursor, forwarded)
     b = ApplicationXBroker(transport=_transport(handler))
 
     async def collect():
-        return [c async for c in b.stream("chat.events", user_token="t", path_params={"run_id": str(uuid.uuid4())}, last_event_id=cursor)]
+        return [c async for c in b.stream("workspace.events", user_token="t", path_params={"workspace_id": str(uuid.uuid4())}, last_event_id=cursor)]
 
     asyncio.run(collect())
     assert seen["lei"] == forwarded
@@ -244,7 +248,7 @@ def test_stream_stops_with_stream_timeout_after_max_seconds(configured, monkeypa
     b = ApplicationXBroker(transport=_transport(lambda r: httpx.Response(200, headers={"content-type": "text/event-stream"}, stream=NeverDone())))
 
     async def collect():
-        return [c async for c in b.stream("chat.events", user_token="t", path_params={"run_id": str(uuid.uuid4())}, last_event_id=None)]
+        return [c async for c in b.stream("workspace.events", user_token="t", path_params={"workspace_id": str(uuid.uuid4())}, last_event_id=None)]
 
     import time as _time
 
@@ -274,7 +278,7 @@ def test_stream_emits_idle_keepalive(configured, monkeypatch):
 
     async def collect():
         chunks = []
-        async for chunk in b.stream("chat.events", user_token="t", path_params={"run_id": str(uuid.uuid4())}, last_event_id=None):
+        async for chunk in b.stream("workspace.events", user_token="t", path_params={"workspace_id": str(uuid.uuid4())}, last_event_id=None):
             chunks.append(chunk)
         return chunks
 
@@ -301,7 +305,7 @@ class _FakeBroker:
             "workspace_id": "w",
             "workspace_title": "Nursing",
             "program_title": body.get("program_ref", {}).get("title") if body else None,
-            "campus_label": "LAMC",
+            "campus_label": "Main Campus",
             "revision_label": "r",
             "api_version": "0.1",
         }
@@ -330,7 +334,7 @@ def test_resolve_enriches_program_from_database(as_faculty, configured, fake_bro
     assert r.status_code == 200 and r.json()["state"] == "ready"
     op, token, _, body = fake_broker.calls[0]
     assert op == "host-contexts.resolve" and token == "tok"
-    assert body["organization_ref"] == "lamc" and body["campus_ref"] == "LAMC" and body["host"] == "calricula"
+    assert body["organization_ref"] == "demo-college" and body["campus_ref"] == "MAIN" and body["host"] == "calricula"
     assert body["program_ref"]["external_id"] == str(p.id) and body["program_ref"]["title"] == "Nursing AS" and body["program_ref"]["status"] == "Approved"
     assert body["program_ref"]["revision"].endswith("+00:00")
 
@@ -351,9 +355,9 @@ def test_ops_only_allowlisted(as_faculty, configured, fake_broker):
         json={"path_params": {}, "body": {}},
     ).status_code == 404
     assert as_faculty.post(
-        "/api/applicationx/ops/chat.messages",
+        "/api/applicationx/ops/sources.list",
         headers={"Authorization": "Bearer tok", "X-ApplicationX-Token": "tok"},
-        json={"path_params": {}, "body": {"question": "q", "context_id": "c", "conversation_id": None, "workspace_id": None, "language": "en"}},
+        json={"path_params": {}, "body": None},
     ).status_code == 200
 
 
@@ -368,7 +372,7 @@ def test_disabled_embed_is_503_everywhere_but_status(as_faculty, fake_broker):
 
 def test_events_stream_proxied(as_faculty, configured, fake_broker):
     r = as_faculty.get(
-        f"/api/applicationx/runs/{uuid.uuid4()}/events",
+        f"/api/applicationx/workspaces/{uuid.uuid4()}/events",
         headers={"Authorization": "Bearer tok", "X-ApplicationX-Token": "tok", "Last-Event-ID": "0"},
     )
     assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream") and b"event: done" in r.content
@@ -406,7 +410,7 @@ def test_stream_broker_error_before_first_byte_surfaces_as_error_status(as_facul
 
     monkeypatch.setattr("app.api.routes.applicationx.get_broker", lambda: BoomStream())
     r = as_faculty.get(
-        f"/api/applicationx/runs/{uuid.uuid4()}/events",
+        f"/api/applicationx/workspaces/{uuid.uuid4()}/events",
         headers={"Authorization": "Bearer tok", "X-ApplicationX-Token": "tok"},
     )
     assert r.status_code == 403 and r.json()["detail"]["code"] == "upstream_stream_error"

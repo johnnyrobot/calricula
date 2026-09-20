@@ -19,13 +19,13 @@ from app.core.config import settings
 
 OPERATIONS: dict[str, tuple[str, str]] = {
     "host-contexts.resolve": ("POST", "/v1/host-contexts/resolve"),
-    "chat.messages": ("POST", "/v1/chat/messages"),
-    "chat.cancel": ("POST", "/v1/chat/runs/{run_id}/cancel"),
     "sources.list": ("GET", "/v1/sources"),
     "sources.health": ("GET", "/v1/sources/{source_id}/health"),
 }
+# Workspace event streams (threads, tasks, evidence) arrive with ApplicationX
+# P2; the relay below is already proven against them.
 STREAMS: dict[str, tuple[str, str]] = {
-    "chat.events": ("GET", "/v1/chat/runs/{run_id}/events"),
+    "workspace.events": ("GET", "/v1/workspaces/{workspace_id}/events"),
 }
 
 # How long to wait for the next SSE chunk before emitting a keepalive comment
@@ -51,12 +51,12 @@ _MESSAGE_MAX = 500
 _EVENT_ID_RE = re.compile(r"^[A-Za-z0-9._:-]{1,64}$")
 
 _PARAM_RULES = {
-    "run_id": lambda v: _is_uuid(v),
+    "workspace_id": lambda v: _is_uuid(v),
     "source_id": lambda v: re.fullmatch(r"[a-z_]{2,40}", v) is not None,
 }
 # Canonical form substituted into the upstream path (after validation).
 _PARAM_NORMALIZE = {
-    "run_id": lambda v: str(uuid.UUID(v)),
+    "workspace_id": lambda v: str(uuid.UUID(v)),
 }
 _SAFE_4XX = {
     400: "invalid request",

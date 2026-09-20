@@ -10,7 +10,7 @@ describe('getStatus', () => {
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
-      json: async () => ({ enabled: true, organization_ref: 'lamc', campus_ref: 'LAMC', standalone_url: null, api_version: null }),
+      json: async () => ({ enabled: true, organization_ref: 'demo-college', campus_ref: 'MAIN', standalone_url: null, api_version: null }),
     });
     const s = await getStatus('tok');
     expect(mockFetch.mock.calls[0][0]).toMatch(/\/api\/applicationx\/status$/);

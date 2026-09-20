@@ -166,9 +166,9 @@ async def _chain(first, gen):
         await gen.aclose()
 
 
-@router.get("/runs/{run_id}/events")
-async def run_events(
-    run_id: uuid.UUID,
+@router.get("/workspaces/{workspace_id}/events")
+async def workspace_events(
+    workspace_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
     token: str = Depends(_upstream_token),
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
@@ -176,7 +176,7 @@ async def run_events(
     _require_ready()
     broker = get_broker()
     gen = broker.stream(
-        "chat.events", user_token=token, path_params={"run_id": str(run_id)}, last_event_id=last_event_id
+        "workspace.events", user_token=token, path_params={"workspace_id": str(workspace_id)}, last_event_id=last_event_id
     )
     try:
         first = await gen.__anext__()

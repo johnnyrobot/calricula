@@ -1,0 +1,365 @@
+##### logs
+[
+ "Q: Deep-research report on **ApplicationX** \u2014 an AI-enabled, jobs-focused platform \u2026",
+ "Decomposed into 5 angles: Job-posting and LMI data access (practitioner/cost), Employer discovery and contact enrichment legality (legal/skeptical), Competitive landscape (broad/primary), Grant reporting and compliance data requirements (authoritative refs), Market signals and contrarian view (recent news/skeptical)",
+ "Competitive landscape (broad/primary): 6 results",
+ "Job-posting and LMI data access (practitioner/cost): 6 results",
+ "Market signals and contrarian view (recent news/skeptical): 6 results",
+ "Market signals and contrarian view (recent news/skeptical): 4 novel (2 filtered)",
+ "Employer discovery and contact enrichment legality (legal/skeptical): 6 results",
+ "Employer discovery and contact enrichment legality (legal/skeptical): 4 novel (2 filtered)",
+ "Grant reporting and compliance data requirements (authoritative refs): 6 results",
+ "Grant reporting and compliance data requirements (authoritative refs): 5 novel (1 filtered)",
+ "Fetched 25 sources \u2192 123 claims \u2192 verifying top 25",
+ "\"LinkedIn is not accepting new partners f\u2026\": 3-0 \u2713",
+ "\"Access requires LinkedIn approval, meeti\u2026\": 3-0 \u2713",
+ "\"The LinkedIn Job Posting API is a write-\u2026\": 3-0 \u2713",
+ "\"Lightcast's US Job Postings API requires\u2026\": 1-2 \u2717",
+ "\"CareerOneStop no longer issues its Jobs\u2026\": 3-0 \u2713",
+ "\"The CareerOneStop Web API license is roy\u2026\": 3-0 \u2713",
+ "\"COE produces customized regional LMI on\u2026\": 3-0 \u2713",
+ "\"The Centers of Excellence (COE) position\u2026\": 3-0 \u2713",
+ "\"The API exposes aggregate facets that ma\u2026\": 3-0 \u2713",
+ "\"Individual posting records (the /posting\u2026\": 1-2 \u2717",
+ "\"Adzuna's default API key is rate-limited\u2026\": 3-0 \u2713",
+ "\"Under California's Delete Act, any busin\u2026\": 3-0 \u2713",
+ "\"Under the API Terms of Service, use by a\u2026\": 3-0 \u2713",
+ "\"The Adzuna API exposes job-ad search plu\u2026\": 2-1 \u2713",
+ "\"Commercial email must include a valid ph\u2026\": 3-0 \u2713",
+ "\"The Delete Request and Opt-Out Platform\u2026\": 3-0 \u2713",
+ "\"CAN-SPAM applies to business-to-business\u2026\": 0-3 \u2717",
+ "\"Lightcast Career Coach is a student-faci\u2026\": 3-0 \u2713",
+ "\"Steppingblocks markets a dataset of 150M\u2026\": 3-0 \u2713",
+ "\"Career Coach surfaces local job postings\u2026\": 3-0 \u2713",
+ "\"Steppingblocks' Graduate Outcomes produc\u2026\": 1-2 \u2717",
+ "\"Riipen is the experiential-learning plat\u2026\": 3-0 \u2713",
+ "\"Every California community college distr\u2026\": 3-0 \u2713",
+ "\"The CLNA requires documented evidence of\u2026\": 3-0 \u2713",
+ "\"To qualify for 2026-27 Perkins V funding\u2026\": 3-0 \u2713",
+ "Verify done: 25 claims \u2192 21 confirmed, 4 refuted, 0 unverified"
+]
+##### result
+{
+ "question": "Deep-research report on **ApplicationX** \u2014 an AI-enabled, jobs-focused platform to improve engagement between community colleges, employers, and students (getting the right students into the right careers/jobs). The maintainer is building it in a private repo (github.com/johnnyrobot/applicationx) and embedding it in Calricula (a California community-college curriculum-management platform).\n\nAUDIENCE: Both \u2014 an executive summary for college stakeholders / pitch backing, followed by detailed sections for product/engineering (cite repo files by path).\n\nSOURCE OF TRUTH (highest authority, read these first \u2014 plain-text extracts of the owner's three documents):\n- /tmp/appx-src/Application-Benefits.pptx.txt  (13 slides: value proposition, problems for colleges/employers/students, benefits for each, initial strategy \"Level 1 prototype for college use\", naming candidates, competition list \u2014 Salesforce, Element451, EnrollmentRX, Technolutions Slate, Jenzabar, Handshake, PlanStreet, LinkedIn Recruiter, Indeed, Visier, Crunchr, Stellic \u2014 and nonprofits: Strada, Smith Family Foundation, SHRM Foundation, US Chamber Foundation Talent Pipeline Management, Full Scale Learning, Education at Work, CredLens, Jobs for the Future)\n- /tmp/appx-src/ApplicationX-Benefit-Summary.docx.txt  (benefit list: continuously updated regional employer list, AI-ranked employer prioritization, CRM-like relationship tools, key contacts per employer, continuous web monitoring of employer news, advisory-board recruitment for accreditation, LMI analysis, SIS/CRM student import, instant job-posting notifications, resume/interview help, post-interview follow-up, graduate/alumni tracking incl. foundation/advancement, grant reporting for Perkins / Strong Workforce / Gainful Employment, engagement with SHRM / Education at Work / JFF / Riipen)\n- /tmp/appx-src/Inputs-and-Outputs-Standard-College-Use-Case.docx.txt  (Tier 1 use case. Inputs: known employers, NAICS codes, region by zip codes, job titles, BLS SOC codes, O*NET Job Zones 1-5; open question whether Indeed/LinkedIn job data can be licensed. Outputs: employer database with contacts (owner/president/HR director/supervisors), 2-year job-posting history per employer, min/desired qualifications extracted from postings, outreach letter template)\n\nREPO DOCUMENTS (secondary \u2014 what has actually been designed/built; in <calricula repo>):\n- docs/applicationx/README.md, PRD.md, TECHNICAL-SPEC.md, SOURCE-INVENTORY.md, EMBEDDED-INTERFACE.md, ADR-0001-auth-stack-logto.md\n- docs/applicationx/plans/*.md (P0 source contracts, P1a host/service/package, P1b-1 chat breadth, P1b-2 sequencing/schedule completeness, P1b\u2013P4 roadmap, auth Logto plans)\n- docs/APPLICATIONX-EMBED.md, docs/AUTH-LOGTO.md\n- session/20260917_144623/*.md (execution ledgers/handoffs)\nCurrent state per memory: P0 + P1a + Logto auth swap implemented; PRs #35/#36/#37 merged 2026-09-19; workspace-ui published as @johnnyrobot/workspace-ui 0.1.1; P1b-1 merged 2026-09-20; next is P1b-2 and P1b-3.\n\nRESEARCH QUESTIONS (answer all four; web research must be grounded in current, citable sources):\n1. GAP ANALYSIS \u2014 vision vs. build: For each benefit/input/output in the three source-of-truth docs, is it covered in the repo PRD/spec/plans (implemented, planned with a phase, or absent)? Where do repo design decisions drift from or contradict the source docs? Produce a coverage matrix and a list of promised benefits with no design.\n2. DATA-SOURCE FEASIBILITY: Can the Tier-1 inputs/outputs be delivered legally and affordably? Evaluate: employer discovery by NAICS + zip (Census County Business Patterns, Data Axle/D&B, Google Places, state license data, OpenCorporates), contact enrichment (Apollo, ZoomInfo, Clearbit/HubSpot, Hunter \u2014 ToS and CCPA/CPRA constraints), job-posting ingestion (Indeed/LinkedIn official API terms and scraping prohibitions; Lightcast/Burning Glass, Adzuna, Jooble, Google Jobs, USAJobs, CareerOneStop APIs; JobsPikr/Coresignal), O*NET Web Services / SOC / Job Zone, BLS OES/QCEW/projections, California-specific LMI (EDD LMID, Centers of Excellence, LaunchBoard/Cal-PASS Plus), current pricing/licensing where published.\n3. COMPETITIVE & MARKET LANDSCAPE: For Handshake, Salesforce Education Cloud, Element451, EnrollmentRX, Technolutions Slate, Jenzabar, PlanStreet, LinkedIn Recruiter, Indeed, Visier, Crunchr, Stellic, Riipen, plus Symplicity, 12twenty, Lightcast, Purdue/Chmura JobsEQ, Emsi Career Coach, Steppingblocks, Work-Based Learning tools (e.g., Nepris/Pathful, Tallo), and the listed nonprofits (Strada, JFF, US Chamber TPM, Education at Work, CredLens, SHRM Foundation): what each actually does today, pricing model if public, and where ApplicationX overlaps vs. differentiates (esp. employer-side discovery + CTE advisory-board workflow + curriculum feedback loop into a COR tool). Also market signals: declining confidence in higher-ed value, employer-college trust, AI-written resume sifting.\n4. COMPLIANCE & GRANT-REPORTING FIT: What data must the app capture to actually deliver the promised reporting benefits \u2014 Perkins V (CLNA, core indicators 1P1\u20135P4, advisory committees), California Strong Workforce Program (metrics, LaunchBoard, regional consortia), Gainful Employment / Financial Value Transparency (2024 rule; current status after 2025 litigation/rescission), ACCJC accreditation advisory-committee expectations for CTE programs, Title 5 CTE program review / two-year CTE review requirements, plus privacy (FERPA for SIS import, CCPA/CPRA for employer contact data, CAN-SPAM for outreach) and the WCAG 2.2 AA obligation for a public-college tool.\n\nOUTPUT: Cited report with an executive summary; a coverage matrix (benefit \u2192 source doc \u2192 repo artifact \u2192 status); a feasibility table per data source (what it provides, access/licensing, cost, legal risk, confidence); a competitor table; a compliance data-capture checklist; and a prioritized list of recommended roadmap changes (P1b-2 onward). Flag every claim that is unverified or where sources disagree. Distinguish clearly between what the source docs say (owner intent), what the repo says (design), and what external sources say (market/legal reality).",
+ "summary": "Verified evidence covers three of the four research questions (data-source feasibility, competitive landscape, compliance/grant fit); no claims about the repo gap analysis survived verification, so vision-vs-build coverage must be drawn from the repo docs directly. On data sources, the Tier-1 \"2-year job-posting history per employer\" output has no cheap, legal public path: LinkedIn's Job Posting API is write-only and closed to new partners, Adzuna's free tier (2,500 calls/month) and ToS (14-day trial, written consent for ongoing college/government use) rule out continuous monitoring, and CareerOneStop has moved its Jobs API behind the NASWA NLx Research Hub governance board; Lightcast's Job Postings API exposes the right facets (NAICS 2-6, SOC 2-5, O*NET, company, county/MSA, education/experience) but not zip code, and its access/pricing terms were not verified. Contact enrichment is exposed to California's Delete Act (annual broker registration, DROP mass-deletion platform live since Jan 1 2026), and emailed outreach templates must meet CAN-SPAM formal requirements if deemed commercial. On competition, Lightcast Career Coach, Steppingblocks, Riipen, and the CCC Centers of Excellence overlap ApplicationX on student-facing exploration, alumni outcomes, experiential projects, and regional LMI respectively, leaving employer discovery + CTE advisory-board workflow + curriculum feedback into a COR tool as the uncontested differentiator. On compliance, the CCCCO Perkins V CLNA (WED 25-80) specifies exactly the LMI thresholds (median-of-median wage, 2024-2029 growth, openings \u2265 regional median) and stakeholder-engagement evidence (agendas, sign-in sheets, participant name/title/phone/email kept on file, not published) that ApplicationX would need to capture to deliver its grant-reporting benefit.",
+ "findings": [
+  {
+   "claim": "LinkedIn cannot be a job-posting data source for ApplicationX: the Job Posting API is a write channel for ATSs/job distributors to push jobs onto LinkedIn (no retrieval of other employers' postings), access is partner-gated behind LinkedIn approval and an API agreement with data restrictions, and LinkedIn is currently not accepting new partners at all (new requests redirected to Apply Connect). LinkedIn's User Agreement separately prohibits scraping, and its public Jobs search API was retired in 2018.",
+   "confidence": "high",
+   "sources": [
+    "https://learn.microsoft.com/en-us/linkedin/talent/job-postings/api/overview?view=li-lts-2026-03"
+   ],
+   "evidence": "Official LinkedIn/Microsoft docs (updated 2026-06-03) state verbatim: 'We are currently not accepting new partnerships for LinkedIn's Job Posting API... please request access to Apply Connect'; 'enables authorized third parties such as clients, ATS systems, and job distributors to post jobs directly to LinkedIn'; 'restricted to those developers approved by LinkedIn... sign an API agreement with data restrictions.' No endpoint reads other employers' postings. Three merged claims, each 3-0.",
+   "vote": "3-0 (x3, merged)"
+  },
+  {
+   "claim": "Adzuna is not viable for continuous regional employer monitoring without a negotiated commercial licence: the default key is capped at 25 hits/min, 250/day, 1,000/week, 2,500/month; the API ToS limits any commercial, government or academic use outside three permitted uses (publishing Adzuna listings, Jobsworth salary estimates, personal research) to a 14-day trial and forbids using data 'in its original format or in aggregation... to deliver any ongoing work or research' without written consent. The API does offer search, regional vacancy counts, top-companies, salary history/histogram and categories endpoints, but no per-employer 2-year posting archive product.",
+   "confidence": "high",
+   "sources": [
+    "https://developer.adzuna.com/docs/terms_of_service",
+    "https://developer.adzuna.com/overview",
+    "https://developer.adzuna.com/docs/regional",
+    "https://developer.adzuna.com/docs/historical"
+   ],
+   "evidence": "Rate limits and ToS language verified verbatim on developer.adzuna.com/docs/terms_of_service (2026-09-20). Overview page lists endpoint categories; historical endpoint filters by title/category/location only (no company filter). Note the original citation pointed at /overview; the limits and ToS text actually live at /docs/terms_of_service. Endpoint-capability claim was 2-1.",
+   "vote": "3-0, 3-0, 2-1 (merged)"
+  },
+  {
+   "claim": "CareerOneStop no longer issues its Jobs (job-listing) API directly; new job-listing access is routed through the National Labor Exchange (NLx) Research Hub, where requests are reviewed and approved by the NLx Research Hub Governance Board (NASWA). The remaining CareerOneStop Web APIs (occupations, training, LMI, etc.) are royalty-free but require registration/approval, expire after 36 months, are granted AS-IS and revocable, and require per-page attribution to both USDOL ETA and Minnesota DEED.",
+   "confidence": "high",
+   "sources": [
+    "https://www.careeronestop.org/Developers/WebAPI/jobs-api-updates.aspx",
+    "https://www.careeronestop.org/Developers/WebAPI/registration.aspx",
+    "https://www.careeronestop.org/Developers/WebAPI/web-api.aspx",
+    "https://www.naswa.org/national-labor-exchange/nlx-research-hub"
+   ],
+   "evidence": "Jobs-api-updates page: 'Jobs APIs, formerly available on CareerOneStop, are now available through the National Labor Exchange (NLx). All new requests... reviewed, approved and provided by the NLx Research Hub Governance Board.' Registration page: 'royalty-free', 'expire 36 months from the date you submit your application', attribution to DOLETA and DEED on each page. Pre-Aug-27-2024 registrants may retain grandfathered v1 Jobs access. NLx Research Hub offers daily/historical posting data via API or monthly files by data request \u2014 a plausible, governed path to the 2-year posting history output.",
+   "vote": "3-0 (x2, merged)"
+  },
+  {
+   "claim": "Lightcast's Job Postings API (v2.97, pipeline 2026-06) exposes aggregate facets that map almost one-to-one onto the ApplicationX Tier-1 inputs \u2014 NAICS 2-6 digit, SOC 2-5 digit, O*NET, standardized company name, county/MSA/city/state geography, min/max education level, min/max years experience, certifications and skills \u2014 but zip code is not among the available facets or filters, so 'region by zip codes' would have to be translated to county/MSA/city.",
+   "confidence": "high",
+   "sources": [
+    "https://docs.lightcast.dev/apis/job-postings",
+    "https://emsiservices.com/docs-site-proxy?url=https://emsiservices.com/jpa/docs"
+   ],
+   "evidence": "Verifier pulled the underlying API markdown; GET /rankings facet list contains company, company_name, county, msa, naics2..naics6, onet, soc2..soc5, min/max_edulevels, min/max_years_experience, certifications, skills; grep for zip/postal/radius across the 2.2 MB doc returns nothing. Note: companion claims about Lightcast's OAuth scope, 10 rps limit, and 10/100/1000 individual-posting caps were REFUTED (1-2) \u2014 treat Lightcast access gating and pricing as unverified.",
+   "vote": "3-0"
+  },
+  {
+   "claim": "The California Community Colleges Centers of Excellence (COE) are an existing, CCCCO-funded, in-system LMI supplier ('the leading source of labor market research for the California Community Colleges') that already produces customized regional data on high-growth/emerging occupations, sector profiles, district profiles with dashboards, apprenticeship landscape reports, employer surveys and industry expert interviews. ApplicationX's 'LMI analysis' benefit overlaps directly and should consume COE/Occupation-in-Demand outputs rather than recompute them; the overlap with 'advisory-board recruitment' is inferential only (COE produces research, not employer-relationship tooling).",
+   "confidence": "high",
+   "sources": [
+    "https://coeccc.net/",
+    "https://coeccc.net/about/",
+    "https://www.cccco.edu/About-Us/Chancellors-Office/Divisions/Workforce-and-Economic-Development"
+   ],
+   "evidence": "coeccc.net homepage tagline and About page ('customized data on high growth, emerging, and economically-critical industries and occupations') verified 2026-09-20; CCCCO WEDD page describes COE as grant-funded technical-assistance providers; college IR pages (Chaffey, Glendale, Mt. SAC) list COE as standard LMI source for program review.",
+   "vote": "3-0 (x2, merged)"
+  },
+  {
+   "claim": "Lightcast Career Coach overlaps ApplicationX only on the student side: it is a learner-facing career-exploration product (interest assessment, skills inventory, program-to-career mapping) that also surfaces local job postings plus vetted postings from the college's own industry partners via an Employer Portal. It has no employer-discovery, contact-enrichment, CRM, or advisory-board features, and its posting surfacing is not real-time (aggregated data updated monthly), so it only partially matches the 'instant job-posting notifications' benefit.",
+   "confidence": "high",
+   "sources": [
+    "https://lightcast.io/solutions/education/career-coach"
+   ],
+   "evidence": "Vendor page (fetched 2026-09-20) lists 'Interest assessment... Guided career exploration... Recommended educational offerings' and 'Local job postings + vetted opportunities with your industry partners'; Employer Portal introduced July 2018; Dallas College 2024 adoption confirms it ships. No mention of alerts or push notifications to deans/chairs/faculty.",
+   "vote": "3-0 (x2, merged)"
+  },
+  {
+   "claim": "Steppingblocks markets 150M+ career paths, 25M+ employer profiles and 30K+ job skills and positions itself as a graduate-outcomes/alumni-tracking and student career-counselor vendor, not an employer-relationship/CRM tool \u2014 so it overlaps the 'graduate/alumni tracking' benefit, but the specific claim that its Graduate Outcomes product delivers record-level alumni employment downloads was refuted and should not be asserted.",
+   "confidence": "medium",
+   "sources": [
+    "https://www.steppingblocks.com/",
+    "https://www.steppingblocks.com/career-services"
+   ],
+   "evidence": "Homepage figures verified verbatim (self-reported vendor numbers; an older third-party listing cited 135M, so the figure moves). Three modules: Digital Career Counselor, Graduate Outcomes, Alumni Relations/Advancement. No employer CRM or outreach features. Related record-level-download claim voted 1-2 (refuted).",
+   "vote": "3-0 (positioning); 1-2 refuted (record-level data)"
+  },
+  {
+   "claim": "Riipen, named in the ApplicationX benefit summary as an engagement partner, is currently the experiential-learning platform in a Google.org-funded, three-year ACCT initiative (announced Jan 27 2026, launching fall 2026) that embeds virtual, employer-designed projects directly into community-college coursework via the Riipen marketplace with WPI's Center for Project-Based Learning; trade press reports 14 colleges actually participating versus 20 announced.",
+   "confidence": "medium",
+   "sources": [
+    "https://www.acct.org/news/national-initiative-will-equip-community-colleges-embed-real-world-employer-projects-workforce",
+    "https://www.ccdaily.com/",
+    "https://www.ecampusnews.com/"
+   ],
+   "evidence": "ACCT press release contains the quoted language; corroborated by Community College Daily (Jan 2026), eCampus News (Feb 16 2026) and ACCT Perspectives (14 colleges underway). Source is a press release, so it is marketing-adjacent; the ApplicationX Benefit-Summary line 20 names Riipen alongside SHRM, Education at Work and JFF.",
+   "vote": "3-0"
+  },
+  {
+   "claim": "Contact-enrichment data for the Tier-1 employer database carries California Delete Act exposure: any business that acted as a data broker in the prior year must register with CalPrivacy by January 31 annually, disclose required information and pay a fee (2026: $6,000; $200/day fines for non-registration); and the Delete Request and Opt-Out Platform (DROP) has been open to consumers since January 1 2026, letting one request direct all registered brokers to delete a person's data, with brokers required from August 1 2026 to poll DROP every 45 days, delete, instruct service providers/contractors to delete, and suppress re-collection. Vendor-supplied owner/HR-director/supervisor contacts are therefore subject to mass deletion and downstream suppression duties.",
+   "confidence": "high",
+   "sources": [
+    "https://cppa.ca.gov/announcements/2025/20251217.html",
+    "https://cppa.ca.gov/data_brokers",
+    "Cal. Civ. Code \u00a71798.99.82"
+   ],
+   "evidence": "CalPrivacy enforcement advisory (Dec 17 2025) verified verbatim; statute cross-checked; law-firm analyses (Byte Back Feb 2026, Alston & Bird, Hunton) confirm DROP live and Aug 1 2026 broker obligations. Whether ApplicationX itself (vs. its vendors) qualifies as a data broker is unverified; CCPA 'publicly available information' exemptions may exclude some business-contact records.",
+   "vote": "3-0 (x2, merged)"
+  },
+  {
+   "claim": "If the ApplicationX outreach-letter template is sent by email and the message's primary purpose is commercial, CAN-SPAM requires accurate From/To/routing and subject information, a valid physical postal address, a clear and conspicuous opt-out mechanism (honored within 10 business days), and identification as an ad. However, the stronger claim that CAN-SPAM necessarily covers college-to-employer cold outreach was refuted (0-3): a college's advisory-board or hiring-partnership letter is arguably non-commercial and may fall outside the Act.",
+   "confidence": "medium",
+   "sources": [
+    "https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business"
+   ],
+   "evidence": "FTC guide (edited Jan 2024) lists each required element verbatim and notes 'no exception for business-to-business email', but applicability turns on the message's primary purpose being commercial advertisement/promotion; verifiers split on whether college outreach is commercial, so the design should treat compliance as conditional-but-cheap (include address + opt-out by default).",
+   "vote": "3-0 (elements); 0-3 refuted (B2B applicability)"
+  },
+  {
+   "claim": "Perkins V grant-reporting fit is concrete and dated: all 72 California community college districts had to certify (CBO or designee) and submit a 2026-27 Perkins local application plus CLNA (PDF) via NOVA by May 29 2026, with Chancellor's Office regional monitors approving by July 1 2026; the CLNA is updated every two years. To qualify, a CTE program must meet two of three criteria \u2014 High-skill (any approved CE program, trivially met), High-wage (occupation \u2265 regional 'median of the median' wage using 2024 wage data, or program earnings \u226510% above regional average per the SWP 'Attained a Living Wage' metric), and In-demand (projected growth 2024-2029 in region AND annual openings \u2265 regional median, per the Occupation in Demand index and/or the CLNA).",
+   "confidence": "high",
+   "sources": [
+    "https://www.cccco.edu/-/media/CCCCO-Website/docs/memo/wed-25-80-perkins-2026-27-clna-guidance-memo-and-framework-a11y.pdf",
+    "CCCCO memo WED 26-34 (May 4 2026)"
+   ],
+   "evidence": "WED 25-80 (Nov 24 2025) text-extracted; every element verified verbatim; WED 26-34 reaffirms the same dates with no extension. The May 29 2026 deadline has passed, so this is the historical cycle; the next CLNA cycle would be 2028-29. Because COE/CCCCO already publish these computations, ApplicationX should ingest the index rather than recompute.",
+   "vote": "3-0 (x2, merged)"
+  },
+  {
+   "claim": "The CLNA's stakeholder-engagement requirement defines the advisory-committee data ApplicationX must capture: evidence of engagement with business/industry representatives and state/local workforce boards (Perkins V \u00a7134(e)) in the form of meeting agendas, notes, sign-in sheets and participant lists with name, institution, title, phone and email, kept on file for monitoring visits or on request \u2014 while the CLNA document itself is public, so no private data may appear in it.",
+   "confidence": "high",
+   "sources": [
+    "https://www.cccco.edu/-/media/CCCCO-Website/docs/memo/wed-25-80-perkins-2026-27-clna-guidance-memo-and-framework-a11y.pdf"
+   ],
+   "evidence": "Memo p.3 NOTE and Section 1 verified verbatim: 'meeting agendas, notes, and list of participants (names, Institution, title, phone and email)'; 'meeting agendas, sign-in sheets and notes'; 'exercise caution to ensure no private data is reported... publicly available.' Guidance is illustrative ('would include') rather than a statutory field list, and the privacy line is a caution rather than a prohibition.",
+   "vote": "3-0"
+  }
+ ],
+ "caveats": "1. No claims addressing Research Question 1 (repo gap analysis / coverage matrix) survived verification, and no claims covered Census CBP, Data Axle/D&B, Google Places, OpenCorporates, Apollo/ZoomInfo/Clearbit/Hunter ToS, Jooble, Google Jobs, USAJobs, JobsPikr/Coresignal, O*NET Web Services terms, BLS OES/QCEW, EDD LMID, LaunchBoard, Strong Workforce metrics, Gainful Employment/FVT post-2025 status, ACCJC or Title 5 CTE review, FERPA, WCAG 2.2, or any of Handshake, Salesforce, Element451, EnrollmentRX, Slate, Jenzabar, PlanStreet, Visier, Crunchr, Stellic, Symplicity, 12twenty, JobsEQ, Pathful, Tallo, or the nonprofits other than Riipen. Those sections must be sourced separately or flagged as unverified. 2. Lightcast access/pricing claims (OAuth scope, 10 rps, 10/100/1000 posting-sample caps) were refuted 1-2; only the facet list is confirmed. Pricing for Lightcast, NLx Research Hub, and Adzuna commercial licences is not published and unverified. 3. Two Adzuna citations pointed at /overview but the text lives at /docs/terms_of_service; the CareerOneStop licence text lives on registration.aspx, not web-api.aspx. 4. Time-sensitivity: LinkedIn partner moratorium (page dated 2026-06-03) could lift; Adzuna ToS is undated; Delete Act DROP broker duties began Aug 1 2026 and enforcement posture is evolving; Perkins dates cited are for the 2026-27 cycle, which has closed. 5. Vendor claims (Steppingblocks counts, Career Coach features, Riipen press release) are self-reported marketing. 6. CAN-SPAM applicability to college outreach is contested (refuted 0-3 as a blanket claim); Delete Act applicability to ApplicationX itself vs. its vendors is unresolved.",
+ "openQuestions": [
+  "What does NLx Research Hub (NASWA) actually charge, and what terms/latency apply, for daily or historical posting data \u2014 is it a practical path to the per-employer 2-year posting history for a public college?",
+  "What are Lightcast Job Postings API contract terms and pricing for a single college or a consortium, and how are individual posting records (vs. aggregates) gated?",
+  "Do vendor-sourced employer contacts (Apollo, ZoomInfo, etc.) fall under CCPA 'publicly available information' exemptions when re-used by a public college, and would ApplicationX itself ever meet the Delete Act data-broker definition if it shares contacts across colleges?",
+  "Which of the three source-doc benefits (continuous employer web monitoring, graduate/alumni tracking with foundation/advancement, Perkins/SWP/GE grant reporting) have any corresponding artifact in docs/applicationx/PRD.md, TECHNICAL-SPEC.md or plans/*.md \u2014 the gap matrix remains to be built from the repo directly."
+ ],
+ "refuted": [
+  {
+   "claim": "Lightcast's US Job Postings API requires an OAuth client-credentials bearer token with scope `postings:us` (i.e., contracted/credentialed access, not an open public API), and by default rate-limits every client to 10 requests per second.",
+   "vote": "1-2",
+   "source": "https://docs.lightcast.dev/apis/job-postings"
+  },
+  {
+   "claim": "Individual posting records (the /postings endpoint) are heavily gated: by default a client can view only 10 individual postings total; the `postings:samples_full_access` claim raises that to 100, and a `postings:samples_full_access:1000` claim raises it to 1000 \u2014 so a per-employer 2-year posting history (a Tier-1 ApplicationX output) cannot be pulled at scale without negotiated access.",
+   "vote": "1-2",
+   "source": "https://docs.lightcast.dev/apis/job-postings"
+  },
+  {
+   "claim": "CAN-SPAM applies to business-to-business email, so cold outreach from a college to employer contacts (owners, HR directors, supervisors) is covered by the Act.",
+   "vote": "0-3",
+   "source": "https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business"
+  },
+  {
+   "claim": "Steppingblocks' Graduate Outcomes product provides institutions alumni post-graduation employment data with record-level downloads, overlapping ApplicationX's promised graduate/alumni tracking and grant-reporting benefit.",
+   "vote": "1-2",
+   "source": "https://www.steppingblocks.com/"
+  }
+ ],
+ "unverified": [],
+ "sources": [
+  {
+   "url": "https://jobspipe.dev/blog/indeed-publisher-api",
+   "quality": "blog",
+   "angle": "Job-posting and LMI data access (practitioner/cost)",
+   "claimCount": 4
+  },
+  {
+   "url": "https://learn.microsoft.com/en-us/linkedin/talent/job-postings/api/overview?view=li-lts-2026-03",
+   "quality": "primary",
+   "angle": "Job-posting and LMI data access (practitioner/cost)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://docs.lightcast.dev/apis/job-postings",
+   "quality": "primary",
+   "angle": "Job-posting and LMI data access (practitioner/cost)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://www.careeronestop.org/Developers/WebAPI/web-api.aspx",
+   "quality": "primary",
+   "angle": "Job-posting and LMI data access (practitioner/cost)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://coeccc.net/",
+   "quality": "primary",
+   "angle": "Job-posting and LMI data access (practitioner/cost)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://developer.adzuna.com/overview",
+   "quality": "primary",
+   "angle": "Job-posting and LMI data access (practitioner/cost)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://privacy.ca.gov/drop/",
+   "quality": "primary",
+   "angle": "Employer discovery and contact enrichment legality (legal/skeptical)",
+   "claimCount": 4
+  },
+  {
+   "url": "https://cppa.ca.gov/announcements/2025/20251217.html",
+   "quality": "primary",
+   "angle": "Employer discovery and contact enrichment legality (legal/skeptical)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://www.zwillgen.com/alternative-data/hiq-v-linkedin-wrapped-up-web-scraping-lessons-learned/",
+   "quality": "secondary",
+   "angle": "Employer discovery and contact enrichment legality (legal/skeptical)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://www.ftc.gov/business-guidance/resources/can-spam-act-compliance-guide-business",
+   "quality": "primary",
+   "angle": "Employer discovery and contact enrichment legality (legal/skeptical)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://prentus.com/blog/best-career-services-software-for-colleges-and-universities",
+   "quality": "blog",
+   "angle": "Competitive landscape (broad/primary)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://workforceconnect.com/resources/supporting-cte-excellence-through-workforce-partnership-management",
+   "quality": "blog",
+   "angle": "Competitive landscape (broad/primary)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://lightcast.io/solutions/education/career-coach",
+   "quality": "primary",
+   "angle": "Competitive landscape (broad/primary)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://www.steppingblocks.com/",
+   "quality": "primary",
+   "angle": "Competitive landscape (broad/primary)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://www.acct.org/news/national-initiative-will-equip-community-colleges-embed-real-world-employer-projects-workforce",
+   "quality": "primary",
+   "angle": "Competitive landscape (broad/primary)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://saascrmreview.com/crm-for-higher-education/",
+   "quality": "blog",
+   "angle": "Competitive landscape (broad/primary)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://www.cccco.edu/-/media/CCCCO-Website/docs/memo/wed-25-80-perkins-2026-27-clna-guidance-memo-and-framework-a11y.pdf",
+   "quality": "primary",
+   "angle": "Grant reporting and compliance data requirements (authoritative refs)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://www.cccco.edu/-/media/CCCCO-Website/Files/Workforce-and-Economic-Development/Perkins-V/perkins-v-clna-framework-template-a11y.pdf",
+   "quality": "primary",
+   "angle": "Grant reporting and compliance data requirements (authoritative refs)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://fsapartners.ed.gov/knowledge-center/topics/financial-value-transparency-and-gainful-employment-information",
+   "quality": "primary",
+   "angle": "Grant reporting and compliance data requirements (authoritative refs)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://www.calpassplus.org/LaunchBoard/SWP.aspx",
+   "quality": "primary",
+   "angle": "Grant reporting and compliance data requirements (authoritative refs)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://www.sdccd.edu/docs/ISPT/workforce/docs/ASCCC-EffectivePractices-AdvisoryCommittees2019.pdf",
+   "quality": "primary",
+   "angle": "Grant reporting and compliance data requirements (authoritative refs)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://www.hbs.edu/faculty/Pages/item.aspx?num=63379",
+   "quality": "primary",
+   "angle": "Market signals and contrarian view (recent news/skeptical)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://news.gallup.com/poll/702284/college-students-grads-strong-career-value-degree.aspx",
+   "quality": "primary",
+   "angle": "Market signals and contrarian view (recent news/skeptical)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://www.prnewswire.com/news-releases/new-data-from-ashby-reveals-surge-in-applications-rising-selectivity-and-shifting-recruiter-workloads-302765846.html",
+   "quality": "primary",
+   "angle": "Market signals and contrarian view (recent news/skeptical)",
+   "claimCount": 5
+  },
+  {
+   "url": "https://stradaeducation.org/report/trends-in-employer-partnerships-with-community-colleges/",
+   "quality": "primary",
+   "angle": "Market signals and contrarian view (recent news/skeptical)",
+   "claimCount": 5
+  }
+ ],
+ "stats": {
+  "angles": 5,
+  "sourcesFetched": 25,
+  "claimsExtracted": 123,
+  "claimsVerified": 25,
+  "confirmed": 21,
+  "killed": 4,
+  "unverified": 0,
+  "afterSynthesis": 12,
+  "urlDupes": 0,
+  "budgetDropped": 5,
+  "agentCalls": 107
+ }
+}

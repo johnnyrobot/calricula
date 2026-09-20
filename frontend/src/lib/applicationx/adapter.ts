@@ -67,10 +67,6 @@ export function createBrokeredAdapter({ getToken, router, standaloneUrl }: Creat
       if (!tokens) throw sessionExpiredError();
 
       switch (operation) {
-        case 'chat.messages':
-          return op<T>(tokens, operation, {}, parameters, signal);
-        case 'chat.cancel':
-          return op<T>(tokens, operation, { run_id: parameters.run_id as string }, null, signal);
         // GET /v1/sources — no path params, no body.
         case 'sources.list':
           return op<T>(tokens, operation, {}, null, signal);
