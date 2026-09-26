@@ -1,0 +1,20 @@
+--- word/document.xml ---
+Technology that Improves Engagement Between Colleges and Employers
+Such technology empowered with AI tools would:
+Provide Career &amp; Technical Education (CTE) dean, program chairs, and career services directors with a continuously updated list of ALL employers in their region who might wish to hire a student or graduate from any of the college programs.
+Based on criteria provided by AI or the dean/chairs, prioritize potential employers in a ranking that identifies those most likely to hire the college’s students and graduates. This will help staff to focus time on the key employers if they cannot engage with all of them.
+Provide tools to help automate or technology-assist college staff in creating and maintaining relationships with employers (similar to CRM tools)
+AI tools would provide a list of key individuals at each employer (e.g., VP of human resources, line supervisors)
+AI tools would continuously comb the Internet for articles, news releases and other information about each employer—date stamping and adding it to that employer’s data in the system
+Establish contacts at each employer who might assist with instruction (e.g., provide guest presentations to students, offer apprenticeships, internships or other forms of work-based learning).
+Allow colleges to better identify employers who might benefit by their expertise. For instance, the college could help each employer with needs assessment—identify and articulate gaps in their workforce and/or in the knowledge their employees need to improve performance with skills-forward learning programs. (This could be offered by relevant program faculty and instructional designers acting as consultants with the goal of meeting the employer’s needs with new or existing credit, noncredit, contract ed programs.)
+Help program chairs to increase employer involvement and input for the annual advisory board meetings required by accreditation for each CTE program. The app may also allow asynchronous communication between program chairs and relevant employers to allow more continuous improvement of programs (rather than one yearly event). This app may also help with the collection and presentation of data required for the college’s program review and accreditation.
+Possibly assist CTE deans and program chairs in collecting and analyzing available labor market data to create new programs and sustain/improve existing programs 
+Allow colleges to import student data into the app from the college’s SIS, CRM, etc. This would allow students to engage with program instructors and employers. In theory, if students and employers opt in, they could communicate directly with each other on topics of jobs, career and industry trends.
+Notify dean, chairs, faculty and students of job postings from the employers the moment they are published.
+Allow college staff to better help students edit resumes, respond to applications, and prepare for interviews.
+Allow college staff to easily follow up after a student or graduate completes an interview, allowing the college to confirm the student got the job or, if not, to better understand the employer’s needs (and potentially allow the student candidate some information to improve their interview next time).
+Maintain a list of students/graduates who land jobs at any employer, maintaining relationships with these graduates/employees who may help future students land jobs in that employer’s organization.
+The college’s foundation (advancement unit) would also benefit by this as these graduate-students may also become donors and/or contribute to the college in other ways.
+Possibly improve college ability to apply for grants and provide tools to help CTE deans produce their regular reports to government agencies that provide the grants that support their programs (e.g., Perkins, Strong Workforce, Gainful Employment)
+Help CTE deans and college staff better engage with organizations whose mission it is to better connect colleges and industry (e.g. Society for Human Resource Management, Education at Work, Jobs for the Future, Riipen)

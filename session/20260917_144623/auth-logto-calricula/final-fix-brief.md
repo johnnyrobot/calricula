@@ -1,0 +1,31 @@
+# Final-review fix wave — auth/logto-migration
+
+Read `final-review.md` in this directory for the full text of every finding (file:line, why, how). This brief lists what to do; the review carries the detail.
+
+## Must fix
+
+1. **I-1 seeds adoptable by re-link.** `backend/seeds/seed_users.py`: add `"auth_issuer": "dev"` to every `SEED_USERS` entry (dev-token lookup is by subject; the rows must stop matching `auth_issuer IS NULL`). Add a route test in `backend/tests/test_auth_oidc_routes.py`: a verified-email `/login` match against a row whose `auth_issuer="dev"` does NOT re-link (a new row is provisioned instead). Docs: rewrite `README.md` ~line 232 so "create Logto users with the same emails as the test credentials" is dropped or scoped to dev-only (M-4); add to `docs/AUTH-LOGTO.md` §6 that seeds are dev-only and must not be loaded into a production database; also add there the cutover line (review Recommendation 5): when `AUTH_LEGACY_RELINK` is turned off, stamp or delete remaining `auth_issuer IS NULL` rows (`UPDATE users SET auth_issuer='<issuer>' WHERE auth_issuer IS NULL` or delete) so NULL stops meaning "adoptable".
+
+2. **I-2 first-sign-in race.** `frontend/src/contexts/AuthContext.tsx`: in `logto` mode, store the session-bootstrap promise (`/api/auth/session`, which runs the backend `/login`) in a ref and make `fetchAccessToken`/`getToken()` await it before minting, so a child that calls `getToken()` during its mount effect still gets a real token but only after `/login` has settled. Update the test "mints a token for a child that asks during its own mount effect" (in the AuthContext test file) to assert the token request is issued only after the session route resolved; keep the other 44 provider tests green. Backend defence-in-depth in `backend/app/api/routes/auth.py` `/login`: when the row found by subject still has a provisional email (`is_provisional_email`), `AUTH_LEGACY_RELINK` is on, and exactly one `auth_issuer IS NULL` row matches the verified email, re-link that legacy row to the subject/issuer and delete the placeholder row; if the delete fails (FK dependants), roll back to the placeholder path and log a warning. Add route tests for both the merge and the no-merge (two legacy matches) cases.
+
+3. **I-3 dangling ADR links.** Ruling: the ADR stays untracked (owner's call whether to publish the ApplicationX planning docs). Add a short "Decision record" section to `docs/AUTH-LOGTO.md` carrying the two paragraphs the docs depend on: (a) one Logto tenant, two web applications, one API resource per app; Calricula requests tokens for both resources; verification is standard JWT/JWKS with no vendor SDK; users keyed by `auth_subject` + `auth_issuer`; (b) self-hosting stance — deployers run Logto (MPL-2.0, Docker + Postgres) or Logto Cloud; identity data stays on deployer infrastructure. Then change every tracked reference to `docs/applicationx/ADR-0001-auth-stack-logto.md` (20 files: `docs/AUTH-LOGTO.md`, `README.md`, `.env.example`, `.env.production.example`, `backend/app/core/config.py`, `oidc.py`, `models/user.py`, `schemas/auth.py`, the migration docstring, compose files, test modules — find them with `git grep -n "ADR-0001"`) to either a bare "ADR-0001 (Logto auth stack)" label in code comments or a pointer to `docs/AUTH-LOGTO.md` in docs/env files. No tracked file may link to a path under `docs/applicationx/` afterwards.
+
+4. **I-4 staging gate.** Add to `docs/STAGING_VALIDATION.md` and `RELEASE_CHECKLIST.md` a cutover gate: run a real Logto tenant through sign-in → `/dashboard` → an authenticated API call → sign-out; one legacy-row re-link; confirm `email_verified` is `true` on the tenant's ID tokens for each connector in use. And M-8: rename `OIDC_ID_TOKEN` → `OIDC_ACCESS_TOKEN` in `scripts/staging/validate_auth.py` and `validate_staging.sh` (and any doc mentioning it).
+
+## Small minors folded in
+
+- M-3 `backend/app/core/oidc.py` ~116: on the generic `except Exception` → 401 path, log at debug level with the exception class name only (never the token or message contents).
+- M-5 `docs/AUTH-LOGTO.md` ~17: fix the endpoint label (`https://your-tenant.logto.app/` is Logto Cloud; give the self-hosted form too).
+- M-6 `docs/AUTH-LOGTO.md` ~166: the troubleshooting row "treated as signed out → email_verified not true" applies only in demo mode; outside demo mode the user is provisioned with a placeholder address. Add one sentence to §4 that an email set by an administrator through the Console/Management API is reported verified and is inside the trust boundary.
+- M-7 `frontend/.env.local.example` ~27: application type is "Traditional web" (App Router is the framework guide), matching `docs/AUTH-LOGTO.md` §2 and README.
+- M-9 `frontend/src/app/callback/route.ts`: catch errors from `handleSignIn` and redirect to `/login?error=callback`; make the login page/provider show a user-visible message for that error value (the provider already has `authError`). Add a test if the callback route has a test file; otherwise a login-page test for the `?error=callback` rendering is enough.
+
+## Do NOT touch
+- `backend/serviceAccountKey.json` (untracked deployer placeholder), `calricula_pwa_demo/`, `docs/applicationx/`, `session/`, `.superpowers/` (except appending your report).
+- M-1, M-2, M-10, M-11, M-13 are deferred — leave them.
+
+## Constraints
+- No personal email anywhere; no secrets. Light-only UI, WCAG 2.2 AA (any message you add on the login page uses existing `luminous-*` classes and `gold-ink` for small text on parchment).
+- Backend tests run against the disposable Postgres on **port 5435** (`calricula-test-db` container; DB `calricula`), never 5433. Use the env the existing reports used: `cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5435/calricula venv/bin/python -m pytest -q -p no:cacheprovider` (the local :5435 `calricula` DB is built by `create_all`; if a schema mismatch appears, see task-2-report.md line ~141). Run the full backend suite once at the end (coverage floor 45 %).
+- Frontend: `npm run lint`, `npm test`, `npm run build` must stay green.
+- Commit in logical commits (e.g. one backend, one frontend, one docs) with trailer as its own final paragraph: `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.

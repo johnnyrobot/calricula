@@ -1,0 +1,27 @@
+--- word/document.xml ---
+Inputs and Outputs: College Use Case
+Tier 1 Standard Use:
+College’s CTE dean, program chair, or staff member wants to identify all the organizations in their region that could benefit by hiring students who graduate from a particular college program.
+Inputs:
+Potential employers: 
+College user can enter names of known employers in their region who have hired or could likely hire one of their graduates.
+Users can use enter the Standard Industry Classification codes associated with the employment industry using NAICS Code Identification Tools.
+College’s geographical region or job zone: This could be the college district, the local region/county, or it might be the entire state (or even the country) for 100% online programs. 
+Zip codes would be the most likely input variable here.
+Job positions that the college program prepares students for: 
+User could enter typical job titles they are aware of
+User could enter US Bureau of Labor Statistic’s Standard Occupational Classification codes for jobs of interest
+User could use the O*NET OnLine data base to help identify SOC codes. We might also use O*NET’s Job Zone classification:
+Job Zone 1-2 - occupations that need very little to some preparation
+Job Zone 3 - occupations that need medium preparation
+Job Zone 4 - occupations that need considerable preparation
+Job Zone 5 - occupations that need extensive preparation
+Question: Can we connect our app with known job boards (e.g., Indeed, LinkedIn), professional networks and industry associations in order to pull job position data from them? If so, this may be worth the effort, even if we have to pay a license fee.
+{Note: In theory, the AI embedded in our application would help the users improve the search with each input.]
+Outputs:
+The application creates a database for this program with:
+A list of potential employers fitting the input parameters, along with organization names, addresses, and other contact information.
+A database list of individual contacts at each organization (if available on the Internet), including owner, president, HR director, and supervisors/managers overseeing employees performing the jobs of interest (along with any contact information available for these individuals)
+A list of all job openings/postings from each of these employers over the last (two?) years
+From the list of job openings/postings, a list of minimum qualifications/skills required along with a list of desired qualifications/skills. (This can help the college identify needs and improve their curriculum to add more value.)
+A template letter, email or other communication from the college to employers in this field that introduces the college’s program and requests a phone or web conference call to explore how the college can help with the employer’s workforce needs.

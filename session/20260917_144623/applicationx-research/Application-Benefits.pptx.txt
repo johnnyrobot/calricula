@@ -1,0 +1,100 @@
+--- ppt/slides/slide1.xml ---
+ApplicationXAI Enabled – Jobs Focused
+To improve engagement between colleges, employers &amp; students for the purpose of getting the right students in the right careers/jobs more effectively
+--- ppt/slides/slide2.xml ---
+A New Value Proposition for Higher Ed
+More and more students (and parents) are losing faith in the value of traditional higher education.
+They are becoming less interested in general liberal arts education. Instead, the goal seems to be building skills for a good career and landing a great job.
+In the future, colleges will be more successful if they can get better at delivering this value to students.
+To do so, colleges will need to get more involved in the job placement business.  It will no longer be good enough to prepare students with knowledge and skills; colleges will need to work harder to get students into the careers/jobs they are seeking and making a good match between student and employer.
+--- ppt/slides/slide3.xml ---
+What problems are we trying to solve for colleges?
+Colleges don’t know all the employers in their region that relate to the programs they offer. And some programs are fully online and statewide.
+Colleges don’t always know when employers open positions
+Colleges have trouble engaging employers in efforts to improve their programs and employ their graduates
+Career and technical education (CTE) deans are notoriously busy with small clerical staff
+Faculty department chairs are often part-time (from industry) and are also quite busy
+Adding to the usual workload of running academic programs, CTE deans and chairs have considerable work in getting and reporting on the state and federal grants available to them (e.g., Strong Workforce, Perkins)
+--- ppt/slides/slide4.xml ---
+ApplicationX: Benefits for Colleges
+Provide a continuously updated list of ALL employers in the college’s region that might wish to hire a student or graduate from any of the college programs (AI can do this)
+Based on criteria provided by AI and/or dean/chairs, prioritize employers in a ranking that identifies those most likely to hire the college’s students and graduates. 
+Help automate or assist college staff in creating and maintaining relationships with employers
+Provide a list of key individuals at each employer location
+Continuously comb the Internet for articles, news releases and other info about each employer
+Provide means of asynchronous communication between college, employers and (perhaps) students
+Help department chairs recruit employers for annual program review meetings (required by accreditors) to help keep program up-to-date with industry changes
+--- ppt/slides/slide5.xml ---
+ApplicationX: Benefits for Colleges (cont.)
+Possibly assist deans and program chairs in collecting and analyzing available labor market data to create and improve programs 
+Notify dean, chairs, faculty and students of job postings from the employers the moment they are published
+Allow college staff to better help students edit resumes, respond to applications, and prepare for interviews (leverage/amplify the work of college’s career services unit)
+Allow college staff to easily follow up after a student or graduate completes an interview
+Help colleges identify gaps in each employer’s performance metrics related to employee knowledge and training to potentially offer consulting services
+Help colleges maintain relationships with graduates who land jobs in chosen field
+Possibly help colleges collect and report program data required by gov’t regulators and accreditors (e.g., post-program employment/wage info)
+--- ppt/slides/slide6.xml ---
+What problems are we trying to solve for employers?
+Employers don’t always know which colleges are offering programs that might produce job candidates qualified to fill positions (some not local)
+They don’t always trust those colleges they know to deliver qualified candidates with sufficient skills
+They face the challenge of sifting through resumes (often written by AI) trying to find candidates qualified for interview
+They don’t always know where their performance gaps are (those caused by lack of knowledge/skills) and they do not see colleges as experts in this area, able to help improve their performance
+They are very busy and focused on business outcomes – not much time to “donate” to a college unless it provides an ROI (lower the cost of hiring)
+--- ppt/slides/slide7.xml ---
+ApplicationX: Benefits for Employers
+Employers will discover what programs are offered by colleges using our app (even those outside their local region)
+They can build trust with a source for qualified candidates
+The app can help them find and hire “good match” qualified candidates more quickly and efficiently, reducing the cost of hiring
+They will have a more effective and time-efficient way to communicate with colleges--to qualify candidates with faculty and to express their wishes for curriculum changes (without having to travel to a campus)
+They will discover that college faculty and instructional designers can help with their manpower and training needs
+--- ppt/slides/slide8.xml ---
+What problems are we trying to solve for students?
+Students don’t always know what job/career they want
+Even if they do, they sometimes  don’t have access to a college career center’s services until after they enroll
+They have trouble selecting any particular program of study
+Some college career development services are not available fully online
+Some students may wish to explore careers/jobs outside their current college’s geographic district
+Students often do not have easy access to any college faculty (other than current teachers) and almost never have access to potential employers
+Students in fully online programs have an added challenge finding employment in their field of study because they may not live in region
+--- ppt/slides/slide9.xml ---
+ApplicationX: Benefits for Students
+Colleges can encourage students to engage earlier with the career center to select a career path and related educational program
+Students can access career development services online (if that is not already offered by their college)
+Students can potentially have access to job boards and labor market data to help identify career opportunities in ANY area of the U.S.
+Students will have access to communication tools to help them engage with college program faculty and (potentially) with employers
+The application can help students find apprenticeships, internships, and other forms of work-based learning
+--- ppt/slides/slide10.xml ---
+Initial Company Strategy
+What business are we in?
+Career Development/Job Placement
+What is our Mission?
+Help colleges find a great career/job for each student at the right employer location
+Student success, employer success, college success
+What are our initial goals?
+Develop Level 1 Prototype for College Use
+Level 2?
+Level 3?
+--- ppt/slides/slide11.xml ---
+Naming the App
+In theory, the name of the app should resonate with all 3 potential user groups: colleges, employers, and students
+Some possible key words: Job, Career, Pathway, Employ, Collaborate, Engage, Connect, Converge, Workforce, Interact, Converge, Link, Partner, Support, Learn, Skills, Bridge, Leverage, Amplify, Talent, liaison
+What is the outcome they are all interested in?
+EduPath, Collaborate, EmployCollab, EmployerFinder, Engage, Interact, CareerCollab, EmployUCo-op, CollabEmploy, WorkforceCollab, WorkforcePartner, JobPath, PathMaker, Learn-To-Career, JobChute, CareerCannon, CrossConnect, CTEGo, PathSync, WorkPath
+--- ppt/slides/slide12.xml ---
+Competition or Integration?
+Customer relationship management (CRM) systems: Salesforce, Element451, EnrollmentRX, Technolutions Slate, Jenzabar, etc.
+Employer engagement platforms/software: Handshake
+Workforce development software: PlanStreet
+Job placement and Candidate relationship mgt apps: LinkedIn Recruiter, Indeed
+HR analytics software: Visier, Crunchr 
+Degree management: Stellic
+--- ppt/slides/slide13.xml ---
+Some non-profits in this space
+Strada Education Foundation - https://www.strada.org/
+Smith Family Foundation - https://rssff.org/
+SHRM Foundation - https://www.shrm.org/foundation
+US Chamber of Commerce Foundation, Talent Pipeline Mgt - https://www.uschamberfoundation.org/solutions/workforce-development-and-training/talent-pipeline-management
+Full Scale Learning - https://www.fullscalelearning.org/
+Education at Work - https://eaw.org/
+CredLens - https://www.credlens.org/
+Jobs for the Future - https://www.jff.org/

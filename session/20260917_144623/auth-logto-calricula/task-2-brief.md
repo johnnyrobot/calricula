@@ -1,0 +1,10 @@
+### Task 2: Identity column, dependencies, login route, test doubles
+
+**Files:** modify `backend/app/models/user.py` (`firebase_uid: str = Field(unique=True, index=True)` at line 42 → `auth_subject: str = Field(unique=True, index=True)`, `auth_issuer: str | None = Field(default=None, index=True)`; `UserCreate`/`UserRead` at lines 52/58), `backend/app/schemas/auth.py` (lines 28, 43, 78), `backend/app/core/deps.py` (`get_current_user` lines 25-91: verify access token → `sub`; lookup `User.auth_subject == sub`; auto-provision with `email=None` unless the token carries one — the ID-token email is captured at `/login`), `backend/app/api/routes/auth.py` (`/login` lines 99-170: accept the **ID token** in the Authorization header for this route only, verify with `verify_id_token`, link an existing user by `auth_subject` or, once, by verified email match to a legacy row whose `auth_issuer` is null, else provision; return the profile), new Alembic migration, `backend/tests/conftest.py` (`mock_firebase_auth` at 340-346 → `mock_oidc_auth` patching `app.core.deps.verify_access_token`; seed users at 96/112/128/144 use `auth_subject=f"test_..."`), every test referencing `firebase_uid` (`test_auth_characterization.py`, `test_api_integration.py`, `test_security_regressions.py`, `test_courses_crud.py`, `test_ccn_api_integration.py`, `test_ccn_auth.py`, `test_workflow_endpoints.py`).
+
+- [ ] Migration: `op.alter_column("users", "firebase_uid", new_column_name="auth_subject")`, add `auth_issuer` nullable + index; downgrade reverses; `alembic upgrade head` + `check` clean against the dev DB (`:5433`).
+- [ ] The seed (`seeds/seed_all.py` and any fixture writing `firebase_uid`) uses `auth_subject` with the same `test_*` values so `dev-*` tokens still resolve.
+- [ ] Demo mode: `verify_id_token` claims must contain `email` with `demo`; keep the 403 message.
+- [ ] Run the full backend suite; coverage ≥ 45 %.
+- [ ] Commit `feat(auth): key users by OIDC subject; login via ID token; migrate firebase_uid`.
+
